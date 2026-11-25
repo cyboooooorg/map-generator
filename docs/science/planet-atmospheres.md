@@ -1639,9 +1639,12 @@ radiogenic argon does.
 body colder than argon's triple point holds its argon as frost wherever the
 frost's vapour pressure is under the argon's weight. Its triple point is 83.806
 K and 68 891 Pa (Tegeler, Span & Wagner 1999, *J. Phys. Chem. Ref. Data* 28,
-779, doi:10.1063/1.556037, as Xiao et al. 2025 and CoolProp's `Argon.json` take
-it; the NIST WebBook lists 83.8 K and 0.689 bar after Gosman, McCarty et al.
-1969). Two fits of the measured sublimation pressures were read:
+779, doi:10.1063/1.556037; the 68 891 Pa as CoolProp's `Argon.json` gives
+Tegeler et al.'s triple point in its melting line, `p_0` at `T_0` = 83.8058 K,
+read; Xiao et al. 2025 print 0.0689 MPa and 83.806 K; CoolProp's saturated state
+at 83.806 K is 68 892 Pa; the NIST WebBook lists 83.8 K and 0.689 bar after
+Gosman, McCarty et al. 1969). Two fits of the measured sublimation pressures
+were read:
 
 - Xiao, Sriskandaruban & Maynard-Casely 2025 (*Int. J. Thermophys.* 46, 14,
   doi:10.1007/s10765-024-03469-2, eq. 55, read in the Research Square preprint):
@@ -1668,13 +1671,14 @@ At the 37 to 39 K of Triton's and Pluto's ices argon's frost holds 0.019 to
 the uncertainty there. The law takes Xiao et al.'s: newer, fitted to every data
 set with a stated range that covers those ices, and anchored on the triple point
 of the fluid's reference equation. Under 26 K it carries on the slope at 26 K,
-as N₂'s does under 10 K (a `Definition:`). Above the triple point the liquid's
+as N₂'s does under 10 K: the 26 K is a `Source:` (the fit's stated lower bound),
+the slope carried under it a `Definition:`. Above the triple point the liquid's
 curve is CoolProp's ancillary of Tegeler et al.'s equation (`ANCILLARIES.pS` of
 `Argon.json`, read: `p = p_c exp[(T_c / T) Σ nᵢ θᵢ^tᵢ]`, `θ = 1 − T / T_c`,
 `T_c` = 150.687 K, `p_c` = 4.863 MPa, its largest error against the equation
-0.0077 %), 68 892 Pa at the triple point and 1.013 bar at the normal boiling
-point 87.3 K (87.28 K, Gosman et al. 1969, through the WebBook); above `T_c`
-argon does not condense.
+0.0077 %), 68 892 Pa at the triple point and 1.011 bar at the normal boiling
+point, 87.28 K (Gosman et al. 1969, through the WebBook; 0.23 % under 1 atm);
+above `T_c` argon does not condense.
 
 Argon's heat of sublimation is not needed by the law: the fits are its curve.
 Their slope, by Clausius-Clapeyron for an ideal vapour, `L = R T² d ln p / dT`,
@@ -1682,20 +1686,22 @@ is 7.9 to 8.1 kJ/mol over 26 to 84 K for Fray & Schmitt's and 7.5 to 8.7 kJ/mol
 for Xiao et al.'s (derived). A Clausius-Clapeyron curve from the triple point
 with a constant sourced `L` would be a `Definition:` built on `Source:` values,
 as NH₃'s and SO₂'s frosts are in the code, and is the fallback where no fit
-exists; for argon, with `L` = 7.9 kJ/mol (the fits' slope at the triple point),
-it would be 1.2 times Fray & Schmitt's curve and 2.0 times Xiao et al.'s at 38 K
-(derived). Xiao et al.'s Figure 8 plots Chen et al. 1978's heats of sublimation
-as −6.0 to −6.4 kJ/mol, which is not the slope of their own eq. 55; that figure
-is not used.
+exists; for argon, with `L` = 7.9 kJ/mol (Fray & Schmitt's slope at the triple
+point), it would give 0.080 Pa at 38 K, 1.29 times Fray & Schmitt's curve and
+2.04 times Xiao et al.'s there (derived with R = 8.3145 J/(mol·K), `T_t` =
+83.806 K, `p_t` = 68 891 Pa). Xiao et al.'s Figure 8 plots Chen et al. 1978's
+heats of sublimation as −6.0 to −6.4 kJ/mol, which is not the slope of their own
+eq. 55; that figure is not used.
 
 In the code: `science::volatiles::argon_frost_pressure` (eq. 55, the slope
 carried on under 26 K) and `argon_saturation_pressure` (the frost, then the
 liquid ancillary, infinite from `ARGON_CRITICAL_TEMPERATURE`). Tests: eq. 55
 gives the triple pressure at the triple point and 0.0219 Pa at 37.2 K; Fray &
 Schmitt's `Ar-1` stays within a factor 1.7 of it from 37 K up and within 2 %
-from 65 K up (the largest gap there is 1.7 %, near 75 K; study 29b proposed 1 %,
-which the two formulas do not meet); the liquid gives 1.011 bar at 87.28 K
-(0.2 % under 1 atm) and meets the frost at the triple point within 0.002 %.
+from 65 K up (the largest gap there is 1.7 %, near 75 K: the 2 % is the test's
+choice; study 29b's 1 % is the tolerance of `condense` on eq. 55's 0.0219 Pa at
+37.2 K, below, not of this agreement); the liquid gives 1.011 bar at 87.28 K
+(0.23 % under 1 atm) and meets the frost at the triple point within 0.002 %.
 
 **Argon with the N₂ frost.** In the climate, `condense` caps each condensing gas
 at its activity times its saturation pressure: N₂ at activity 1 over its frost,
@@ -1724,9 +1730,10 @@ climate's fixed point calls it at each step, so argon follows the temperature
 with N₂. The cold trap at the equilibrium temperature does not read argon, and
 the frost of the ground (`surface::frost`, hence `frost_cover` and
 `frost_emissivity`) leaves it out: a few grams per square metre on Triton,
-nothing a disc's albedo or emissivity would show. A liquid argon (an air of
-more than 0.69 bar of argon between 83.8 and 150.7 K) is not a surface liquid of
-the model either.
+nothing a disc's albedo or emissivity would show. A liquid argon (it needs,
+between 83.8 and 150.7 K, more argon in the air than the liquid's vapour
+pressure, 0.689 bar at the triple point rising to 48.6 bar at 150.7 K) is not a
+surface liquid of the model either.
 
 **Checks on the cold bodies.** At the N₂ ice temperature that its air sets, by
 the N₂ curve of the code, and with the law's argon (8.68e-8 mol per kg of
@@ -4057,6 +4064,9 @@ another paper, from memory) is said where it is used.
 - Barrett and Meyer 1965, *J. Chem. Phys.* 42, 107,
   doi:10.1063/1.1695654, the argon-nitrogen phase diagram (abstract
   read).
+- Bell, Wronski, Quoilin and Lemort 2014, *Ind. Eng. Chem. Res.* 53,
+  2498, doi:10.1021/ie4033999, CoolProp, whose saturation ancillaries
+  give argon's liquid vapour pressure.
 - Bertrand et al. 2022, *Icarus* 373, 114764, Triton.
 - Biver et al. 2022, *Comets III*, arXiv:2207.04800, Table 3.
 - Blakley et al. 2024, *Planet. Space Sci.*,

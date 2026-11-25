@@ -311,8 +311,8 @@ mod tests {
         /// newest evaluation; Schaen et al. 2020 (GSA Bulletin 133, 461,
         /// Table 1) give 1.2505 to 1.2688 Gyr for the others.
         const DDEP_2025: f64 = 1.2522;
-        // Potassium's heat at formation over today's is the share of K-40
-        // that has decayed since, `2^(t_earth / t_half)`.
+        // Potassium's heat at formation over today's is `2^(t_earth /
+        // t_half)`, the inverse of the share of K-40 left today.
         let ratio = isotope_term(3, 0.0) / isotope_term(3, EARTH_AGE.0);
         let expected = 2f64.powf(EARTH_AGE.0 / DDEP_2025);
         assert!((ratio / expected - 1.0).abs() < 1e-12, "{ratio} {expected}");
