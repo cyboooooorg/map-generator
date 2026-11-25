@@ -94,9 +94,11 @@ use Cell::{Kept, NoLoss, NothingLeft};
 
 /// Source: Tang, Fortney & Murray-Clay 2024 (arXiv:2410.08577), Table 2,
 /// "Maximum final mass fraction allowed after boil-off": the H/He mass
-/// fraction of the planet a core of [`BOIL_OFF_CORE_MASSES`] (columns)
-/// keeps under the bolometric flux [`BOIL_OFF_FLUXES`] (rows), whatever
-/// it started with below 20 % (§ 3.3), read on the paper's rendered page.
+/// fraction a core of [`BOIL_OFF_CORE_MASSES`] (columns) keeps under the
+/// bolometric flux [`BOIL_OFF_FLUXES`] (rows), whatever it started with
+/// below 20 % (§ 3.3), read on the paper's rendered page. The paper does
+/// not say whether the fraction is of the planet's mass or of the core's;
+/// it is read as of the planet's, `M = M_c / (1 − f)`.
 /// The per cent cells are divided by 100. The starred cells (2 × 10⁻⁶,
 /// 6 × 10⁻⁶, 4 × 10⁻⁶, no per cent sign) are planets that lost their
 /// whole envelope, the value a radiative layer alone; the double-starred

@@ -175,25 +175,27 @@ The two are one outflow, bolometrically heated above the
 radiative-convective boundary, with different starting states (Owen &
 Schlichting 2024, § 2). Tang, Fortney & Murray-Clay 2024 run both in one
 evolution model with a self-consistent start, and find that after the
-boil-off the core-powered stage removes at most 0.1 % of the planet's
-mass over 3 Gyr, against about 10 % in the boil-off. Their Table 2, the
-largest H/He fraction a planet keeps after the boil-off, whatever it
-started with below 20 %:
+boil-off the core-powered stage removes at most 0.1 % of the H/He mass
+fraction over 3 Gyr, against about 10 % in the boil-off (abstract and
+§ 3.5). Their Table 2, the largest H/He fraction a planet keeps after the
+boil-off, whatever it started with below 20 %:
 
 | Flux (F⊕) | 1.5 M⊕ | 2.4 | 3.6 | 5.5 | 8.5 | 13 | 20 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 1.18 % | 3.38 % | 8.62 % | − | − | − | − |
-| 3 | 0.49 % | 1.79 % | 4.93 % | 14.64 % | − | − | − |
+| 3 | 0.49 % | 1.79 % | 4.93 % | 14.64 %\*\* | − | − | − |
 | 10 | 0.14 % | 0.77 % | 2.56 % | 8.85 % | − | − | − |
-| 30 | 0.02 % | 0.25 % | 1.17 % | 4.44 % | 16.75 % | − | − |
-| 100 | 2 × 10⁻⁶ | 0.03 % | 0.30 % | 1.67 % | 7.21 % | 23.49 % | − |
-| 300 | 0 | 6 × 10⁻⁶ | 0.04 % | 0.53 % | 3.14 % | 11.13 % | − |
-| 1000 | 0 | 0 | 4 × 10⁻⁶ | 0.04 % | 0.73 % | 4.04 % | 13.50 % |
+| 30 | 0.02 % | 0.25 % | 1.17 % | 4.44 % | 16.75 %\*\* | − | − |
+| 100 | 2 × 10⁻⁶\* | 0.03 % | 0.30 % | 1.67 % | 7.21 % | 23.49 %\*\* | − |
+| 300 | 0 | 6 × 10⁻⁶\* | 0.04 % | 0.53 % | 3.14 % | 11.13 %\*\* | − |
+| 1000 | 0 | 0 | 4 × 10⁻⁶\* | 0.04 % | 0.73 % | 4.04 % | 13.50 %\*\* |
 
-"−" is "zero or very slight mass loss"; 2 × 10⁻⁶, 6 × 10⁻⁶ and
-4 × 10⁻⁶ are planets that lost the whole envelope, the value a
-radiative layer alone. Photoevaporation "should start right after
-boil-off around 1 Myr" (Tang et al. 2024, § 3.3).
+"−" is "zero or very slight mass loss". The starred values (\*:
+2 × 10⁻⁶, 6 × 10⁻⁶ and 4 × 10⁻⁶) are planets that lost the whole
+envelope, the value a radiative layer alone. The double-starred ones
+(\*\*, above 10 %) were started from a larger envelope than the
+default 10 % to find the largest one kept. Photoevaporation "should
+start right after boil-off around 1 Myr" (Tang et al. 2024, § 3.3).
 
 **The law.** One bolometric law, then the XUV law, never two
 bolometric ones (the same outflow would be counted twice): Gupta &
@@ -275,10 +277,10 @@ decides nothing. A ceiling read above one is one.
   Measured: `α = 0.069 (+0.019/−0.023)` (Berger et al. 2023), 0.08
   predicted for core-powered loss (Rogers et al. 2021). Round one star,
   −0.108 in period against −0.09 (+0.02/−0.04) (Van Eylen et al. 2018)
-  and −0.10 ± 0.03 (Petigura et al. 2022). The line sits at 1.1 to
-  1.4 R⊕, under the observed valley (about 1.9 R⊕ at 10 days): the
-  boil-off "cannot by itself form a pronounced radius gap", the XUV law
-  adds to it.
+  and −0.10 ± 0.03 (Petigura et al. 2022). The line sits at 1.1 R⊕
+  (10 F⊕) to 1.6 R⊕ (1 000 F⊕), under the observed valley (about 1.9 R⊕
+  at 10 days): the boil-off "cannot by itself form a pronounced radius
+  gap", the XUV law adds to it.
 - Earth (1 M⊕, 1 F⊕): ceiling 0.48 %, so a nebular envelope above it is
   trimmed but not removed; Earth's bareness comes from capturing little
   (Lammer et al. 2014), not from this law. In the chain, an Earth at
@@ -301,15 +303,21 @@ decides nothing. A ceiling read above one is one.
 
 **Limitations.** Tang et al.'s grid is for rocky cores round a Sun-like
 star at constant flux; icy cores are more fragile, and the model reads
-the mass without the envelope, water included, as the rocky core. Next
-to the "−" cells the calibration sits under a published value (13 M⊕:
-"−" at 30 F⊕, 23.49 % at 100 F⊕), so near 12 M⊕ and 30 to 47 F⊕ the
-ceiling rises with the flux from 0.196 to 0.20 and can trim a 20 % draw
-by under 2 % of itself. The present flux stands for the flux at disc
-dispersal. The near-ultraviolet escape of hot stars (Balmer-driven,
-García Muñoz & Schneider 2019), which strips Neptunes of A stars within
-0.1 AU (Giacalone et al. 2022), is a separate channel the model lacks
-(#701). The energy-limited rate of Owen & Schlichting 2024 (eq. 17)
+the mass without the envelope, water included, as the rocky core. Tang
+et al. do not say whether their fraction is of the planet's mass or of
+the core's; the model reads it as of the planet's (the mass left is
+`M_c / (1 − c)`). Next to the "−" cells the calibration sits under a
+published value (13 M⊕: "−" at 30 F⊕, 23.49 % at 100 F⊕), so in the
+cell from 8.5 to 13 M⊕ and 30 to 100 F⊕ the ceiling rises with the
+flux for cores from 12.15 to 13 M⊕, against the physics' direction. It
+is lowest there at 12.15 M⊕ and 30 F⊕, 0.194, where it trims a 20 %
+draw by about 2.8 % of itself; the flux where it reaches 0.20 depends
+on the core (about 40 F⊕ at 12.5 M⊕, 32 F⊕ at 12.8 M⊕; under about
+12.2 M⊕ it stays under 0.20 up to 100 F⊕). The present flux stands for
+the flux at disc dispersal. The near-ultraviolet escape of hot stars
+(Balmer-driven, García Muñoz & Schneider 2019), which strips Neptunes of
+A stars within 0.1 AU (Giacalone et al. 2022), is a separate channel the
+model lacks (#701). The energy-limited rate of Owen & Schlichting 2024 (eq. 17)
 divides the XUV law by 4 for the same `η` (#702).
 
 ## Runaway greenhouse, water kept and tectonic regime
@@ -3967,10 +3975,12 @@ another paper, from memory) is said where it is used.
 - Lacis et al. 2010, doi:10.1126/science.1190653.
 - Lainey et al. 2009, doi:10.1038/nature08108, Io's tidal
   dissipation.
+- Lammer et al. 2014, *MNRAS*, arXiv:1401.2765, nebula-captured
+  hydrogen envelopes of 0.1 to 5 M⊕: Tables 1 to 3 (the largest
+  envelope of a 1 M⊕ core, 2.5 % of the planet's mass, Table 1) and
+  Table 5 (read).
 - Lay, Hernlund and Buffett 2008, doi:10.1038/ngeo.2007.44,
   the core's heat flow.
-- Lammer et al. 2014, *MNRAS*, arXiv:1401.2765, nebula-captured
-  hydrogen envelopes of 0.1 to 5 M⊕ (Table 5 read).
 - Lecavelier des Etangs 2007, energy-limited escape.
 - Lemmon et al. 2013, ethane's triple point (90.4 K), as Richardson,
   Hartwig and Leachman 2019 quote it (not re-read).
@@ -4078,11 +4088,11 @@ another paper, from memory) is said where it is used.
 - Payne 1972, *J. Atmos. Sci.* 29, 959,
   doi:10.1175/1520-0469(1972)029<0959:AOTSS>2.0.CO;2, the albedo of
   the sea (abstract read).
-- Petigura et al. 2022, *AJ*, doi:10.3847/1538-3881/ac51e3,
-  arXiv:2201.10020, the radius gap against stellar mass (abstract read).
 - Perovich et al. 2002, *J. Geophys. Res.* 107(C10),
   doi:10.1029/2000JC000438, the albedo of Arctic sea ice (abstract
   read).
+- Petigura et al. 2022, *AJ*, doi:10.3847/1538-3881/ac51e3,
+  arXiv:2201.10020, the radius gap against stellar mass (abstract read).
 - Pierrehumbert 2010, section 4.4.
 - Pierrehumbert 2023, *ApJ* 944, 20, doi:10.3847/1538-4357/acafdf,
   arXiv:2212.02644, the supercritical column of a post-runaway
