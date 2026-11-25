@@ -1678,6 +1678,15 @@ it would be 1.2 times Fray & Schmitt's curve and 2.0 times Xiao et al.'s at 38 K
 as −6.0 to −6.4 kJ/mol, which is not the slope of their own eq. 55; that figure
 is not used.
 
+In the code: `science::volatiles::argon_frost_pressure` (eq. 55, the slope
+carried on under 26 K) and `argon_saturation_pressure` (the frost, then the
+liquid ancillary, infinite from `ARGON_CRITICAL_TEMPERATURE`). Tests: eq. 55
+gives the triple pressure at the triple point and 0.0219 Pa at 37.2 K; Fray &
+Schmitt's `Ar-1` stays within a factor 1.7 of it from 37 K up and within 2 %
+from 65 K up (the largest gap there is 1.7 %, near 75 K; study 29b proposed 1 %,
+which the two formulas do not meet); the liquid gives 1.011 bar at 87.28 K
+(0.2 % under 1 atm) and meets the frost at the triple point within 0.002 %.
+
 **Argon with the N₂ frost.** In the climate, `condense` caps each condensing gas
 at its activity times its saturation pressure: N₂ at activity 1 over its frost,
 CH₄ at its share of a sea (Raoult's law) or 1 over its own ice. Argon joins it
@@ -1698,7 +1707,16 @@ doi:10.1063/1.1695654; Yantsevich, Prokhvatilov & Krupskii 1986,
 doi:10.1063/10.0031462; abstracts). The law takes argon at activity 1 over its
 own frost, as CH₄ over its ice: the same rule, no new number, and the most argon
 of the three pictures. Raoult's law would leave in the air a few 1e-5 of the
-activity-1 argon, the detailed balancing about 2e-3 of it (derived below).
+activity-1 argon, the detailed balancing about 2e-3 of it (derived below). In
+the code `science::surface::condense` caps argon third, after N₂ and CH₄, at
+`argon_saturation_pressure` and lays the rest in `Condensed.condensate`; the
+climate's fixed point calls it at each step, so argon follows the temperature
+with N₂. The cold trap at the equilibrium temperature does not read argon, and
+the frost of the ground (`surface::frost`, hence `frost_cover` and
+`frost_emissivity`) leaves it out: a few grams per square metre on Triton,
+nothing a disc's albedo or emissivity would show. A liquid argon (an air of
+more than 0.69 bar of argon between 83.8 and 150.7 K) is not a surface liquid of
+the model either.
 
 **Checks on the cold bodies.** At the N₂ ice temperature that its air sets, by
 the N₂ curve of the code, and with the law's argon (8.68e-8 mol per kg of

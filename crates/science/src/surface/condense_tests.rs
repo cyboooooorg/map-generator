@@ -6,7 +6,10 @@ use super::*;
 use crate::radiation::test_points::{EARTH_AIR, TITAN_SURFACE_AIR, TITAN_SURFACE_K};
 use crate::surface::{PHASE_BAND, methane_sea_vapour};
 use crate::units::Bar;
-use crate::volatiles::{methane_saturation_pressure, nitrogen_frost_pressure};
+use crate::volatiles::{
+    ARGON_TRIPLE_PRESSURE, ARGON_TRIPLE_TEMPERATURE, argon_frost_pressure,
+    methane_saturation_pressure, nitrogen_frost_pressure,
+};
 
 /// Definition: the tolerance of an identity.
 const TIGHT: f64 = 1e-9;
@@ -63,7 +66,7 @@ fn titan_inventory(ch4: f64) -> PartialPressures {
     }
 }
 
-fn sum(a: &PartialPressures, b: &PartialPressures) -> [f64; 7] {
+fn sum(a: &PartialPressures, b: &PartialPressures) -> [f64; 8] {
     [
         a.n2 + b.n2,
         a.co2 + b.co2,
@@ -72,11 +75,12 @@ fn sum(a: &PartialPressures, b: &PartialPressures) -> [f64; 7] {
         a.nh3 + b.nh3,
         a.so2 + b.so2,
         a.o2 + b.o2,
+        a.ar + b.ar,
     ]
 }
 
-fn parts(p: &PartialPressures) -> [f64; 7] {
-    [p.n2, p.co2, p.h2o, p.ch4, p.nh3, p.so2, p.o2]
+fn parts(p: &PartialPressures) -> [f64; 8] {
+    [p.n2, p.co2, p.h2o, p.ch4, p.nh3, p.so2, p.o2, p.ar]
 }
 
 /// Titan's seas (study 25, "Condensation at the surface"; the 2d-2
@@ -156,6 +160,7 @@ fn condensation_keeps_the_inventory() {
             let inventory = PartialPressures {
                 n2,
                 ch4,
+                ar: ch4,
                 ..EARTH_AIR
             };
             let mut k = 0.0;
@@ -169,7 +174,7 @@ fn condensation_keeps_the_inventory() {
                 for (got, want) in total.iter().zip(parts(&inventory)) {
                     assert!(
                         (got - want).abs() <= SUM_TOLERANCE,
-                        "{n2} N2 {ch4} CH4 at {t} K: {air:?} {condensate:?}"
+                        "{n2} N2 {ch4} CH4 and Ar at {t} K: {air:?} {condensate:?}"
                     );
                 }
                 for p in parts(&air).into_iter().chain(parts(&condensate)) {
@@ -182,7 +187,8 @@ fn condensation_keeps_the_inventory() {
 }
 
 /// `condensed_air` changes only the gases that condense: the CO2, H2O,
-/// NH3, SO2 and O2 of `air` pass through.
+/// NH3, SO2 and O2 of `air` pass through; its N2, CH4 and Ar are what
+/// the inventory leaves.
 #[test]
 fn condensed_air_changes_only_what_condenses() {
     let air = PartialPressures {
@@ -193,14 +199,18 @@ fn condensed_air_changes_only_what_condenses() {
         nh3: 0.004,
         so2: 0.005,
         o2: 0.006,
-        ar: 0.0,
+        ar: 0.007,
     };
-    let inventory = titan_inventory(FLOODING_CH4.0);
+    let inventory = PartialPressures {
+        ar: FLOODING_CH4.0,
+        ..titan_inventory(FLOODING_CH4.0)
+    };
     let t = Kelvin(TITAN_SURFACE_K);
     let condensed = condensed_air(&air, &inventory, t);
     let kept = condense(&inventory, t).air;
     assert_eq!(condensed.n2, kept.n2);
     assert_eq!(condensed.ch4, kept.ch4);
+    assert_eq!(condensed.ar, kept.ar);
     assert_eq!(
         [
             condensed.co2,
@@ -225,4 +235,78 @@ fn titan_like_air_is_dense_and_methane_bearing() {
     };
     assert!(!titan_like_air(&triton));
     assert!(!titan_like_air(&EARTH_AIR));
+}
+
+/// Source: the argon a Triton made into its air, 1.3 to 1.8 Pa, and a
+/// Pluto, 0.8 to 1.1 Pa, at their N2 ices' 37.2 and 37.1 K, and the
+/// frost that holds them, 0.022 and 0.020 Pa by Xiao et al. 2025's eq. 55
+/// (study 29b, "Checks on the cold bodies", the table's columns).
+const COLD_BODIES: [(f64, (f64, f64), f64); 2] =
+    [(37.2, (1.3, 1.8), 0.022), (37.1, (0.8, 1.1), 0.020)];
+
+/// Definition: the tolerance of a value printed to two digits, 2.5 %.
+const TWO_DIGITS: f64 = 0.025;
+
+/// Source: the largest share of a Triton's or a Pluto's air its argon
+/// can be at activity 1, 2.5 % (study 29b: 1.6 to 2.5 % between the two
+/// fits); the check of the settle tests takes 5 %.
+const COLD_ARGON_SHARE: f64 = 0.025;
+
+/// Argon condenses as the third gas, over its own frost (activity 1, the
+/// methane-over-its-ice rule): on Triton and Pluto the frost holds nearly
+/// all the argon their rock made, and the air keeps eq. 55's pressure, a
+/// small share of the N2's (study 29b).
+#[test]
+fn argon_condenses_over_its_own_frost_on_the_cold_bodies() {
+    for (t, (low, high), frost) in COLD_BODIES {
+        let t = Kelvin(t);
+        let curve = argon_frost_pressure(t).expect("under the triple point").0;
+        assert!((curve / frost - 1.0).abs() < TWO_DIGITS, "{t:?}: {curve}");
+        for made in [low, high] {
+            let inventory = PartialPressures {
+                n2: TRITON_N2.0,
+                ar: made / crate::constants::PASCALS_PER_BAR,
+                ..PartialPressures::default()
+            };
+            let Condensed { air, condensate } = condense(&inventory, t);
+            let cap = curve / crate::constants::PASCALS_PER_BAR;
+            assert!((air.ar / cap - 1.0).abs() < TIGHT, "{t:?}: {air:?}");
+            assert!(
+                (condensate.ar - (inventory.ar - air.ar)).abs() <= SUM_TOLERANCE,
+                "{condensate:?}"
+            );
+            // The N2 is what it is without argon.
+            let alone = condense(
+                &PartialPressures {
+                    ar: 0.0,
+                    ..inventory
+                },
+                t,
+            );
+            assert_eq!(air.n2, alone.air.n2);
+            let share = air.ar / air.total();
+            println!(
+                "{t:?}, {made} Pa of Ar: {:.3e} Pa in the air, {share:.4} of it",
+                curve
+            );
+            assert!(share < COLD_ARGON_SHARE, "{t:?}: {share}");
+        }
+    }
+}
+
+/// Above its triple point argon's liquid takes more than the triple
+/// pressure (68 891 Pa) to condense: less argon stays all in the air, up
+/// to the critical point and beyond.
+#[test]
+fn argon_under_its_triple_pressure_stays_in_a_warm_air() {
+    let ar = 0.99 * ARGON_TRIPLE_PRESSURE.0 / crate::constants::PASCALS_PER_BAR;
+    let inventory = PartialPressures {
+        ar,
+        ..PartialPressures::default()
+    };
+    for t in [ARGON_TRIPLE_TEMPERATURE.0, 87.28, 120.0, 150.687, 300.0] {
+        let Condensed { air, condensate } = condense(&inventory, Kelvin(t));
+        assert_eq!(air.ar, ar, "{t} K");
+        assert_eq!(condensate.ar, 0.0, "{t} K");
+    }
 }

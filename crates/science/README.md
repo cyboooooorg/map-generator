@@ -96,7 +96,8 @@ alloy (PREM, 364 GPa) is used to 7.85 TPa: converged, not validated.
 `k2_over_q(TidalKind)` (rocky, icy, enveloped; the system engine picks the
 kind). Radiogenic power comes from the abundances of U, Th and K and the Dye
 2012 half-lives (K-40's is DDEP 2025's, which the air's argon shares:
-`potassium_40_decayed`); secular cooling scales Earth's 26.5 TW by the silicate mass;
+`potassium_40_decayed`); secular cooling scales Earth's 26.5 TW by the
+silicate mass;
 tidal heat is Peale, Cassen and Reynolds (1979). The `Calibration:` constants (U
 and Th abundances, cooling time and mass exponent, rocky and icy k2/Q) say what
 was searched and not found; the page [The heat
@@ -145,7 +146,8 @@ study](../../docs/superpowers/studies/2026-11-22-relief/README.md). Laws:
 `science::surface`: `cover` and `ground_albedo` (ocean, land, ice, frost),
 `RELATIVE_HUMIDITY`, and `liquid`, `frost`, `melting` (the freezing of methane
 and nitrogen seas included); `surface::condense`: `condense` keeps in the air
-what a gas's saturation allows at a temperature (nitrogen, then methane) and
+what a gas's saturation allows at a temperature (nitrogen, methane, then
+argon) and
 returns the condensate. Values:
 [planet atmospheres](../../docs/science/planet-atmospheres.md#climate-and-surface-liquid).
 
@@ -160,9 +162,10 @@ solver that uses them is `system::planet::climate`.
 
 `science::radiation::column`: `outgoing_longwave` (a column's infrared: lines
 of `data/opacity.bin`, continua, clouds; the caller owns the `ColumnCache`) and
-`skin_temperature`; `radiation::clouds::cloud_cover`; `science::volatiles`: CO₂
-and methane saturation. Shortwave: `albedo::shortwave_budget` (Bond albedo and
-absorbed light; the caller owns the `ShortwaveCache`), `starlight`, `shortwave`
+`skin_temperature`; `radiation::clouds::cloud_cover`; `science::volatiles`: CO₂,
+methane, nitrogen and argon saturation. Shortwave: `albedo::shortwave_budget`
+(Bond albedo and absorbed light; the caller owns the `ShortwaveCache`),
+`starlight`, `shortwave`
 (`data/shortwave.bin`), `rayleigh`, `veils`, `methane::stratospheric_share`.
 `radiation::gases::PartialPressures` holds the eight gases of a column (N₂,
 CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar); argon absorbs nothing, weighs, scatters,
