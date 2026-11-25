@@ -191,7 +191,8 @@ pub struct Core {
 traced_fields!(Core { state, field });
 
 contract_enum! {
-    /// A gas of an atmosphere.
+    /// A gas of an atmosphere. Argon (`Ar`) is the radiogenic argon-40
+    /// the rock outgasses (study 29, #694).
     Gas {
         N2 => "n2",
         Co2 => "co2",
@@ -200,6 +201,7 @@ contract_enum! {
         Nh3 => "nh3",
         So2 => "so2",
         O2 => "o2",
+        Ar => "ar",
     }
 }
 
