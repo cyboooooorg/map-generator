@@ -1754,7 +1754,17 @@ draws CO₂ down faster when it is warm and volcanoes give it back (Walker,
 Hays & Kasting 1981, doi:10.1029/JC086iC10p09776). The model sets the CO₂
 so that a surface at `THERMOSTAT_K`, 288 K (a calibration on Earth), the
 vapour taken at that temperature, sends out what it absorbs (solved in
-`ln CO₂`). It can build the CO₂ up past what the air held before the
+`ln CO₂`). Each CO₂ tried is weighed on its own air, both what its
+surface absorbs and what its column sends out: the methane
+anti-greenhouse (above) takes a share of the light that grows as less
+CO₂ dilutes the methane, and the surface temperature of the regulated
+air reads the same share (`science::balance::absorbed`, issue #681).
+Legacy took the absorbed light once, on the air before the thermostat
+(its inventory's CO₂): a regulated body under methane then absorbed
+less than the thermostat had balanced, and its surface fell to the
+floor of the solver, the dew point of its vapour (284.01 K for the
+reference Earth under Titan's 2.11 bar of methane at 1 AU, against
+288 K now; Earth's own air, without methane, is unchanged). It can build the CO₂ up past what the air held before the
 climate (what escape and the cold trap left of it), since weathering
 slows and the volcanoes keep giving: up to the planet's carbon inventory
 (all it outgassed, `CarbonCycle::inventory_bar`), at most its maximum
@@ -2580,9 +2590,11 @@ rewrite does the same (`ClimateBody::greenhouse_co2(air)`, tier-3 test
 `one_greenhouse_search_on_a_condensing_air`). The departure is measured
 on the reference Earth under Titan's measured 2.11 bar of methane, at
 Titan's 9.57 AU, where the methane condenses: the two searches give
-14.2 and 52.0 bar, yet the settled climate is the same, 88.419345 K both
-ways (a gap of 4e-11 K), frozen, and the outer edge is 1.6465 AU both
-ways (a gap under 0.0001 AU). No regulated body can have a condensing
+14.2 and 52.0 bar, yet the settled climate is the same, 88.419440 K both
+ways (a gap of 2e-11 K), frozen, and the outer edge is 1.4326 AU both
+ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, when the
+regulated surfaces of this methane Earth fell to 284.01 K, the dew point
+of their vapour, and stayed wet farther out). No regulated body can have a condensing
 air: the thermostat holds 288 K, above the critical points of methane
 (190.564 K, Setzmann & Wagner 1991) and nitrogen (126.192 K, Span et al.
 2000), so the condensation loop's last pass is solved on the inventory

@@ -2,8 +2,10 @@
 
 use super::body::ClimateBody;
 use super::carbon::{maximum_greenhouse, thermostat};
-use super::fixture::earth;
-use super::{GREENHOUSE_DECADES, Numerics, THERMOSTAT_TOLERANCE};
+use super::fixture::{earth, titan};
+use super::{ClimateInputs, GREENHOUSE_DECADES, Numerics, THERMOSTAT_TOLERANCE};
+use science::balance::{THERMOSTAT_K, TOLERANCE};
+use science::radiation::gases::PartialPressures;
 use science::units::{Bar, Fraction, Kelvin, WattPerSquareMetre};
 
 /// Definition: the Bond albedo the tests take the light under, 0.3, a
@@ -66,6 +68,30 @@ fn the_thermostat_holds_earth_at_288_k() {
         most.0 <= inputs.carbon.0,
         "{most:?} over {:?}",
         inputs.carbon
+    );
+}
+
+#[test]
+fn the_thermostat_holds_a_methane_earth_at_its_target() {
+    // #681: Earth under Titan's methane, whose stratosphere sends back
+    // more of the light on the regulated air (a few bar of CO₂) than on
+    // the inventory's (52 bar), which dilutes it. The thermostat's
+    // definition: a regulated surface sits at `THERMOSTAT_K`, within the
+    // surface solver's tolerance and what the thermostat's own moves it
+    // by.
+    let inputs = ClimateInputs {
+        air: PartialPressures {
+            ch4: titan().air.ch4,
+            ..earth().air
+        },
+        ..earth()
+    };
+    let (mut body, light, e) = earth_under_test_albedo(&inputs, Numerics::DEFAULT);
+    let (air, t, regulated) = thermostat(&mut body, light, &inputs.air, e);
+    assert!(regulated, "{air:?} at {t:?}");
+    assert!(
+        (t.0 - THERMOSTAT_K.0).abs() <= TOLERANCE.0 + THERMOSTAT_MOVE.0,
+        "{t:?} under {air:?}"
     );
 }
 

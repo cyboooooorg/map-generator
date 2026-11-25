@@ -44,6 +44,14 @@ const TRACE_CO2_SHARE: f64 = 1.0 / (1u64 << 60) as f64;
 ///   [`TRACE_CO2_SHARE`] of the most within the numerics'
 ///   `thermostat_tolerance`, and the temperature [`surface_temperature`]
 ///   gives that air: regulated.
+///
+/// Each CO₂ tried, the two ends included, is weighed on its own air: what
+/// that air's surface [`absorbed`] (the methane anti-greenhouse takes a
+/// share of the light that more CO₂ dilutes) against what its column
+/// sends out, the same function [`surface_temperature`] reads. Legacy
+/// took the light absorbed once, on `air` (its inventory's CO₂): under
+/// methane its regulated surface then fell to the dew point of its
+/// vapour, not [`THERMOSTAT_K`] (#681).
 pub(crate) fn thermostat(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
@@ -59,23 +67,27 @@ pub(crate) fn thermostat(
         h2o: surface_vapour(THERMOSTAT_K, water).0,
         ..air
     };
-    let absorbed = absorbed(starlight, &air, i.heat_flux).0;
     let skin = skin(starlight);
     let e = emissivity.get().clamp(LEAST_EMISSIVITY, 1.0);
     let columns = &mut body.columns;
-    let mut olr_at = |co2: f64| {
+    // What a surface at `THERMOSTAT_K` under `co2` absorbs less what it
+    // sends out, both on that air: its methane's stratosphere takes a
+    // share of the light that the CO₂ dilutes (#681), and
+    // `surface_temperature` reads the same air.
+    let mut gain_at = |co2: f64| {
         let gases = PartialPressures { co2, ..at_target };
-        e * outgoing_longwave(
-            &gases,
-            THERMOSTAT_K,
-            skin,
-            i.gravity,
-            Profile::CLIMATE,
-            columns,
-        )
-        .0
+        absorbed(starlight, &gases, i.heat_flux).0
+            - e * outgoing_longwave(
+                &gases,
+                THERMOSTAT_K,
+                skin,
+                i.gravity,
+                Profile::CLIMATE,
+                columns,
+            )
+            .0
     };
-    let all = absorbed - olr_at(most);
+    let all = gain_at(most);
     if all <= 0.0 {
         let c = collapsed_climate(
             body,
@@ -85,7 +97,7 @@ pub(crate) fn thermostat(
         );
         return (c.air, c.temperature, false);
     }
-    if olr_at(0.0) < absorbed {
+    if gain_at(0.0) > 0.0 {
         let (g, t) = wet_climate(
             body,
             starlight,
@@ -95,7 +107,7 @@ pub(crate) fn thermostat(
         return (g, t, false);
     }
     let floor = most * TRACE_CO2_SHARE;
-    let mut deficit = |ln_co2: f64| absorbed - olr_at(ln_co2.exp());
+    let mut deficit = |ln_co2: f64| gain_at(ln_co2.exp());
     let low = Point {
         x: floor.ln(),
         f: deficit(floor.ln()),
