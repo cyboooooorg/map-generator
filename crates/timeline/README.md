@@ -21,7 +21,9 @@ the kind of the central object.
 - `StarState`, `PlanetState` (and their parts: `Orbit`, `Spin`, `Bulk`,
   `Composition`, `Heat`, `Surface`, `Atmosphere`, `GlobalClimate`,
   `SurfaceLiquid`, `Terrain`, `Life`): the state of a body at a date.
-  A giant has no `Surface`.
+  A giant has no `Surface`. An `Atmosphere` holds its surface pressure and
+  a partial pressure per `Gas` (N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar), whose
+  sum is the surface pressure.
 - `InteriorProfile`: layers with their stored mass, and radial samples.
 - `Keyframe`: a date, a `BodyState` and the cause graph of its fields.
 - `Timeline`: the keyframes of one body, with its seed, the

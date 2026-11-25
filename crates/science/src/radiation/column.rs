@@ -53,8 +53,8 @@
 use super::clouds::cloud_cover_share;
 use super::fast_math;
 use super::gases::{
-    CH4_HEAT_CAPACITY, CO2_HEAT_CAPACITY, N2_HEAT_CAPACITY, NH3_HEAT_CAPACITY, O2_HEAT_CAPACITY,
-    PartialPressures, SO2_HEAT_CAPACITY,
+    AR_HEAT_CAPACITY, CH4_HEAT_CAPACITY, CO2_HEAT_CAPACITY, N2_HEAT_CAPACITY, NH3_HEAT_CAPACITY,
+    O2_HEAT_CAPACITY, PartialPressures, SO2_HEAT_CAPACITY,
 };
 use super::spectrum::{
     self, BANDS, BINS, DIFFUSIVITY, FastLevel, G, POINTS, TAIL, planck_spectrum,
@@ -70,6 +70,35 @@ use crate::water::{
 #[cfg(test)]
 #[path = "column_tests.rs"]
 mod tests;
+
+/// Argon's molar heat capacity as the column reads it,
+/// [`AR_HEAT_CAPACITY`]. Outside `cfg(test)` this is the constant and
+/// the only code path.
+#[cfg(not(test))]
+fn ar_heat_capacity() -> f64 {
+    AR_HEAT_CAPACITY
+}
+
+/// Argon's molar heat capacity as the column reads it, test builds only:
+/// [`AR_HEAT_CAPACITY`], unless a test on this thread set
+/// [`AR_HEAT_CAPACITY_OVERRIDE`] to tell the lapse rate's part of
+/// argon's warming from its broadening's.
+#[cfg(test)]
+fn ar_heat_capacity() -> f64 {
+    AR_HEAT_CAPACITY_OVERRIDE
+        .with(std::cell::Cell::get)
+        .unwrap_or(AR_HEAT_CAPACITY)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Test builds only: a molar heat capacity, J/(mol·K), that the
+    /// column takes for argon instead of [`AR_HEAT_CAPACITY`] on this
+    /// thread while it is set. A test that sets it uses a fresh
+    /// [`ColumnCache`] for each value and clears it after.
+    pub(crate) static AR_HEAT_CAPACITY_OVERRIDE: std::cell::Cell<Option<f64>> =
+        const { std::cell::Cell::new(None) };
+}
 
 /// Definition: water's critical temperature, K ([`CRITICAL_POINT_TEMPERATURE`]):
 /// above it no liquid exists, and the vapour is a gas like the others.
@@ -287,6 +316,7 @@ impl DryAir {
             nh3: gases.nh3.max(0.0),
             so2: gases.so2.max(0.0),
             o2: gases.o2.max(0.0),
+            ar: gases.ar.max(0.0),
         };
         let pressure = g.total();
         let cp = if pressure > 0.0 {
@@ -295,7 +325,8 @@ impl DryAir {
                 + g.ch4 * CH4_HEAT_CAPACITY
                 + g.nh3 * NH3_HEAT_CAPACITY
                 + g.so2 * SO2_HEAT_CAPACITY
-                + g.o2 * O2_HEAT_CAPACITY)
+                + g.o2 * O2_HEAT_CAPACITY
+                + g.ar * ar_heat_capacity())
                 / pressure
         } else {
             N2_HEAT_CAPACITY
@@ -329,6 +360,7 @@ impl DryAir {
             nh3: self.gases.nh3 * share,
             so2: self.gases.so2 * share,
             o2: self.gases.o2 * share,
+            ar: self.gases.ar * share,
         }
     }
 
@@ -337,13 +369,14 @@ impl DryAir {
     /// none.
     fn cp_without_co2(&self) -> f64 {
         let g = &self.gases;
-        let others = g.n2 + g.ch4 + g.nh3 + g.so2 + g.o2;
+        let others = g.n2 + g.ch4 + g.nh3 + g.so2 + g.o2 + g.ar;
         if others > 0.0 {
             (g.n2 * N2_HEAT_CAPACITY
                 + g.ch4 * CH4_HEAT_CAPACITY
                 + g.nh3 * NH3_HEAT_CAPACITY
                 + g.so2 * SO2_HEAT_CAPACITY
-                + g.o2 * O2_HEAT_CAPACITY)
+                + g.o2 * O2_HEAT_CAPACITY
+                + g.ar * ar_heat_capacity())
                 / others
         } else {
             N2_HEAT_CAPACITY
@@ -635,6 +668,7 @@ pub fn outgoing_longwave(
         gases.nh3,
         gases.so2,
         gases.o2,
+        gases.ar,
         surface_k,
         skin_k,
         gravity.0,
@@ -664,10 +698,10 @@ pub fn outgoing_longwave(
 /// size (a numerical choice with no source: audit, Wiki study 19).
 const REMEMBERED: usize = 1024;
 
-/// The inputs of a column, as bits: the seven partial pressures, the
+/// The inputs of a column, as bits: the eight partial pressures, the
 /// surface and skin temperatures, the gravity, and the profile's levels
 /// per decade, top and sky.
-type ColumnKey = [u64; 14];
+type ColumnKey = [u64; 15];
 
 /// What [`outgoing_longwave`] keeps between calls, owned by the caller:
 /// the last [`REMEMBERED`] columns and their outgoing radiation, the
@@ -701,7 +735,7 @@ struct Memory {
 impl Memory {
     fn new() -> Box<Self> {
         Box::new(Self {
-            keys: [[0; 14]; REMEMBERED],
+            keys: [[0; 15]; REMEMBERED],
             olr: [0.0; REMEMBERED],
             len: 0,
             next: 0,

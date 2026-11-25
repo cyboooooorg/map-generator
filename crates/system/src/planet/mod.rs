@@ -34,18 +34,19 @@
 //! seed for `class_of`, the body seed for `model`), [`interior`] builds its
 //! structure with the `science` integrator (a planet without an envelope,
 //! or a mini-Neptune's core), [`enveloped`] the mini-Neptunes and giants
-//! around it, [`escape`] what their envelope loses to the stars' XUV
-//! light, [`heat`] computes its internal heat, [`water`] the water it keeps
-//! under its stars' light and the planet left after a runaway's steam,
-//! [`regime`] its tectonic regime, [`core`] its iron core and its dynamo,
-//! [`air`] the air it outgasses and the cosmic shoreline keeps, what the
-//! stars' ultraviolet leaves of its methane, whether it is reducing (its
-//! CO2 then held back), what the cold of its equilibrium temperature
-//! traps and what the photochemistry makes of it. [`bare`] chains them in
-//! legacy's order, from the draw to the bare air, before any climate:
-//! draw, interior, escape and heat; for a planet without an envelope, its
-//! water, the planet a runaway's steam left (body and heat built again),
-//! regime, core and air, and after a runaway whose shoreline took vapour,
+//! around it, [`boil_off`] what a mini-Neptune's envelope loses to the
+//! boil-off when its disc goes, [`escape`] what their envelope loses to
+//! the stars' XUV light, [`heat`] computes its internal heat, [`water`]
+//! the water it keeps under its stars' light and the planet left after a
+//! runaway's steam, [`regime`] its tectonic regime, [`core`] its iron core
+//! and its dynamo, [`air`] the air it outgasses and the cosmic shoreline
+//! keeps, what the stars' ultraviolet leaves of its methane, whether it is
+//! reducing (its CO2 then held back), what the cold of its equilibrium
+//! temperature traps and what the photochemistry makes of it. [`bare`]
+//! chains them in legacy's order, from the draw to the bare air, before
+//! any climate: draw, interior, boil-off, escape and heat; for a planet
+//! without an envelope, its water, the planet a runaway's steam left (body
+//! and heat built again), regime, core and air, and after a runaway whose shoreline took vapour,
 //! the body built once more for the water kept. [`climate`] holds the
 //! first part of the climate solver (the body it settles, its albedo,
 //! its wet balance, the collapse of its CO₂, the carbonate thermostat,
@@ -75,6 +76,11 @@ mod air;
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
 mod bare;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
+mod boil_off;
 #[cfg_attr(
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
@@ -145,6 +151,8 @@ mod water;
 mod air_tests;
 #[cfg(test)]
 mod bare_tests;
+#[cfg(test)]
+mod boil_off_tests;
 #[cfg(test)]
 mod core_tests;
 #[cfg(test)]
