@@ -4354,8 +4354,10 @@ at 295 bar and find the plateau's end constant past it, to columns of
 
 ## Life
 
-`life` decides from the climate whether life arose, and `oxygenate` gives
-the air of a world with oxygenic life its oxygen. The values below come
+`science::life::stage` decides from the climate whether life arose and
+where it stands (`Stage`: `Lifeless`, `Anoxic`, `Oxidising`, `Modern`),
+and `science::life::oxygenate` gives the air of a living world what its
+stage makes of it. The values below come
 from [study 27](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit),
 which read the sources; the user decided its open choices on
 2026-11-24.
@@ -4448,7 +4450,9 @@ O₂ 20.95 % of 1.014 bar) the solver gives 287.1 K at 280 ppm, inside
 the 286 to 290 K window of the tests (a test definition: Myhre et al.
 1998 give the 280 ppm, not a temperature). The second solve is what
 brings the reference Earth onto that air. The class does not read the
-O₂; the climate does, through the pressure.
+O₂; the climate does, through the pressure. The second solve takes no
+boil verdict (a declared simplification): the class and the surface
+liquid read the second climate, the biosphere the first.
 
 | Case | Result |
 | --- | --- |
@@ -4510,7 +4514,12 @@ Otherwise the `Surface` holds the water, regime, core, final gases,
 climate and life, and `classify` reads the class off it. Nothing derives
 from the class.
 
-The first rule that holds wins:
+The first rule that holds wins. Its thresholds are in `science::classes`:
+`HOT_GIANT_MAX_PERIOD`, `SUPER_EARTH_MIN_RADIUS`, `DENSE_AIR_BAR`,
+`ICE_WORLD_MIN_OCEANS` and the basins' capacity `basin_capacity_oceans`
+(`BASIN_OCEANS`); methane's triple-point pressure is
+`science::volatiles::methane_triple_pressure`, which `titan_like_air`
+reads too.
 
 | Order | Class | Rule |
 | --- | --- | --- |
@@ -4598,7 +4607,7 @@ source sets a pressure that parts a runaway greenhouse from a bare rock:
 the published criteria are the absorbed light (Goldblatt et al. 2013)
 or the distance to the star (Hamano et al. 2013), so it stays a
 calibration (study 27). The hydrocarbon world needs its air above methane's
-triple-point pressure (`METHANE_TRIPLE_BAR`, 0.1169 bar, NIST), under
+triple-point pressure (`methane_triple_pressure`, 0.1169 bar, NIST), under
 which no liquid methane is stable; it took the 1 bar until part 4, when
 Titans drawn with 0.6 to 1 bar kept lakes but were classed ice worlds.
 It keeps a cold body with a trace of methane over its ice under a thin

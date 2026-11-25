@@ -121,6 +121,12 @@ photochemistry, snowball}`: [planet atmospheres](../../docs/science/planet-atmos
 keeps, from Earth's flux, the lifetime under the stars and the gravity),
 `methane_lifetime`, `methane_host_factor`; see [life
 gases](../../docs/science/life-gases.md).
+`science::life`: `stage` (life from `LIFE_MIN_GYR`, by `LIFE_CHANCE`, then
+`Anoxic`, `Oxidising`, `Modern`) and `oxygenate` (no methane, then O₂ at
+`O2_PER_N2` of the N₂); see [Life](../../docs/science/planet-atmospheres.md#life).
+`science::classes`: the class thresholds (`HOT_GIANT_MAX_PERIOD`,
+`SUPER_EARTH_MIN_RADIUS`, `DENSE_AIR_BAR`, `ICE_WORLD_MIN_OCEANS`) and
+`basin_capacity_oceans`; see [Classes](../../docs/science/planet-interiors.md#classes).
 
 ## Giants and envelopes
 

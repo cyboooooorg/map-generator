@@ -16,7 +16,7 @@ use super::liquids::{SEA_METHANE_SHARE, bar, frozen_share, sea_freezes};
 use crate::radiation::gases::PartialPressures;
 use crate::units::{Bar, Kelvin};
 use crate::volatiles::{
-    METHANE_TRIPLE_TEMPERATURE, argon_saturation_pressure, methane_saturation_bar,
+    argon_saturation_pressure, methane_saturation_bar, methane_triple_pressure,
     nitrogen_saturation_pressure,
 };
 
@@ -96,12 +96,12 @@ pub fn condensed_air(
 
 /// Whether the air a climate leaves is a Titan's: it still holds methane,
 /// which makes its haze, and its total pressure is over methane's
-/// triple-point pressure (0.117 bar, the saturation at
-/// `METHANE_TRIPLE_TEMPERATURE`), dense enough for a hydrocarbon liquid.
+/// triple-point pressure (0.117 bar, [`methane_triple_pressure`]), dense
+/// enough for a hydrocarbon liquid.
 /// A Triton's thin nitrogen air, a few microbar, is not one. A
 /// `Definition:` (study 25, "The reducing-air fallback").
 pub fn titan_like_air(air: &PartialPressures) -> bool {
-    air.ch4 > 0.0 && air.total() > methane_saturation_bar(METHANE_TRIPLE_TEMPERATURE)
+    air.ch4 > 0.0 && air.total() > methane_triple_pressure().0
 }
 
 #[cfg(test)]

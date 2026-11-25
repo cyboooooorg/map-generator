@@ -1389,6 +1389,9 @@ wins. The table gives the rules the rewrite ports in planet PR 2d-4, as
 checked them and the user decided on 2026-11-24, with the giant and
 small-planet rules only; the surface classes are in
 [the atmospheres page](planet-atmospheres.md#the-chain-and-the-surface-classes).
+The thresholds are in `science::classes` (`HOT_GIANT_MAX_PERIOD`,
+`SUPER_EARTH_MIN_RADIUS`, `ICE_WORLD_MIN_OCEANS`); the families draw
+their hot Jupiters within the same `HOT_GIANT_MAX_PERIOD`.
 
 | Class | Rule | Source of the threshold |
 | --- | --- | --- |
