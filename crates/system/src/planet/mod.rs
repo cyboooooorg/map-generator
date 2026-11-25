@@ -23,15 +23,15 @@
 //! `trial.seed` and no spin (legacy `trial_class`,
 //! `legacy-final:crates/mapgen/src/system.rs:896`, also ran without
 //! one), reads the class from the state and throws the scratch away:
-//! one classifier. `model` runs the same chain with the body seed
-//! (`placement.seed`, never `trial.seed`) and the spin, and the
+//! one classifier. `model` runs the same chain with the same trial seed
+//! (the spin is drawn from it too) and the spin, and the
 //! archetype's backward search. `SystemError` does not exist yet.
 //!
 //! # What exists today
 //!
 //! The first slice of the chain: [`draws`] draws a planet's composition
 //! from sub-seeds of the seed it is given (`chain`'s `seed`: the trial
-//! seed for `class_of`, the body seed for `model`), [`interior`] builds its
+//! seed for `class_of` and `model`), [`interior`] builds its
 //! structure with the `science` integrator (a planet without an envelope,
 //! or a mini-Neptune's core), [`enveloped`] the mini-Neptunes and giants
 //! around it, [`boil_off`] what a mini-Neptune's envelope loses to the

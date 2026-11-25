@@ -131,8 +131,8 @@ fn the_same_seed_draws_the_same_composition() {
 
 #[test]
 fn the_draw_follows_the_seed_it_is_given_not_the_trials() {
-    // `model` passes the body seed, `class_of` the trial seed: the draw
-    // reads only the seed it is given.
+    // `class_of` and `model` both pass the trial seed: the draw reads
+    // only the seed it is given.
     let mut a = Trace::new();
     let mut b = Trace::new();
     let ta = trial(&mut a, 7, 1.0, 1.0, 0.0);

@@ -2,7 +2,7 @@
 //! seed the caller passes (`planet/cmf`, `planet/water`,
 //! `planet/radiogenic`, `planet/envelope`, `planet/volatiles`,
 //! `planet/snowball`), so that changing one draw never moves another.
-//! `class_of` will pass the trial seed, `model` the body seed.
+//! `class_of` and `model` both pass the trial seed.
 //!
 //! Why a planet is a water world is recorded beside its water: a flag
 //! derived from the orbit and the ice line (formed beyond it) and, inside
@@ -177,7 +177,7 @@ pub(crate) const LABELS: Labels = Labels {
 };
 
 /// Draws the composition of `trial` from `seed` and records it. The
-/// caller chooses the seed: `class_of` the trial's, `model` the body's.
+/// caller chooses the seed: the trial's, for `class_of` and `model` alike.
 pub(crate) fn draw(seed: Seed, trial: &Trial, trace: &mut Trace) -> Result<Drawn, InteriorError> {
     draw_with(seed, trial, trace, &LABELS)
 }
