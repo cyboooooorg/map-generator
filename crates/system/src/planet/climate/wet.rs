@@ -213,14 +213,15 @@ pub(crate) fn boils(
     wet_balance(&mut body, light, air, emissivity).is_none()
 }
 
-/// A collapsed climate: its air, its temperature, and the steps it took
-/// to settle (under the numerics' `collapse_iterations` when it stopped
-/// by its tolerance).
+/// A collapsed climate: its air, its temperature, the steps it took, and
+/// whether it settled by its tolerance (`held`) rather than stopping at
+/// the numerics' `collapse_iterations` on its way down.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Collapsed {
     pub air: PartialPressures,
     pub temperature: Kelvin,
     pub iterations: usize,
+    pub held: bool,
 }
 
 /// What the surface of a climate solved with some CO₂ keeps, bar: `kept`,
@@ -235,7 +236,8 @@ pub(crate) struct Kept<S> {
 }
 
 /// The CO₂, bar, at which a collapse from `start` settles, with the climate
-/// solved there and the evaluations after the first one.
+/// solved there, the evaluations after the first one, and whether it
+/// settled (false when it stopped at `most` evaluations first).
 ///
 /// `solve(c)` solves the climate with `c` bar of CO₂ ([`Kept`]). The collapse
 /// settles at a `c` that keeps what its air holds within `tolerance`, `g(c) =
@@ -270,13 +272,13 @@ pub(crate) fn collapse_search<S: Copy>(
     tolerance: f64,
     most: usize,
     widest: f64,
-) -> (f64, S, usize) {
+) -> (f64, S, usize, bool) {
     let holds = |c: f64, k: f64| c <= k * (1.0 + tolerance);
     let first = solve(start);
     let (mut c, mut here) = (start, first);
     let mut evaluations = 0;
     if holds(c, here.kept) {
-        return (c, here.state, evaluations);
+        return (c, here.state, evaluations, true);
     }
     // Whether `g` has risen above its noise since the start.
     let mut left = widest == 0.0 || c - here.kept > here.noise;
@@ -286,7 +288,7 @@ pub(crate) fn collapse_search<S: Copy>(
     while evaluations < most {
         let g = c - here.kept;
         if left && holds(c, here.kept) {
-            break;
+            return (c, here.state, evaluations, true);
         }
         let mut step = g;
         let mut plain = true;
@@ -328,7 +330,8 @@ pub(crate) fn collapse_search<S: Copy>(
             above = (x, gx, there);
         }
     }
-    (c, here.state, evaluations)
+    let held = left && holds(c, here.kept);
+    (c, here.state, evaluations, held)
 }
 
 /// The root of `g` between `high` (`g ≥ 0`) and `low` (`g < 0`) by the
@@ -342,7 +345,7 @@ fn bracketed<S: Copy>(
     holds: &impl Fn(f64, f64) -> bool,
     most: usize,
     mut evaluations: usize,
-) -> (f64, S, usize) {
+) -> (f64, S, usize, bool) {
     let (mut high, mut low) = (high, low);
     let mut side = 0_i8;
     while evaluations < most && !holds(high.0, high.2.kept) {
@@ -358,7 +361,7 @@ fn bracketed<S: Copy>(
             side = 1;
         } else {
             if gy >= -there.noise {
-                return (y, there.state, evaluations);
+                return (y, there.state, evaluations, true);
             }
             low = (y, gy);
             if side == -1 {
@@ -367,7 +370,8 @@ fn bracketed<S: Copy>(
             side = -1;
         }
     }
-    (high.0, high.2.state, evaluations)
+    let held = holds(high.0, high.2.kept);
+    (high.0, high.2.state, evaluations, held)
 }
 
 /// [`wet_climate`] of a body whose CO₂ has built up with no thermostat to
@@ -390,7 +394,7 @@ pub(crate) fn collapsed_climate(
 ) -> Collapsed {
     let numerics = body.numerics;
     let within = numerics.solver.tolerance;
-    let (_, (kept_air, t), iterations) = collapse_search(
+    let (_, (kept_air, t), iterations, held) = collapse_search(
         air.co2,
         |co2| {
             let next = PartialPressures { co2, ..*air };
@@ -407,9 +411,13 @@ pub(crate) fn collapsed_climate(
         numerics.collapse_iterations,
         numerics.collapse_step,
     );
+    if !held {
+        body.collapse_capped = true;
+    }
     Collapsed {
         air: kept_air,
         temperature: t,
         iterations,
+        held,
     }
 }

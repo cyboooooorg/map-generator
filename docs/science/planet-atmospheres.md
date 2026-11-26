@@ -3706,6 +3706,20 @@ at least the noise, and inside a bracket a point below the balance
 within its noise ends the search: the solve's 0.01 K tolerance lets the
 gap jump across a balance by up to that much.
 
+A collapse can also run out of steps. With #703's pairs, a methane
+Earth just past its outer edge collapses from 14.2 to about 9.3 bar
+with a gap of only 0.02 to 0.09 bar all the way: the step is about the
+gap, and the collapse needs up to 91 climates at `COLLAPSE_STEP`, 140
+at half of it and 207 with the plain step (measured at 1.25 to
+1.268 AU). Legacy's cap of 100 cut the half step short, and the
+climate it kept depended on the step (232.36 K against 230.96 K at
+1.268 AU); with the cap lifted the step is converged (230.92 to
+231.03 K at every step). The cap is now 300, and a collapse that stops
+at it no longer passes for a settled one: the climate it belongs to is
+stored not converged (`planet.climate.converged` false), and
+`collapse_step_is_converged` fails on it. Crossing that flat gap in
+fewer climates is left to a search of its own.
+
 #### Solver constants (rule of #648)
 
 A guard (a cap on steps, a search range, a start or a damping that
@@ -3720,7 +3734,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `SCAN_RATIO` | 1.03 | Calibration | at 1.01 the same first balance, Earth and a sweep across `S_rg` | 3 |
 | `RUNAWAY_PROBE_K` | 380 K | Definition | the wet balance agrees with and without the probe | 1 |
 | `PLATEAU_SURFACES_K` | 500 to 640 K by 20 K | Calibration | every 10 K and to 700 K, the plateau moves under 0.5 W/m² | 3 |
-| `COLLAPSE_ITERATIONS` | 100 | Definition | a collapsing Earth at 1.6 AU settles under it | 1 |
+| `COLLAPSE_ITERATIONS` | 300 | Definition | a collapsing Earth at 1.6 AU settles under it (tier 1); a methane Earth just past its outer edge with #703's pairs needs up to 207 steps, plain; a collapse stopped at it leaves its climate not converged | 1, 3 |
 | `COLLAPSE_TOLERANCE` | 1e-4 | Calibration | at 1e-5 the temperature moves under 0.01 K | 3 |
 | `COLLAPSE_STEP` | 0.005 of the CO₂ | Calibration | at 0.0025 a methane Earth's climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs (#731); since them and #746, 1.25 and 1.2534 AU do not move, and from 1.261 to 1.268 AU the climate moves by up to 5.6 K with the step (open) | 3 |
 | `PHASE_BAND` | 1 K | Calibration | Titan-like and Triton-like sweeps settle across their points | 3 |

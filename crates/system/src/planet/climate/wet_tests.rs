@@ -257,7 +257,7 @@ fn collapse_iterations_is_converged() {
     let c = collapsed_climate(&mut body, light, &air, e);
     let kept = Bar::from(co2_saturation_pressure(c.temperature)).0;
     assert!(c.iterations > 0, "nothing collapsed: {c:?}");
-    assert!(c.iterations < COLLAPSE_ITERATIONS, "{c:?}");
+    assert!(c.held && c.iterations < COLLAPSE_ITERATIONS, "{c:?}");
     assert!(c.air.co2 <= kept * (1.0 + COLLAPSE_TOLERANCE), "{c:?}");
 }
 
@@ -391,7 +391,7 @@ const SYNTHETIC_NOISE: f64 = 0.005;
 /// The collapse of the synthetic gap from the fold, plain (`widest` 0)
 /// or not: its CO₂ and its evaluations.
 fn synthetic_collapse(dips: &[(f64, f64, f64)], widest: f64) -> (f64, usize) {
-    let (c, (), n) = collapse_search(
+    let (c, (), n, _) = collapse_search(
         FOLD,
         |c| Kept {
             kept: c - synthetic_gap(c, dips),
@@ -453,7 +453,7 @@ fn a_collapse_steps_over_a_zero_within_its_noise() {
 #[test]
 fn a_collapse_whose_air_already_holds_does_not_step() {
     let (c, n) = {
-        let (c, (), n) = collapse_search(
+        let (c, (), n, _) = collapse_search(
             1.0,
             |c| Kept {
                 kept: 2.0 * c,
@@ -467,6 +467,38 @@ fn a_collapse_whose_air_already_holds_does_not_step() {
         (c, n)
     };
     assert_eq!((c, n), (1.0, 0));
+}
+
+#[test]
+fn a_collapse_stopped_at_its_cap_says_it_did_not_settle() {
+    // The synthetic crawl from the fold takes more than five steps to its
+    // cold balance, plain or not: stopped at five, neither has settled.
+    for widest in [0.0, COLLAPSE_STEP] {
+        let (_, (), n, held) = collapse_search(
+            FOLD,
+            |c| Kept {
+                kept: c - synthetic_gap(c, &[]),
+                noise: SYNTHETIC_NOISE * c / FOLD,
+                state: (),
+            },
+            COLLAPSE_TOLERANCE,
+            5,
+            widest,
+        );
+        assert!(n == 5 && !held, "widest {widest}: {n} steps, held {held}");
+    }
+    let (_, (), _, held) = collapse_search(
+        FOLD,
+        |c| Kept {
+            kept: c - synthetic_gap(c, &[]),
+            noise: SYNTHETIC_NOISE * c / FOLD,
+            state: (),
+        },
+        COLLAPSE_TOLERANCE,
+        COLLAPSE_ITERATIONS,
+        COLLAPSE_STEP,
+    );
+    assert!(held);
 }
 
 #[test]
@@ -502,11 +534,11 @@ fn a_collapse_stops_where_its_gap_jumps_across_a_root() {
         )
     };
     for start in [2.5, 4.0, 10.0] {
-        let (c, (), n) = collapse(start, COLLAPSE_STEP);
-        let (_, (), plain) = collapse(start, 0.0);
+        let (c, (), n, held) = collapse(start, COLLAPSE_STEP);
+        let (_, (), plain, _) = collapse(start, 0.0);
         assert!((c - 2.0).abs() < 0.01, "from {start}: {c}");
         assert!(
-            n <= plain && n < COLLAPSE_ITERATIONS,
+            held && n <= plain && n < COLLAPSE_ITERATIONS,
             "from {start}: {n} steps against {plain}"
         );
     }

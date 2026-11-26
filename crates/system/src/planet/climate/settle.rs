@@ -32,7 +32,8 @@ pub(crate) struct Pass {
     /// albedo.
     pub starlight: WattPerSquareMetre,
     /// Whether the condensation's fixed point settled within the
-    /// solver's tolerance.
+    /// solver's tolerance, and every collapse of CO₂ it solved settled
+    /// by its own (none stopped at `collapse_iterations`).
     pub converged: bool,
     /// The steps of the condensation's fixed point: 0 when nothing
     /// condenses at the black body's temperature, under the numerics'
@@ -358,7 +359,9 @@ pub(crate) fn under_albedo(body: &mut ClimateBody, albedo: Fraction, emissivity:
 /// the solver's `bracket_tolerance`. It stops when the temperature
 /// assumed is within the solver's `tolerance` of the one its air gives,
 /// when the air stops changing, or after the numerics'
-/// `condense_iterations` steps, not converged.
+/// `condense_iterations` steps, not converged. A collapse of CO₂ that
+/// stops at the numerics' `collapse_iterations` before settling leaves
+/// the pass not converged too.
 fn under_light(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
@@ -371,6 +374,7 @@ fn under_light(
     let e = emissivity.get().clamp(LEAST_EMISSIVITY, 1.0);
     let mut t = (absorbed / (e * STEFAN_BOLTZMANN)).powf(0.25);
     let mut air = condense(&gases, Kelvin(t)).air;
+    body.collapse_capped = false;
     let mut pass = climate_of(body, starlight, &air, emissivity);
     if air == gases {
         return Pass {
@@ -378,7 +382,7 @@ fn under_light(
             temperature: pass.1,
             regulated: pass.2,
             starlight,
-            converged: true,
+            converged: !body.collapse_capped,
             iterations: 0,
         };
     }
@@ -436,7 +440,7 @@ fn under_light(
         temperature: pass.1,
         regulated: pass.2,
         starlight,
-        converged,
+        converged: converged && !body.collapse_capped,
         iterations,
     }
 }

@@ -346,7 +346,8 @@ pub(crate) const CLIMATE_EMISSIVITY: &str = "planet.climate.emissivity";
 /// Whether the carbonate thermostat holds the temperature.
 pub(crate) const CLIMATE_REGULATED: &str = "planet.climate.regulated";
 /// Whether the fixed points of the albedo and of the condensation
-/// settled within the solver's tolerance.
+/// settled within the solver's tolerance, and every collapse of CO₂
+/// within its own (none stopped at its step cap).
 pub(crate) const CLIMATE_CONVERGED: &str = "planet.climate.converged";
 /// Whether the albedo's fixed point has none: the climate jumps between
 /// a warm and a colder side and cycles (#729); the temperature is the

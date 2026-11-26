@@ -1973,7 +1973,9 @@ const STEP_ORBITS: [f64; 3] = [1.25, 1.2534, CYCLING_AU];
 fn collapse_step_is_converged() {
     // The longest step of a collapse (`COLLAPSE_STEP`): at half of it the
     // climates around the edge, where collapses start at the fold, keep
-    // their branch and move under `ALBEDO_TOLERANCE_K`.
+    // their branch and move under `ALBEDO_TOLERANCE_K`. Each is converged
+    // or cycles: a collapse stopped at `COLLAPSE_ITERATIONS` would leave
+    // it neither, and its climate would depend on the step.
     let like = ClimateInputs {
         air: PartialPressures {
             ch4: titan().air.ch4,
@@ -1995,6 +1997,8 @@ fn collapse_step_is_converged() {
             "{au} AU: {:.4} K against {:.4} K at half the step, CO2 {:.4} and {:.4} bar",
             a.temperature.0, b.temperature.0, a.air.co2, b.air.co2
         );
+        assert!(a.converged || a.cycles, "{au} AU: {a:?}");
+        assert!(b.converged || b.cycles, "{au} AU, half the step: {b:?}");
         assert_eq!(frozen_over(&a), frozen_over(&b), "{au} AU: {a:?} {b:?}");
         assert!(
             (a.temperature.0 - b.temperature.0).abs() < super::ALBEDO_TOLERANCE_K.0,
