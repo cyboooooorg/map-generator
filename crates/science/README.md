@@ -167,7 +167,9 @@ of `data/opacity.bin`, continua, clouds; the caller owns the `ColumnCache`) and
 methane, nitrogen and argon saturation. Shortwave: `albedo::shortwave_budget`
 (Bond albedo and absorbed light, for a star's temperature and metallicity; the
 caller owns the `ShortwaveCache`), `starlight` (the star's spectrum, from
-`data/stellar-spectra.tsv`), `shortwave` (`data/shortwave.bin`), `rayleigh`,
+`data/stellar-spectra.tsv`), `shortwave` (`data/shortwave.bin`), `ozone`
+(`ozone_column`, an oxygen air's ozone under its star, and its
+cross-sections from `data/ozone.tsv`), `rayleigh`,
 `veils`, `methane::stratospheric_share`.
 `radiation::gases::PartialPressures` holds the eight gases of a column (N₂,
 CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar); argon absorbs nothing, weighs, scatters,

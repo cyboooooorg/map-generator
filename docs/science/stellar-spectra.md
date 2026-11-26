@@ -197,7 +197,9 @@ star's temperature and metallicity and follows each band through the air.
 The climate gives each star the planet's metallicity (the stars of a
 system share one) and weights the stars' albedos by their flux (#592).
 The cloud albedo (`albedo::CLOUD_ALBEDO`) is fitted on Earth's Bond
-albedo under the table's Sun: 0.296 (0.276 under the black body).
+albedo under the table's Sun: 0.296 (0.276 under the black body), and
+0.322 since #705 fitted it with ozone over the climate's own ground
+([ozone.md](ozone.md), "Calibrations").
 
 The tests hold the table's Sun against the measured one, TSIS-1 HSRS
 (Coddington et al. 2021), binned on the same bands by the same tool and
@@ -236,14 +238,16 @@ is fitted on its own measurement, decided by the user on 2026-11-25:
   (`rfmip_tests.rs`): see [How does a planet's air set its outgoing heat
   and its albedo?](radiative-transfer.md), "Calibrations of the RFMIP
   tolerances".
-- `CLOUD_ALBEDO`, 0.296 (`albedo.rs`): refitted on Earth's Bond albedo
-  0.293 under the table's Sun. The refit was forced: with the black
+- `CLOUD_ALBEDO`, 0.296 (`albedo.rs`; 0.322 since #705, with ozone,
+  see [ozone.md](ozone.md), "Calibrations"): refitted on Earth's Bond
+  albedo 0.293 under the table's Sun. The refit was forced: with the black
   body's 0.276 the table's Sun gives Earth 0.2835, outside the 0.0015 of
   the Bond albedo test (`EARTH_BOND_TOLERANCE`). Searched and not found:
   a single cloud reflectance for a one-column model (see
   [radiative-transfer.md](radiative-transfer.md), "The cloud's water,
   the deck and the haze").
-- `SNOWBALL_WARM_BAR`, 10.2 bar (`snowball.rs`): refitted on Earth's
+- `SNOWBALL_WARM_BAR`, 10.2 bar (`snowball.rs`; 10.1 bar since #705):
+  refitted on Earth's
   dated snowball share under the new cloud albedo and Earth's argon
   (`d⊕` 0.1468 bar, `W` 10.22) (see [Planet
   atmospheres](planet-atmospheres.md), "Calibration of
@@ -296,8 +300,8 @@ against RFMIP's line-by-line fluxes.
   (2008)'s rounded "about 50" for water; the black-body Sun passed it.
   The user retired the window on 2026-11-25: no line-by-line reference on
   water and CO₂ alone exists, and the total is compared with LBLRTM on
-  RFMIP's field once the column holds ozone and O₂ (#653, #715). Earth's
-  Bond albedo test still guards the budget; the column's responses to
+  RFMIP's field once the column holds O₂ too (ozone's shortwave is in
+  since #653's first pull request; #715). Earth's Bond albedo test still guards the budget; the column's responses to
   CO₂ and to water are tested against LBLRTM on RFMIP's field (see [How
   does a planet's air set its outgoing heat and its
   albedo?](radiative-transfer.md), "Window of the H₂O and CO₂

@@ -60,10 +60,11 @@ mod wet_tests;
 use super::bare::Bare;
 use science::balance::{SOLVER, Solver};
 use science::radiation::gases::PartialPressures;
+use science::radiation::ozone::ozone_column;
 use science::relief::volcanoes::heat_flux;
 use science::units::{
-    Bar, Degree, Dex, EarthFlux, Fraction, Kelvin, Kilogram, Metre, MetrePerSecondSquared, Radian,
-    Watt, WattPerSquareMetre,
+    Bar, Degree, Dex, DobsonUnit, EarthFlux, Fraction, Kelvin, Kilogram, Metre,
+    MetrePerSecondSquared, Radian, Watt, WattPerSquareMetre,
 };
 use timeline::{Atmosphere, Gas, TectonicRegime, Traced};
 
@@ -173,6 +174,12 @@ pub(crate) struct Light {
     /// The equilibrium temperature from this star alone, at the
     /// timeline's reference albedo: the warm start of the fixed point.
     pub equilibrium: Kelvin,
+    /// The ozone column the air's O₂ holds under this star's light
+    /// ([`ozone_column`] of the bare air's O₂ and the star's
+    /// temperature), which its light crosses in the shortwave budget. The
+    /// climate never changes the air's O₂ (it does not condense), so the
+    /// column holds for every air the solve tries.
+    pub ozone: DobsonUnit,
 }
 
 /// The rotation the climate reads (the spin, #677): the obliquity, which
@@ -230,6 +237,7 @@ impl ClimateInputs {
         let radius = Metre::from(*bulk.radius.value());
         let heat = &bare.heat;
         let total = Watt(heat.radiogenic.value().0 + heat.tidal.value().0 + heat.secular.value().0);
+        let air = partial_pressures(&surface.atmosphere);
         Some(ClimateInputs {
             sources: bare
                 .trial
@@ -240,9 +248,10 @@ impl ClimateInputs {
                     effective_temperature: *s.effective_temperature.value(),
                     metallicity: *bare.trial.metallicity.value(),
                     equilibrium: *s.equilibrium.value(),
+                    ozone: ozone_column(Bar(air.o2), *s.effective_temperature.value()),
                 })
                 .collect(),
-            air: partial_pressures(&surface.atmosphere),
+            air,
             water: *surface.water.inventory.value(),
             runaway: *surface.water.runaway.value(),
             plates: *surface.regime.value() == TectonicRegime::Plates,

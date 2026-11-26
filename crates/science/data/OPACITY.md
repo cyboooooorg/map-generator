@@ -277,3 +277,54 @@ Layout, little-endian, as `opacity.bin` but for these fields:
 `shortwave.bin` is 1 841 972 bytes (147 bins × 8 g-points × 15 pressures
 × 13 temperatures × 4 sets, then the continua). The build takes about
 four minutes on four threads.
+
+## Ozone cross-sections
+
+`ozone.tsv` is built by `opacity-table --ozone` from one file:
+
+- **Source:** Serdyuchenko, A., Gorshelev, V., Weber, M., Chehade, W.,
+  Burrows, J. P. 2014, "High spectral resolution ozone absorption
+  cross-sections – Part 2: Temperature dependence", *Atmos. Meas. Tech.*
+  7, 625, doi:10.5194/amt-7-625-2014. Data file
+  `serdyuchenkogorshelev5digits.dat` (IUP Bremen, molecular spectroscopy
+  lab, created 05.03.2012), downloaded on 2026-11-25 from
+  `https://www.iup.uni-bremen.de/gruppen/molspec/downloads/serdyuchenkogorshelev5digits.dat`:
+  213.33 to 1100 nm on a 0.01 nm grid of vacuum wavelengths, cm² per
+  molecule at 293 to 193 K in steps of 10 K, total relative systematic
+  uncertainty under 3 % (its header).
+- **SHA-256:**
+  `4dfbf021b746512c192df5f0d43c54cee6ea3b4365bb490bcf6ed347f0ce7092`
+  (checked by `fetch.sh`; recorded in the tool's `ozone::SHA256` and in
+  the table's header, which a test of the tool compares).
+- **Terms:** the data page and the file state none; the paper is
+  published under CC BY 3.0. The table holds derived numbers only (the
+  g-point means below), cited; the raw file is not committed
+  (`tools/opacity-table/raw/` is ignored by git).
+- **Reduction:** each sample goes to the band of the albedo's spectrum
+  (240 bands even in `ln λ` from 0.2 to 5 µm, `starlight.rs`) that holds
+  its wavelength; a band's samples at one temperature are sorted and
+  averaged over the eight g-intervals of the k-tables (edges 0, 0.3,
+  0.6, 0.8, 0.9, 0.96, 0.99, 0.998, 1). A negative sample (the file's
+  noise around zero) counts as zero. The four bands below 213.33 nm take
+  the first band's g-points; the bands past 1100 nm are not written (the
+  science crate reads them as zero). Only 223 K (the layer's) and 233 K
+  (for a test) are kept.
+- **Layout:** comment lines (`#`), a `bands` line (count and outer
+  edges, m, checked against the star's bands when the crate loads it), a
+  `g` line (the g-intervals' edges), then one row per temperature and
+  band, `temperature_k band sigma_1 … sigma_8`, cm² per molecule, band 0
+  the bluest. 26.6 kB.
+- **Checked by:** `radiation::ozone`'s tests (the Hartley peak
+  1.165e-17 cm² at 255.3 nm and the Chappuis peak 5.16e-21 cm² at
+  602.5 nm at 223 K, and the file's 233 K peaks, within 1e-3) and the
+  tool's (the bands and g lines, the SHA-256).
+
+Regeneration, from the repository root:
+
+```bash
+tools/opacity-table/fetch.sh
+cargo run --release -j 4 -p opacity-table -- --ozone
+```
+
+It reads `raw/serdyuchenkogorshelev5digits.dat` and writes
+`crates/science/data/ozone.tsv` in under a second.

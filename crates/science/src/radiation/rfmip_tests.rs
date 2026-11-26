@@ -210,6 +210,7 @@ impl Field {
                     .collect();
                 let column = Levels { levels, spans };
                 let air = Air {
+                    ozone: 0.0,
                     haze: (0.0, 1.0),
                     rayleigh_550: rayleigh_depth_550(&column.levels[0].gases, STANDARD_GRAVITY.0),
                     column: Some(&column),
