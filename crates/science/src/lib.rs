@@ -15,6 +15,7 @@ pub mod giants;
 pub mod habitable;
 pub mod heat;
 pub mod hydrogen;
+pub mod life_gases;
 pub mod orbit;
 pub mod outgassing;
 pub mod photochemistry;

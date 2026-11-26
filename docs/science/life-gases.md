@@ -281,12 +281,24 @@ ratios carry over.
 
 ### What it does now
 
-- **No biogenic gas.** `science::life::oxygenate` (planet PR 2d-4) gives
-  a `Modern` air O₂ at `O2_PER_N2` of its N₂ and removes its methane; an
-  `Oxidising` air loses its methane and keeps no O₂ (#717); `Anoxic` and
-  `Lifeless` airs pass through. N₂O is not a gas of the model
-  (`PartialPressures` holds N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂ and Ar;
-  #737).
+- **The `Modern` methane law is in `science`, not yet wired.**
+  `science::life_gases::modern_methane(stars, gravity)` gives the
+  methane of a `Modern` air, bar by weight: $p = \Phi_A \tau g$ with
+  Prather et al. 2012's 202 Tg/yr spread over Earth's 5.112e14 m² and
+  their 9.5 years times the host factor of each star (calibration 1,
+  `methane_host_factor`), the stars' loss rates added by their share of
+  the light (calibration 2, `methane_lifetime`). Around the Sun on
+  Earth's 9.798 m/s² it gives 3.678e-7 bar, 672.8 ppb by moles in the
+  reference air, inside Prather et al.'s 680 ± 24 like for like
+  (`modern_methane_around_the_sun_is_prathers_column`). Planet PR 2d-4
+  calls it from its `Modern` stage (`life::oxygenate`); until then no
+  engine reads it, and the reference bodies' airs are unchanged.
+- **No biogenic gas in the engines yet.** `science::life::oxygenate`
+  (planet PR 2d-4) gives a `Modern` air O₂ at `O2_PER_N2` of its N₂ and
+  removes its methane; an `Oxidising` air loses its methane and keeps no
+  O₂ (#717); `Anoxic` and `Lifeless` airs pass through. N₂O is not a gas
+  of the model (`PartialPressures` holds N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂
+  and Ar; #737).
 - **Abiotic methane only.** Outgassed methane survives only under an
   equilibrium temperature of 150 K (`photochemistry::METHANE_SURVIVES`,
   a calibration) and is destroyed by Lyman α photolysis
@@ -299,6 +311,14 @@ ratios carry over.
   `CH4_OPACITY` 15.1, a calibration) that acted on any air holding
   methane. Methane's lines, which this law joins, add to the pairs
   without counting methane twice.
+- **Weights read as moles (a departure).** The chain's partial pressures
+  are weights; the column reads $p_i/p$ as a share of the moles. The
+  law's 3.678e-7 bar of methane is 672.8 ppb by moles in Earth's air,
+  but the column would read it as 373 ppb ($16.04/28.96$ of it), so
+  methane's lines would take about half of what they should once 2d-4
+  wires it. The same holds for argon (radiative-transfer.md, "Gases that
+  only broaden") and for Titan's chain methane. Not fixed here: it
+  changes every air the column reads.
 
 ### Where the code's docs disagree
 
@@ -393,7 +413,8 @@ points after its review:
 
 ## Calibrations
 
-Decided 2026-11-26, none in the code yet.
+Decided 2026-11-26. Methane's are in the code since #704
+(`science::life_gases`); N₂O's wait for its lines (#737).
 
 ### Calibration 1: the host factor
 
@@ -422,6 +443,11 @@ more around an M8.
 Searched and not found: a law of either gas's lifetime against the
 host's ultraviolet; any model outside the Kasting family around a host
 other than the Sun; runs at pre-industrial fluxes.
+
+In the code (methane): `life_gases::methane_host_factor`, from the
+abundances `RK2018_CH4_PPM` and `RUGHEIMER_2015A_CH4_PPM` over their
+Suns' 1.73 and 1.6 ppm (`Calibration:` and `Source:`), tested at every
+grid point and past both ends (`host_factor_is_the_grids_ratio_at_its_points`).
 
 Its known faults:
 
@@ -453,7 +479,10 @@ Its known faults:
 
 Loss rates add: $1/\tau = \sum_i w_i/\tau_i$, each star's factor
 weighted by its share of the planet's light. The grids hold one star at
-Earth's total light; no source treats two hosts.
+Earth's total light; no source treats two hosts. In the code:
+`methane_lifetime` (stars whose flux is not positive count for nothing;
+with none, Earth's 9.5 years), tested by
+`several_stars_add_their_loss_rates_by_light`.
 
 ## Departures
 

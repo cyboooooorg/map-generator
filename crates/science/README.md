@@ -117,6 +117,10 @@ fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
 `argon_degassed_share`).
 `science::{escape, dynamo, outgassing, volatiles, habitable, tectonics,
 photochemistry, snowball}`: [planet atmospheres](../../docs/science/planet-atmospheres.md).
+`science::life_gases`: `modern_methane` (the methane a `Modern` biosphere
+keeps, from Earth's flux, the lifetime under the stars and the gravity),
+`methane_lifetime`, `methane_host_factor`; see [life
+gases](../../docs/science/life-gases.md).
 
 ## Giants and envelopes
 
