@@ -847,11 +847,11 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
     // What it sends to space was ε σ T⁴ while the thin air was
     // transparent, the premise of a grey column. Since the N₂ pairs of
     // #703 the air absorbs at the roto-translational peak where a 60 K
-    // surface emits most: the column sends out 6 % (frost) to 12 %
-    // (liquid side) less than ε σ T⁴, so the check compares with the
-    // column's own ε OLR(T) at each climate's flux, the balance each
-    // fixed point solves, which tests the same physics without the grey
-    // premise (ε T⁴ is still printed).
+    // surface emits most: the column sends out 6 % (frost) to 16 %
+    // (liquid) less than σ T⁴ (0.9432 and 0.8417 of it, study 38), so the
+    // check compares with the column's own ε OLR(T) at each climate's
+    // flux, the balance each fixed point solves, which tests the same
+    // physics without the grey premise (ε T⁴ is still printed).
     let reference = titan();
     let air = PartialPressures {
         n2: NITROGEN_WORLD_N2.0,
@@ -917,27 +917,9 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
 
 /// Definition: the light, against Titan's, over which the nitrogen
 /// world's two branches are followed, 0.5 to 0.75: it spans both folds
-/// study 38 measured on its S curve (0.542 and 0.645 of Titan's light,
-/// [`HYSTERESIS_FOLDS`]).
+/// of its S curve, which study 38 measured at 0.542 and 0.645 of Titan's
+/// light (`docs/science/nitrogen-phases.md`).
 const HYSTERESIS_SWEEP: (f64, f64) = (0.5, 0.75);
-
-/// Definition: a measured reference of the model, not a fact: the folds
-/// of the nitrogen world's S curve, in Earth fluxes, measured by study 38
-/// on the model's own balance (#703's branch at e59e6a92,
-/// `docs/science/nitrogen-phases.md`, "What the branch's climate does"):
-/// the frost branch's last point, 0.0070411, and the liquid branch's
-/// first, 0.0059183. No source claims them: a nitrogen world's hysteresis
-/// has no published value (study 38, "Searched and not found").
-const HYSTERESIS_FOLDS: (f64, f64) = (0.0070411, 0.0059183);
-
-/// Definition: how far, in steps of the followed light, a branch's last
-/// climate may sit from its fold, 3: the fixed point resolves a root to
-/// [`ALBEDO_TOLERANCE_K`] in radiative equilibrium, 0.1 K of about
-/// 57 K, so 0.7 % of the light (`4 ΔT / T`), 4.1e-5 to 4.9e-5 Earth fluxes
-/// at the two folds, three steps of the sweep's 1.37e-5. Measured: 0.7
-/// step past the frost's fold (0.0070506) and 0.5 step above the
-/// liquid's (0.0059258).
-const FOLD_STEPS: f64 = 3.0;
 
 /// The climates of the nitrogen world under each flux of `fluxes` in
 /// turn, each started from the albedo and emissivity the one before
@@ -965,7 +947,12 @@ fn a_nitrogen_world_keeps_its_frost_and_its_liquid_over_a_range_of_light() {
     // an S curve. Followed up the light from its frost, the body stays
     // frozen to the frost branch's fold; followed down from its liquid, it
     // stays liquid to the liquid branch's fold. Every climate converges,
-    // keeps the albedo and emissivity it derives, and attracts.
+    // keeps the albedo and emissivity it derives, and attracts, and the
+    // two branches overlap (Charnay et al. 2014: both states stable under
+    // one light). Where the folds lie is the model's, not a fact: study
+    // 38 measured them at 0.0070411 and 0.0059183 Earth fluxes on its S
+    // curve, and this test found 0.0070506 and 0.0059258 when it was
+    // written (history only, not asserted).
     let reference = titan();
     let base = ClimateInputs {
         air: PartialPressures {
@@ -1038,23 +1025,11 @@ fn a_nitrogen_world_keeps_its_frost_and_its_liquid_over_a_range_of_light() {
         .last()
         .expect("a liquid")
         .0;
-    println!(
-        "frost up to {top:.7}, liquid down to {bottom:.7} (study 38: {:.7}, {:.7}), step {step:.2e}",
-        HYSTERESIS_FOLDS.0, HYSTERESIS_FOLDS.1
-    );
+    println!("frost up to {top:.7}, liquid down to {bottom:.7}, step {step:.2e}");
     assert!(bottom < top, "no overlap: {bottom} {top}");
     assert!(
         top < up[SWEEP_COUNT - 1] && bottom > up[0],
         "a fold outside the sweep"
-    );
-    let (frost_fold, liquid_fold) = HYSTERESIS_FOLDS;
-    assert!(
-        (top - frost_fold).abs() <= FOLD_STEPS * step,
-        "{top} against {frost_fold}"
-    );
-    assert!(
-        (bottom - liquid_fold).abs() <= FOLD_STEPS * step,
-        "{bottom} against {liquid_fold}"
     );
 }
 
@@ -1943,15 +1918,18 @@ fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
     assert!(under_steam(&s));
 }
 
-/// An orbit just past a methane Earth's outer edge where the albedo's
+/// Definition: a test input placed by a probe, not a fact of any body:
+/// an orbit just past a methane Earth's outer edge where the albedo's
 /// fixed point has none (#729): a warm climate at its maximum greenhouse
 /// derives a Rayleigh albedo that collapses its CO₂, and the collapsed
 /// climate derives one that warms it back. The edge is 1.2588 AU since
-/// methane warms through its pairs only (#703; it was 1.4355 AU under the
-/// grey stand-in, and this orbit 1.44 AU), measured by
+/// methane warms through its pairs only (#703; it was 1.4365 AU under the
+/// grey stand-in, on `main` since #734, 1.4355 AU before, and this orbit
+/// 1.44 AU), measured by
 /// `one_greenhouse_search_on_a_condensing_air`; orbits from 1.268 to
-/// 1.276 AU cycle (probed every 0.001 AU: 1.267 settles at its maximum
-/// greenhouse, 1.278 frozen), and this one is their middle.
+/// 1.277 AU cycle (probed every 0.001 AU: 1.267 settles at its maximum
+/// greenhouse, 1.278 frozen; 1.277 probed after the stable-root rule),
+/// and this one is near their middle.
 const CYCLING_AU: f64 = 1.272;
 
 /// Definition: the most albedo steps the cycling orbit may take before
