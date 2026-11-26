@@ -247,7 +247,8 @@ pub(crate) struct Kept<S> {
 /// reaches, never past it. A collapse that starts at the maximum greenhouse
 /// can start at the fold of the warm branch, where `g` is about zero
 /// (measured on a methane Earth's edge search); there it crawls, `g` growing
-/// by about a tenth a step, for up to 58 steps at 17 bar (#731).
+/// by about a tenth a step, for up to 58 steps at 17 bar (#731, measured
+/// before #734).
 ///
 /// Otherwise (#731) each step is at least the plain one and at most twice the
 /// last one and `widest` times the CO₂; where `g` falls, at most to the zero

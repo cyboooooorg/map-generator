@@ -3254,8 +3254,8 @@ Titan's 9.57 AU, where the methane condenses: the two searches give
 14.2 and 52.0 bar, yet the settled climate is the same, 88.419440 K both
 ways (a gap of 2e-11 K), frozen, and the outer edge is 1.4326 AU both
 ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, see below;
-1.4443 AU once the stellar spectra of #730 came in, and 1.4355 AU since
-#729, below).
+1.4443 AU once the stellar spectra of #730 came in, 1.4355 AU since
+#729, below, and 1.4365 AU since #734).
 No regulated body can have a condensing air: the thermostat holds
 288 K, above the critical points of methane
 (190.564 K, Setzmann & Wagner 1991) and nitrogen (126.192 K, Span et al.
@@ -3299,7 +3299,7 @@ then fell to the floor of the surface solver, the dew point of its
 vapour, 284.0103 K, at 1, 1.3 and 1.6 AU. Now it sits at 288.0000 K at 1
 AU (3.94 bar of CO₂) and 288.0004 K at 1.3 AU (7.73 bar), and is frozen
 at 1.6 AU. Its outer edge moves in from 1.6470 to 1.4331 AU (1.4355 AU
-since #730 and #729). The old
+since #730 and #729, 1.4365 AU since #734). The old
 edge came from the top end of the search: from about 1.43 to 1.65 AU
 even the most CO₂ sends out more from a 288 K surface than the air with
 that CO₂ absorbs (at 1.6 AU under a 0.3 albedo, 57.6 against 51.0 W/m²),
@@ -3522,7 +3522,8 @@ spends part of its time on each side has a time-averaged state that a
 future law would rest on these papers for. The rewrite draws no share
 of time: the cold side and the `cycles` flag say that no stable warm
 state is claimed. The edge of a methane Earth moves from 1.4443 to
-1.4355 AU with it (measured, `one_greenhouse_search_on_a_condensing_air`),
+1.4355 AU with it (measured, `one_greenhouse_search_on_a_condensing_air`;
+1.4365 AU since #734),
 and that test went from 833 s to 74 s (release).
 
 #### A collapse from the fold (#731)
@@ -3531,8 +3532,8 @@ A climate past its maximum greenhouse collapses from the CO₂ of that
 maximum: the CO₂ frosts out, step by step, until the air keeps what its
 surface allows. Its gap `g(c) = c − φ(c)` (the CO₂ of the air less what
 its surface keeps) was about zero there on a methane Earth's edge
-search (measured): its maximum greenhouse sat at the fold that ends the
-warm branch. Below it `φ`
+search (measured before #734): its maximum greenhouse sat at the fold
+that ends the warm branch. Below it `φ`
 grows with `c`, so the plain step `c ← φ(c)` falls onto the largest
 balance below the start without passing it. From the fold it crawls: on
 a methane Earth near its outer edge `g` starts at 0.002 to 0.006 bar
@@ -3547,8 +3548,8 @@ minus its noise, the step has passed a balance: the search brackets it
 and closes in by the Illinois rule. A warm balance narrower than one
 step can be stepped over; the plain step finds every one (tier 1,
 synthetic collapses in the measured shape). At half the step the
-methane Earth's climates at 1.42875, 1.4355 and 1.44 AU do not move
-(tier 3, `collapse_step_is_converged`).
+methane Earth's climates at 1.42875, 1.4355 and 1.44 AU, around its
+outer edge, do not move (tier 3, `collapse_step_is_converged`).
 
 The gap's noise is how much `φ` moves within the temperature tolerance
 of the climate solve, `φ(T + TOLERANCE_K) − φ(T)`: 0.005 bar at 248 K
@@ -3560,12 +3561,17 @@ rewrite counts a balance only once `g` has risen above its noise since
 the start: a zero within the noise is not a balance, and the collapse
 steps on. A collapse whose air already holds at its start does not
 step at all, as in legacy. This follows the decision of #729 (at a
-discontinuity, the cold side; decided with the user, 2026-11-26): on
-the methane Earth's edge search, 28 of 280 collapses that legacy
-stopped warm on noise now fall cold, and the outer edge stays at
-1.4355 AU. `one_greenhouse_search_on_a_condensing_air` went from 74 s
-to 59 s (release); the cold collapses cost 18 to 27 climates each,
-where the stops on noise cost 1 to 3. Within the noise the steps stay
+discontinuity, the cold side; decided with the user, 2026-11-26). Before
+#734, on the methane Earth's edge search, 28 of 280 collapses that
+legacy stopped warm on noise fell cold, and the search went from 74 s to
+59 s (release), its crawls from the fold gone. Since #734 the maximum
+greenhouse sits on the fold less often: 12 of 272 collapses (from 16.14
+and 16.23 bar, about 247 K) fall cold, at 16 to 18 climates each where
+the stops on noise took 2 to 6; the others keep their balance within
+0.001 K. The outer edge stays at 1.4365 AU, and
+`one_greenhouse_search_on_a_condensing_air` takes 40 s against 37 s
+with the plain step: the rule costs that, for a result that no longer
+depends on the solver's last digits. Within the noise the steps stay
 at least the noise, and inside a bracket a point below the balance
 within its noise ends the search: the solve's 0.01 K tolerance lets the
 gap jump across a balance by up to that much.
