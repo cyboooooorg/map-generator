@@ -95,6 +95,16 @@ pub(crate) const COLLAPSE_TOLERANCE: f64 = 1e-4;
 /// `collapse_iterations_is_converged`).
 pub(crate) const COLLAPSE_ITERATIONS: usize = 100;
 
+/// Calibration: the longest step of a collapse, as a share of its CO₂,
+/// 0.005 (#731): 0.085 bar at 17 bar. A warm balance whose pocket of CO₂
+/// is narrower than one step can be stepped over, where the plain
+/// iteration would stop in it; at half of it a methane Earth's climates
+/// around its outer edge do not move, a convergence test in tier 3
+/// (`collapse_step_is_converged`) ("A collapse from the fold (#731)" in
+/// `docs/science/planet-atmospheres.md`).
+/// Zero steps the collapse plainly, as legacy did.
+pub(crate) const COLLAPSE_STEP: f64 = 0.005;
+
 /// Calibration: the bisection steps of the thaw search, 13 (legacy
 /// `THAW_STEPS` was 12). Study 25 ("Solver constants"): at 16 steps
 /// Earth's thaw CO₂ must move under 0.1 %, held by a convergence test in
@@ -295,6 +305,8 @@ pub(crate) struct Numerics {
     pub collapse_tolerance: f64,
     /// [`COLLAPSE_ITERATIONS`].
     pub collapse_iterations: usize,
+    /// [`COLLAPSE_STEP`]; zero steps the collapse plainly.
+    pub collapse_step: f64,
     /// [`THAW_STEPS`].
     pub thaw_steps: usize,
     /// [`ALBEDO_TOLERANCE_K`].
@@ -332,6 +344,7 @@ impl Numerics {
         scan_ratio: SCAN_RATIO,
         collapse_tolerance: COLLAPSE_TOLERANCE,
         collapse_iterations: COLLAPSE_ITERATIONS,
+        collapse_step: COLLAPSE_STEP,
         thaw_steps: THAW_STEPS,
         albedo_tolerance: ALBEDO_TOLERANCE_K,
         albedo_iterations: ALBEDO_ITERATIONS,
