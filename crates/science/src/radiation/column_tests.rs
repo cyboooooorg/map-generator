@@ -326,6 +326,10 @@ const SMOOTH_STEP_K: f64 = 0.25;
 /// factor 7 above the first and 3 under the second. Not derived from the
 /// fusion share: the change of the rise scales as the jump over the
 /// sweep's step, so a share of the latent heat alone does not set it.
+/// The same bound holds CO₂'s column across its own triple point
+/// (`a_co2_column_is_smooth_across_its_triple_point`): 5.6 % since its
+/// split, 176 % before (three steps falling), a factor 1.8 under the bound
+/// and 18 above it.
 const SMOOTH_RISE_CHANGE: f64 = 0.1;
 
 /// The skin temperature of a body of equilibrium temperature `t_eq_k`.
@@ -964,26 +968,37 @@ fn an_air_of_nitrogen_and_oxygen_alone_loses_what_hopfner_finds() {
     );
 }
 
+/// The rises of the outgoing radiation `olr_at(surface_k)`, W/m², over
+/// steps of [`SMOOTH_STEP_K`] across `(from, to)`.
+fn rises_over((from, to): (f64, f64), mut olr_at: impl FnMut(f64) -> f64) -> Vec<f64> {
+    let step = SMOOTH_STEP_K;
+    let n = ((to - from) / step).round() as usize;
+    let olrs: Vec<f64> = (0..=n).map(|i| olr_at(from + i as f64 * step)).collect();
+    olrs.windows(2).map(|w| w[1] - w[0]).collect()
+}
+
+/// The most a rise of `rises` changes over the next, as a share of the
+/// larger.
+fn most_change(rises: &[f64]) -> f64 {
+    rises
+        .windows(2)
+        .map(|w| (w[1] - w[0]).abs() / w[0].abs().max(w[1].abs()))
+        .fold(0.0, f64::max)
+}
+
 /// The rises of the column's outgoing radiation, W/m², over steps of
 /// [`SMOOTH_STEP_K`] across [`SMOOTH_RANGE_K`].
 fn rises(profile: Profile, cache: &mut ColumnCache) -> Vec<f64> {
-    let (from, to) = SMOOTH_RANGE_K;
-    let step = SMOOTH_STEP_K;
-    let n = ((to - from) / step).round() as usize;
-    let olrs: Vec<f64> = (0..=n)
-        .map(|i| {
-            let t = from + i as f64 * step;
-            olr(
-                &earth_at(PREINDUSTRIAL_PPM, t),
-                t,
-                earth_skin(),
-                EARTH,
-                profile,
-                cache,
-            )
-        })
-        .collect();
-    olrs.windows(2).map(|w| w[1] - w[0]).collect()
+    rises_over(SMOOTH_RANGE_K, |t| {
+        olr(
+            &earth_at(PREINDUSTRIAL_PPM, t),
+            t,
+            earth_skin(),
+            EARTH,
+            profile,
+            cache,
+        )
+    })
 }
 
 #[test]
@@ -997,15 +1012,120 @@ fn earths_column_is_smooth_in_its_surface() {
     let cache = &mut ColumnCache::default();
     for profile in [Profile::CLEAR, Profile::CLIMATE] {
         let rises = rises(profile, cache);
-        let worst = rises
-            .windows(2)
-            .map(|w| (w[1] - w[0]).abs() / w[0].abs().max(w[1].abs()))
-            .fold(0.0, f64::max);
+        let worst = most_change(&rises);
         println!("{profile:?}: rises {rises:.3?}, most change {worst:.4}");
         assert!(
             rises.iter().all(|&r| r > 0.0),
             "{profile:?} falls: {rises:?}"
         );
         assert!(worst <= share, "{profile:?}: a rise changes by {worst:.3}");
+    }
+}
+
+/// Definition: a dry air of 12.5 bar of CO₂ over 0.75 bar of nitrogen,
+/// whose CO₂ saturates at about 239 K at the surface (its saturation curve,
+/// [`co2_saturation_bar`]): a cold, CO₂-rich air whose column condenses
+/// CO₂ from the surface, or from just above it, up across CO₂'s triple
+/// point (216.592 K) to its skin, as a methane Earth's collapsed climate
+/// past its outer edge does (#703, measured at 1.272 AU).
+const CO2_RICH_AIR: PartialPressures = PartialPressures {
+    n2: 0.75,
+    co2: 12.5,
+    h2o: 0.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: 0.0,
+    ar: 0.0,
+};
+
+/// Definition: the surface temperatures, K, over which the smoothness test
+/// sweeps [`CO2_RICH_AIR`]'s column, 232 to 239 K: colder than its
+/// surface's CO₂ saturation (about 239.4 K), so that the column condenses
+/// from the surface up, and the level where it crosses CO₂'s triple point
+/// sweeping two of its layers. Past the saturation the column's outgoing
+/// radiation flattens (rises of a few mW/m² per step), whose share of
+/// change the test cannot read.
+const CO2_SMOOTH_RANGE_K: (f64, f64) = (232.0, 239.0);
+
+/// Definition: the skin of [`CO2_RICH_AIR`]'s column, 190 K, below CO₂'s
+/// triple point, so that its CO₂ pseudo-adiabat crosses it (the methane
+/// Earth of #703 at 1.272 AU had a skin of 190.68 K).
+const CO2_RICH_SKIN: Kelvin = Kelvin(190.0);
+
+#[test]
+fn a_co2_column_is_smooth_across_its_triple_point() {
+    // CO₂'s latent heat jumps by fusion's at its triple point (sublimation
+    // below, vaporisation above): a step of its pseudo-adiabat that takes
+    // the phase of its midpoint for its whole span shifts the column above
+    // by about 1 K, and its outgoing radiation by about 1.3 W/m², where the
+    // surface moves that midpoint across 216.592 K (#703's methane Earth,
+    // whose collapse stopped on the jump). The bound is the water column's
+    // ([`SMOOTH_RISE_CHANGE`]).
+    let cache = &mut ColumnCache::default();
+    for profile in [Profile::CLEAR, Profile::CLIMATE] {
+        let rises = rises_over(CO2_SMOOTH_RANGE_K, |t| {
+            olr(&CO2_RICH_AIR, t, CO2_RICH_SKIN, EARTH, profile, cache)
+        });
+        let worst = most_change(&rises);
+        println!("{profile:?}: rises {rises:.3?}, most change {worst:.4}");
+        assert!(
+            rises.iter().all(|&r| r > 0.0),
+            "{profile:?} falls: {rises:?}"
+        );
+        assert!(
+            worst <= SMOOTH_RISE_CHANGE,
+            "{profile:?}: a rise changes by {worst:.3}"
+        );
+    }
+}
+
+/// Definition: the substeps of the reference integration of one step of
+/// CO₂'s pseudo-adiabat, 2000: each spans 1/2000 of the step, so that the
+/// one that crosses the triple point errs by under a thousandth of the
+/// jump a whole step makes.
+const CO2_STEP_SUBSTEPS: usize = 2000;
+
+/// Calibration: how far, K, one step of CO₂'s pseudo-adiabat across its
+/// triple point may land from the same step cut into
+/// [`CO2_STEP_SUBSTEPS`], 0.01 K. It bounds the model's own numerics: no
+/// published tolerance on the step of a pseudo-adiabat was found in the
+/// sources read (Kasting 1991 and Kopparapu et al. 2013 give the slope,
+/// not its integration; no dedicated search was made), so the bound is
+/// placed between two measured ends: split at the triple point, a step of a
+/// twentieth of a decade from 216.8 to 218 K misses by 1.0e-3 to
+/// 3.4e-3 K (3.5e-4 K for a step that does not cross it, at 222 and
+/// 226 K); taken over the phase of each of its points, as before the
+/// split, by 0.08 to 0.45 K. 0.01 K sits a factor 3 above the first and
+/// 8 under the second.
+const CO2_STEP_TOLERANCE_K: f64 = 0.01;
+
+#[test]
+fn a_co2_step_across_its_triple_point_takes_each_phase_on_its_part() {
+    // One step of CO₂'s pseudo-adiabat that crosses its triple point
+    // agrees with the same step cut into many, each over the condensate
+    // stable where it starts: liquid down to 216.592 K, frost below.
+    // Before the split, the step took the phase of each point it read
+    // for its whole span, and missed by up to 0.45 K.
+    let air = DryAir::of(&CO2_RICH_AIR, CO2_RICH_SKIN.0);
+    let h = std::f64::consts::LN_10 / 20.0;
+    for start in [216.8, 217.2, 217.6, 218.0] {
+        let p = co2_saturation_bar(start) / CO2_RICH_AIR.co2 * CO2_RICH_AIR.total();
+        let one = co2_step(&air, start, p, h);
+        let (mut t, mut from) = (start, p);
+        let small = h / CO2_STEP_SUBSTEPS as f64;
+        for _ in 0..CO2_STEP_SUBSTEPS {
+            t = co2_step(&air, t, from, small);
+            from *= (-small).exp();
+        }
+        println!("{start} K: one step {one:.5} K, {CO2_STEP_SUBSTEPS} steps {t:.5} K");
+        assert!(
+            one < CO2_TRIPLE_TEMPERATURE,
+            "{start} K: the step ends at {one} K"
+        );
+        assert!(
+            (one - t).abs() < CO2_STEP_TOLERANCE_K,
+            "{start} K: {one} against {t}"
+        );
     }
 }

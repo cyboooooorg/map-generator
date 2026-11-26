@@ -49,6 +49,7 @@
 
 use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STANDARD_ATMOSPHERE};
 use crate::units::{AstronomicalUnit, Dex, Kelvin, Kilogram, Pascal, SolarLuminosity};
+use crate::water::Condensate;
 
 /// Calibration: kg of CO2 per kg of rock and iron, fitted on Venus's air,
 /// which has no thermostat: 92 bar of CO2 is about 1e-4 of the planet
@@ -219,7 +220,7 @@ const CO2_CRITICAL_PRESSURE_PA: f64 = 7_377_300.0;
 /// Source: triple-point temperature of CO2, 216.592 K (Span and Wagner
 /// 1996, doi:10.1063/1.555991; as in CoolProp v6.6.0,
 /// `dev/fluids/CarbonDioxide.json`, `pS.Tmin`).
-const CO2_TRIPLE_TEMPERATURE: f64 = 216.592;
+pub(crate) const CO2_TRIPLE_TEMPERATURE: f64 = 216.592;
 /// Source: coefficients `n_i` of the vapour pressure of CO2,
 /// `ln(p / p_c) = T_c / T sum n_i theta^t_i`, `theta = 1 - T / T_c`
 /// CoolProp's ancillary fit to the Span and Wagner 1996 equation of state
@@ -370,9 +371,9 @@ impl Curve {
     }
 
     /// `(ln p, d ln p / dT)` below the triple point, `p` in Pa, at `t_k`
-    /// held at or above [`FLOOR_TEMPERATURE`].
+    /// held between [`FLOOR_TEMPERATURE`] and the triple point.
     fn sublimation_log(&self, t_k: f64) -> (f64, f64) {
-        let t = t_k.max(FLOOR_TEMPERATURE);
+        let t = t_k.max(FLOOR_TEMPERATURE).min(self.triple_temperature);
         let tt = self.triple_temperature;
         match self.sublimation {
             Sublimation::Equation { triple_pa, a, e } => {
@@ -397,30 +398,57 @@ impl Curve {
         }
     }
 
+    /// The condensate stable at `t_k`: frost below the triple point (and
+    /// at a NaN temperature), liquid above.
+    fn condensate_at(&self, t_k: f64) -> Condensate {
+        if t_k.is_nan() || t_k < self.triple_temperature {
+            Condensate::Ice
+        } else {
+            Condensate::Liquid
+        }
+    }
+
     /// Saturation pressure, Pa: the vapour curve from the triple to the
     /// critical point, the sublimation line below, infinite from the
     /// critical point up.
     fn pressure_pa(&self, t_k: f64) -> f64 {
-        if t_k >= self.critical_temperature {
-            return f64::INFINITY;
+        self.pressure_pa_over(t_k, self.condensate_at(t_k))
+    }
+
+    /// [`Curve::pressure_pa`] over `condensate` whatever the temperature:
+    /// the vapour curve a little below the triple point, where the
+    /// pseudo-adiabat's step that crosses it is split
+    /// ([`crate::radiation::column`]); the frost's, held at the triple
+    /// point above it (the split's rounding only reads it there). Both
+    /// curves meet at the triple point.
+    fn pressure_pa_over(&self, t_k: f64, condensate: Condensate) -> f64 {
+        match condensate {
+            Condensate::Liquid if t_k >= self.critical_temperature => f64::INFINITY,
+            Condensate::Liquid => self.critical_pa * self.vapour_sum(t_k).0.exp(),
+            Condensate::Ice => self.sublimation_log(t_k).0.exp(),
         }
-        if t_k >= self.triple_temperature {
-            return self.critical_pa * self.vapour_sum(t_k).0.exp();
-        }
-        self.sublimation_log(t_k).0.exp()
     }
 
     /// `R T^2 d ln p / dT`, J/mol, with `T` held at or above
     /// [`FLOOR_TEMPERATURE`] below the triple point; 0 from the critical
     /// point up.
+    #[cfg(test)]
     fn latent_j_mol(&self, t_k: f64) -> f64 {
-        if t_k >= self.critical_temperature {
-            0.0
-        } else if t_k >= self.triple_temperature {
-            MOLAR_GAS_CONSTANT * t_k * t_k * self.vapour_sum(t_k).1
-        } else {
-            let t = t_k.max(FLOOR_TEMPERATURE);
-            MOLAR_GAS_CONSTANT * t * t * self.sublimation_log(t_k).1
+        self.latent_j_mol_over(t_k, self.condensate_at(t_k))
+    }
+
+    /// [`Curve::latent_j_mol`] over `condensate` whatever the temperature
+    /// (as [`Curve::pressure_pa_over`]): the slope of the vapour curve
+    /// over liquid, of the sublimation line over frost, which differ by
+    /// the latent heat of fusion at the triple point.
+    fn latent_j_mol_over(&self, t_k: f64, condensate: Condensate) -> f64 {
+        match condensate {
+            Condensate::Liquid if t_k >= self.critical_temperature => 0.0,
+            Condensate::Liquid => MOLAR_GAS_CONSTANT * t_k * t_k * self.vapour_sum(t_k).1,
+            Condensate::Ice => {
+                let t = t_k.max(FLOOR_TEMPERATURE).min(self.triple_temperature);
+                MOLAR_GAS_CONSTANT * t * t * self.sublimation_log(t_k).1
+            }
         }
     }
 }
@@ -437,12 +465,35 @@ pub(crate) fn co2_saturation_bar(t_k: f64) -> f64 {
     CO2.pressure_pa(t_k) / PASCALS_PER_BAR
 }
 
-/// Molar latent heat of CO2, J/mol, at `t_k`, taken from the slope of
-/// [`co2_saturation_bar`] by Clausius-Clapeyron for an ideal vapour over a
+/// [`co2_latent_j_mol_over`] the condensate stable at `t_k`
+/// ([`co2_condensate`]), for the tests of the latent heat.
+#[cfg(test)]
+pub(crate) fn co2_latent_j_mol(t_k: f64) -> f64 {
+    CO2.latent_j_mol(t_k)
+}
+
+/// The condensate of CO2 stable at `t_k`: frost below its triple point
+/// ([`CO2_TRIPLE_TEMPERATURE`], and at a NaN temperature), liquid above.
+pub(crate) fn co2_condensate(t_k: f64) -> Condensate {
+    CO2.condensate_at(t_k)
+}
+
+/// [`co2_saturation_bar`] over `condensate` whatever the temperature:
+/// either curve read a little past the triple point, where CO2's
+/// pseudo-adiabat's step that crosses it is split
+/// ([`crate::radiation::column`]).
+pub(crate) fn co2_saturation_bar_over(t_k: f64, condensate: Condensate) -> f64 {
+    CO2.pressure_pa_over(t_k, condensate) / PASCALS_PER_BAR
+}
+
+/// Molar latent heat of CO2 over `condensate`, J/mol, at `t_k`, whatever
+/// the temperature (as [`co2_saturation_bar_over`]), taken from the slope
+/// of its curve by Clausius-Clapeyron for an ideal vapour over a
 /// condensate of negligible volume, `L = R T^2 d ln p / dT`, as
 /// [`crate::water::vapour_latent_j_mol_over`] does: the slope of the
-/// sublimation equation below the triple point, of the vapour curve
-/// above, 0 from the critical point up (the legacy clamp). The moist adiabat that uses it then agrees
+/// sublimation equation over frost, of the vapour curve over liquid, which
+/// differ by fusion's at the triple point; 0 over liquid from the critical
+/// point up (the legacy clamp). The moist adiabat that uses it then agrees
 /// with the curve.
 ///
 /// This is the ideal-vapour latent heat, a declared simplification: CO2's
@@ -451,8 +502,8 @@ pub(crate) fn co2_saturation_bar(t_k: f64) -> f64 {
 /// the 12.73 kJ/mol of the NIST WebBook table, Span and Wagner 1996). It
 /// is kept because it is consistent with the curve used in the same
 /// adiabat and behaves as the legacy did (its single 16.6 kJ/mol mean).
-pub(crate) fn co2_latent_j_mol(t_k: f64) -> f64 {
-    CO2.latent_j_mol(t_k)
+pub(crate) fn co2_latent_j_mol_over(t_k: f64, condensate: Condensate) -> f64 {
+    CO2.latent_j_mol_over(t_k, condensate)
 }
 
 /// Pressure of methane in equilibrium with its condensate at `t`: frost

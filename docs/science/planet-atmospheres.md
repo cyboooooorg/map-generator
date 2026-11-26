@@ -2440,9 +2440,11 @@ spectral column sends out. Three things in the model cap it:
   the CO₂–CO₂ pairs close the 15 µm region, so each bar adds less
   trapping;
 - where the CO₂ of a cold column reaches its saturation
-  (`atmosphere::co2_saturation_bar`, its frost below 216.6 K, its liquid
-  above) it condenses, the air follows CO₂'s pseudo-adiabat
-  (`column::co2_lapse`, Kasting 1991 Appendix B) and the tropopause
+  (`volatiles::co2_saturation_bar`, its frost below 216.592 K, its
+  liquid above) it condenses, the air follows CO₂'s pseudo-adiabat
+  (`column::co2_lapse`, Kasting 1991 Appendix B, over the condensate
+  stable where each step starts, the step that crosses the triple point
+  split there by `column::co2_step`) and the tropopause
   (`climate::tropopause_k`, the skin temperature `T_eff 2^-¼` of the
   climate's own albedo) cold-traps it;
 - its Rayleigh scattering keeps growing with the column, averaged over
@@ -3321,7 +3323,8 @@ rewrite does the same (`ClimateBody::greenhouse_co2(air)`, tier-3 test
 `one_greenhouse_search_on_a_condensing_air`). The departure is measured
 on the reference Earth under Titan's measured 2.11 bar of methane, at
 Titan's 9.57 AU, where the methane condenses: the two searches give
-14.2 and 52.0 bar, yet the settled climate is the same, 88.419440 K both
+14.2 and 52.0 bar (11.0 bar on the condensed air since CO₂'s phase step
+was split, radiative transfer page, *CO₂'s phase step*), yet the settled climate is the same, 88.419440 K both
 ways (a gap of 2e-11 K), frozen, and the outer edge is 1.4326 AU both
 ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, see below;
 1.4443 AU once the stellar spectra of #730 came in, 1.4355 AU since
@@ -3680,7 +3683,8 @@ the stops on noise took 2 to 6; the others keep their balance within
 0.001 K. The outer edge stayed at 1.4365 AU, and
 `one_greenhouse_search_on_a_condensing_air` took 40 s against 37 s
 with the plain step (these figures date from before #703's pairs, which
-moved the edge to 1.2588 AU; not measured again): the rule costs that, for a result that no longer
+moved the edge to 1.2588 AU; not measured again): the rule costs that,
+for a result that no longer
 depends on the solver's last digits. Within the noise the steps stay
 at least the noise, and inside a bracket a point below the balance
 within its noise ends the search: the solve's 0.01 K tolerance lets the

@@ -1337,6 +1337,40 @@ the Bond albedo are there too (change 2b-2).
   mis-phased step shifts the column above by a jump that does not
   shrink with the sweep's step, while the rise does, so the change of
   the rise depends on the sweep's step as well.
+- **CO₂'s phase step** (#703 PR 1). CO₂'s pseudo-adiabat had the same
+  fault at its own triple point, 216.592 K (Span & Wagner 1996): its
+  latent heat, the slope of its curve, jumps there from vaporisation to
+  sublimation, and the midpoint step that crossed it took the phase of
+  the points it read for its whole span. In a cold, CO₂-rich air that
+  condenses from the ground up, the column above that step jumped colder
+  by up to 1 K when the surface moved the step across 216.592 K. A
+  methane Earth's collapsed air at 1.272 AU (12.54 bar of CO₂, 2.1 bar
+  of methane, skin 190.68 K) sent out 1.31 W/m² less when its surface
+  warmed from 239.105 to 239.110 K. Its energy balance then held a pair
+  of false crossings just past each jump, and the climate's temperature
+  search could stop on one: the collapse of that climate stopped at
+  9.9 bar or at 8.0 bar depending on its step, both of them false
+  balances. The step that crosses 216.592 K is now split there
+  (`co2_step`), as water's is: over liquid down to where the liquid
+  step alone reaches the triple point, over frost below
+  (`co2_saturation_bar_over`, `co2_latent_j_mol_over`, the frost's
+  curve held at the triple point above it). The test
+  `a_co2_column_is_smooth_across_its_triple_point` sweeps a dry air of
+  12.5 bar of CO₂ over 0.75 bar of N₂, under a 190 K skin, from 232 to
+  239 K by 0.25 K: every step rises, and the rise changes by at most
+  `SMOOTH_RISE_CHANGE` from one step to the next (176 % before the
+  split, three steps falling by up to 0.30 W/m²; 5.6 % since, a factor
+  1.8 under the bound where water's column sits a factor 7 under it).
+  `a_co2_step_across_its_triple_point_takes_each_phase_on_its_part`
+  holds one step of a twentieth of a decade from 216.8 to 218 K within
+  0.01 K of the same step cut into 2000 (`CO2_STEP_TOLERANCE_K`):
+  1.0e-3 to 3.4e-3 K split, 0.08 to 0.45 K before. Like
+  `SMOOTH_RISE_CHANGE`, it bounds the model's own numerics between these
+  two measured ends: no published tolerance on the step of a
+  pseudo-adiabat was found in the sources read (Kasting 1991 and
+  Kopparapu et al. 2013 give the slope, not its integration), and no
+  dedicated search was made. The numbers at 1.272 AU were measured on
+  #703 PR 1's branch (`feat/climate-longwave-gases`, `de97e27c`).
 - **Argon (study 29).** The column counts argon as air in the lines'
   widths and in the water's foreign continuum, where
   it broadens CO₂'s lines 0.78 times as much as N₂ and water's about 0.37
