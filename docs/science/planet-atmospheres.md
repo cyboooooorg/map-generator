@@ -2889,7 +2889,13 @@ under the point (`frozen_share`): the frost's cover retreats and
 methane's activity falls from 1 to 0.5 across that band. The band is a
 numerical smoothing, not physics; 1 K is the narrowest over which the
 damped fixed point settles at the triple point (over a band `w` the
-emissivity's loop gain is about `1.8 K / w`). The condensation's fixed
+emissivity's loop gain is about `1.8 K / w`). That holds only while the
+emissivity's rise outweighs the albedo's fall across the band, over a
+ground brighter than about 0.69 for N₂ frost (study 38): over a darker
+ground, as the Titan-like body of the nitrogen sweep (water ice, 0.6),
+the albedo wins (about `3.3 K / w` of radiative temperature, derived)
+and the band holds an unstable balance between the frost and the
+liquid, not a solution at the triple point. The condensation's fixed
 point solves its temperature in the bracket its last two steps make
 when they overshoot, and the albedo's fixed point halves its damping
 when a step turns back. Each of its steps goes as far as the secant
@@ -2918,19 +2924,24 @@ and a liquid that shows the darker ground under it are both stable
 under the same light (Charnay et al. 2014,
 doi:10.1016/j.icarus.2014.07.009), over 0.005918 to 0.007041 Earth
 fluxes for this body with the N₂ pairs of #703 (0.006818 to 0.008028
-while its air was transparent). The melting band between them, where
-`PHASE_BAND` ramps the frost's cover, is the unstable middle branch of
-an S curve, not a third state. Legacy's 1 K band has no source (study
+while its air was transparent). The sweep's 0.24 % jump before the
+pairs (59.77 K at flux 0.006861 to 63.15 K at 0.006878) was where the
+warm start landed, not the width of the bistability, 18 % of flux. The
+melting band between the two branches, where `PHASE_BAND` ramps the
+frost's cover, is the unstable middle branch of an S curve, not a third
+state. Legacy's 1 K band has no source (study
 25).
 
-Before #741 the solver could stop on that unstable branch: the
+Before #703's first pull request the solver could stop on that
+unstable branch: the
 bracket's Illinois steps (#729) find a zero of the push, and its stop
 test did not ask whether the zero attracts; it also settled one
 residual, `(1 − A) / ε`, with two numbers, so the albedo and emissivity
 it stored were not the derived ones (0.6552 and 0.9582 against 0.6690
 and 0.9197 at 62.739 K, study 38). On #703's branch the warm-start
 sweep then jumped twice, 59.31 to 62.78 K and 62.78 to 64.50 K (flux
-0.006236 to 0.006252 to 0.006269). Since #741 `settle` keeps only a
+0.006236 to 0.006252 to 0.006269). Since that pull request `settle`
+keeps only a
 root that attracts (the push taken again at a radiative equilibrium
 `ALBEDO_TOLERANCE_K` colder must fall from there to the root, the
 condition the bracket asks of its ends; a root the plain step reached
@@ -3571,7 +3582,8 @@ cooling planet reaches, with `converged: false` and the cause node
 study 25: the study does not cover it). A bracket that attracts can
 still hold three roots, the two stable branches of a bistable body and
 the unstable one between them, and its steps can stop on the middle
-one: since #741 a root is kept only where it attracts, and an unstable
+one: since #703's first pull request a root is kept only where it
+attracts, and an unstable
 one is left from its cold side (see the nitrogen sweep above and
 [nitrogen-phases.md](nitrogen-phases.md)).
 

@@ -281,15 +281,16 @@ where the unstable branch meets the liquid one (not probed on `main`).
    albedo and emissivity used are within a tolerance of those derived,
    or store the derived pair. Both are `Definition:`s of the solver, no
    new number.
-3. **Condense nitrogen in the column** (a law, `science`): where the
-   air is saturated in N₂ at the ground, the column follows N₂'s
+3. **Condense nitrogen in the column** (a law, `science`, issue #741):
+   where the air is saturated in N₂ at the ground, the column follows N₂'s
    saturation curve (frost below 63.14 K, liquid above) up to the skin
    temperature, as it follows CO₂'s. It cuts the pairs' greenhouse at
    these pressures to a third to a half and raises the light of the
    hysteresis by about 9 % (above), without removing it. It touches only
    bodies whose nitrogen condenses at the ground.
-4. **Extend the pairs below 70 K** with Borysow & Frommhold 1986 when
-   it is read; until then the 70 K block stands, a little weak.
+4. **Extend the pairs below 70 K** (issue #742) with Borysow &
+   Frommhold 1986 when it is read; until then the 70 K block stands, a
+   little weak.
 5. **Leave `PHASE_BAND` a numerical smoothing.** Its width moves the
    frost branch's last point (at `T_m − w`) and so the top of the
    hysteresis, by about 5 % of light between `w` = 1 K and none
@@ -301,7 +302,7 @@ where the unstable branch meets the liquid one (not probed on `main`).
 
 ### What the code does since
 
-Item 2 landed with the N₂ pairs (#703's first pull request, issue #741):
+Item 2 landed with the N₂ pairs, in #703's first pull request:
 
 - `settle` keeps a root only where it attracts: the push taken again at
   a radiative equilibrium `ALBEDO_TOLERANCE_K` (0.1 K) colder must fall
@@ -324,7 +325,33 @@ Item 2 landed with the N₂ pairs (#703's first pull request, issue #741):
 - Earth, Mars, Titan and the Triton-like body settle where they did, to
   the printed digit: their roots attract and their pairs were derived.
 
-Items 3 and 4 are open.
+Items 3 and 4 wait in #741 and #742.
+
+## Decisions (user, 2026-11-26)
+
+The user took every recommendation of the study:
+
+1. **The bistability is accepted, the tristability is not.** A frozen
+   and a melted N₂ state under the same light are physics; the melting
+   frost between them is an unstable balance, never a stored climate.
+2. **The solver is fixed in study 36's first pull request** (issue
+   #703, branch `feat/climate-longwave-gases`): `settle` rejects an
+   unstable root and converges on the albedo and emissivity it derives,
+   with no new number. A tier-3 hysteresis test follows each branch up
+   and down the light, and the sweep's test keeps one jump, frost to
+   liquid.
+3. **Nitrogen condenses in the column** in its own pull request right
+   after that one (issue #741): a saturated N₂ air follows N₂'s
+   saturation curve, as the column's CO₂ does.
+4. **The N₂–N₂ pairs below 70 K** wait for Borysow & Frommhold 1986 to
+   be read (issue #742).
+5. **Departure: a partial N₂ cover held by polar cold traps.** In
+   three dimensions the frost or the liquid gathers at the poles and
+   sets the pressure there (Charnay et al. 2014, §4.2), so a body can
+   hold polar N₂ seas and a warmer equator together. The climate solves
+   one temperature for the whole body: it keeps only the frozen and the
+   melted states, and steps from one to the other where a body with
+   poles would pass through a partial cover.
 
 ## Sources
 
