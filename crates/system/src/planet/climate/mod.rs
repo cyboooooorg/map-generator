@@ -89,11 +89,18 @@ pub(crate) const RUNAWAY_PROBE_K: Kelvin = Kelvin(380.0);
 /// temperature moves under 0.01 K, a convergence test in tier 3.
 pub(crate) const COLLAPSE_TOLERANCE: f64 = 1e-4;
 
-/// Definition: the most steps of a collapse, 100 (legacy
-/// `COLLAPSE_ITERATIONS`), a cap a collapsing Earth at 1.6 AU stops under
-/// by [`COLLAPSE_TOLERANCE`] (study 25, "Solver constants";
-/// `collapse_iterations_is_converged`).
-pub(crate) const COLLAPSE_ITERATIONS: usize = 100;
+/// Definition: the most steps of a collapse, 300, a guard: a collapse
+/// that settles under it does not depend on it, and one that stops at it
+/// leaves its climate not converged. Legacy's 100 was a cap a collapsing
+/// Earth at 1.6 AU stops under by [`COLLAPSE_TOLERANCE`] (study 25,
+/// "Solver constants"; `collapse_iterations_is_converged`), but with
+/// #703's pairs a methane Earth just past its outer edge collapses from
+/// 14.2 to about 9.3 bar with a gap of only 0.02 to 0.09 bar, and needs
+/// up to 91 steps at [`COLLAPSE_STEP`], 140 at half of it and 207 with
+/// the plain step (measured at 1.25 to 1.268 AU); stopped at 100, the
+/// climate kept depended on the step. 300 is the plain step's 207 with
+/// half again as margin.
+pub(crate) const COLLAPSE_ITERATIONS: usize = 300;
 
 /// Calibration: the longest step of a collapse, as a share of its CO₂,
 /// 0.005 (#731): 0.085 bar at 17 bar. A warm balance whose pocket of CO₂
