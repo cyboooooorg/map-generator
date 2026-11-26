@@ -514,7 +514,8 @@ pub(crate) fn warm_start(body: &mut ClimateBody) -> (Fraction, Fraction) {
 /// colder end's (the one a cooling planet reaches), not converged, and
 /// [`Settle::cycles`].
 ///
-/// A root is kept only where it attracts (study 38, #741): where the
+/// A root is kept only where it attracts (study 38,
+/// `docs/science/nitrogen-phases.md`): where the
 /// temperature and the push have settled, [`probe_root`] takes the push
 /// a little colder. A regulated climate is stable
 /// whatever its albedo (the thermostat holds its temperature), and a root

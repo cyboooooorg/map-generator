@@ -834,9 +834,9 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
     // light (Charnay et al. 2014; study 38, `docs/science/nitrogen-phases.md`),
     // and the branch the fixed point reaches depends on its warm start.
     // The melting frost between them, inside `PHASE_BAND`, is the S curve's
-    // unstable branch, not a fixed point the solver may store: before
-    // #741 the bracket's Illinois steps stopped on it (59.31 -> 62.78 ->
-    // 64.50 K, two jumps, on #703's branch at e59e6a92), and since then
+    // unstable branch, not a fixed point the solver may store: the
+    // bracket's Illinois steps stopped on it (59.31 -> 62.78 -> 64.50 K,
+    // two jumps, on #703's branch at e59e6a92), and since 49fca727
     // `settle` keeps only a root that attracts. Measured since: one jump,
     // 59.361 K (frost) at flux 0.006252 against 64.503 K (liquid) at
     // 0.006269 (albedo 0.7524 to 0.6158, emissivity 0.8001 to 1.0000,
