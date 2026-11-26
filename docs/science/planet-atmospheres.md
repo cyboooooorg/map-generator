@@ -2928,6 +2928,18 @@ where `ε T⁴` rises by 1.563, so the tier-3 test fails on both its
 `ε T⁴` check and its 1 K band; how it should hold a pair greenhouse is
 left open.
 
+Study 38 ([Can a nitrogen world be frozen or melted under the same
+light?](nitrogen-phases.md)) checked that step against the literature
+and the model's own balance. The two states are expected: a bright N₂
+frost and a liquid that shows the darker ground under it are both
+stable under the same light (Charnay et al. 2014, doi:10.1016/j.icarus.2014.07.009),
+over 0.006818 to 0.008028 Earth fluxes for this body while its air is
+transparent, as here (measured with the albedo and emissivity of #703's
+branch, which this part of the climate shares). The melting band between them is an unstable balance,
+which the solver can still stop on because its test does not check
+stability; and the column draws a dry adiabat where a saturated N₂ air
+follows its saturation curve.
+
 **Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
 that keeps water has two climates when the ice-albedo feedback makes it
 bistable: the temperate one, started from a warm planet with no ice, and
