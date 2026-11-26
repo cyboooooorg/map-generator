@@ -892,13 +892,23 @@ fn pairs_of(gases: &[spectrum::Partner]) -> u8 {
         .fold(0, |bits, (i, _)| bits | (1 << i))
 }
 
+/// Restores [`spectrum::PAIRS_LEFT_OUT`] to none when dropped, so that a
+/// panic inside [`without_pairs`] leaves no pair out for the next test on
+/// the thread.
+struct PairsBack;
+
+impl Drop for PairsBack {
+    fn drop(&mut self) {
+        spectrum::PAIRS_LEFT_OUT.with(|left| left.set(0));
+    }
+}
+
 /// `f`, with the pairs of `bits` left out of the spectrum on this thread
 /// ([`spectrum::PAIRS_LEFT_OUT`]); `f` takes a fresh cache.
 fn without_pairs<R>(bits: u8, f: impl FnOnce() -> R) -> R {
     spectrum::PAIRS_LEFT_OUT.with(|left| left.set(bits));
-    let result = f();
-    spectrum::PAIRS_LEFT_OUT.with(|left| left.set(0));
-    result
+    let _back = PairsBack;
+    f()
 }
 
 /// What the pairs of `bits` take from the clear-sky outgoing radiation,

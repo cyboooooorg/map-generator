@@ -88,13 +88,18 @@ const TITAN_SURFACE_TOLERANCE_K: f64 = 0.25;
 /// grey stand-in fitted on Titan (`CH4_OPACITY`, `CH4_SATURATION_BAR`).
 /// The column misses N₂–H₂ pairs (Titan's H₂ is not a gas of the model,
 /// issue #720), methane's own lines (its rotational lines at 70 to
-/// 160 cm⁻¹, Bézard & Vinatier 2019), and the haze's infrared opacity.
-/// Each adds absorption, which can only warm a column whose temperature
-/// falls with height, so the test is one-sided: no warmer than the
-/// measurement, no colder than this under it. The bound is the measured
-/// gap rounded up. What was searched and not found: a split of Titan's
-/// greenhouse that gives each missing term in kelvin (study 36, "What we
-/// do not know").
+/// 160 cm⁻¹, Bézard & Vinatier 2019), and the haze's infrared opacity;
+/// and it holds too little methane low down: it applies the cold trap's
+/// mixing ratio (`radiating_methane_bar`, `column.rs`) at every level, so
+/// its lower troposphere holds about 40 % of the sourced surface CH₄ (a
+/// review's estimate, derived, issue #744). N₂–CH₄ absorption is linear
+/// in CH₄, so that is likely a large share of the gap. Each adds
+/// absorption, which can only warm a column whose temperature falls with
+/// height, so the test is one-sided: no warmer than the measurement, no
+/// colder than 93.65 − 0.25 − 1.4 = 92.00 K, a margin of 0.3 K under the
+/// column's 92.30 K. The bound is the measured gap rounded up. What was
+/// searched and not found: a split of Titan's greenhouse that gives each
+/// missing term in kelvin (study 36, "What we do not know").
 const TITAN_MISSING_WARMING_K: f64 = 1.4;
 
 /// Definition: the tolerance of `steam_share(1 bar)` against `1 − e⁻¹`,

@@ -596,10 +596,15 @@ const PAIR_FILE_POINTS: [(&str, f64, f64, f64); 8] = [
     ("CH4-CH4", 400.0, 310.0, 1.388e-44),
 ];
 
-/// Definition: how far a 20 cm⁻¹ cell's mean may stray from the file's
-/// value at a point inside it, a share: the band's curvature over the
-/// cell, and, off the block's temperature, its change over 3 K or less
-/// (3.5 % at the peak of N₂–N₂'s band at 70 K).
+/// Calibration: how far a 20 cm⁻¹ cell's mean may stray from the file's
+/// value at a point inside it, a share, 5 %, chosen above the largest
+/// stray measured on the points of [`PAIR_FILE_POINTS`]: N₂–N₂ at 70 K,
+/// 110 cm⁻¹, +3.46 % (the band's curvature over the cell at its peak),
+/// and O₂–O₂ at 300 K against the 297.8 K block, −3.50 % (the cell's mean
+/// and a 2.2 K step in temperature); the others stray by 0.06 to 2.3 %.
+/// Not a derivation: the band's change with temperature near its peak,
+/// 2 to 2.5 % per K at 70 to 80 K (study 38's probes), would give a bound
+/// per point, not one share for all.
 const CELL_AGAINST_POINT: f64 = 0.05;
 
 /// Definition: relative tolerance of the single-precision pairs against

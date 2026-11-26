@@ -651,7 +651,8 @@ thread_local! {
     /// spectrum leaves out on this thread while it is set, so that a test
     /// can take a pair's share of the outgoing radiation as the line-by-line
     /// sources do (the gas kept in the air, its absorption removed). A test
-    /// that sets it uses a fresh `ColumnCache` and clears it after.
+    /// that sets it uses a fresh `ColumnCache`, and clears it after through
+    /// a drop guard (`column_tests::without_pairs`).
     pub(crate) static PAIRS_LEFT_OUT: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
 }
 
