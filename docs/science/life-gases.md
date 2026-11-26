@@ -268,7 +268,7 @@ ratios carry over.
    is 729.2 ppb (or 270.1 ppb) times the host's ratio to the Sun. Simple,
    but it imposes Earth's abundance on every living planet whatever its
    gravity or air, the "1800 ppb" the user ruled out in another form.
-3. **A steady state of a flux and a lifetime (recommended).**
+3. **A steady state of a flux and a lifetime (recommended, decided).**
    $p = \Phi_A\,\tau\,g$ by weight, with $\Phi_A$ Earth's pre-industrial
    natural flux per m² (Prather et al. 2012, `Source:`), $\tau$ Earth's
    pre-industrial lifetime (same, `Source:`) times the host factor of
@@ -286,10 +286,10 @@ ratios carry over.
    (chromosphere included) and be applied to photospheric ones. Not
    recommended now.
 
-### By stage (recommended)
+### By stage (recommended, decided)
 
 - **`Modern`:** option 3, with methane first (its lines land first) and
-  N₂O with its lines.
+  N₂O with its lines (decided 2026-11-26, below).
 - **`Oxidising`:** no CH₄ and no N₂O, as now. The app gives this air no
   O₂ (#717), where a photochemical lifetime is not defined, and the
   literature disagrees by a factor of a hundred (Olson et al. 2016
@@ -300,11 +300,34 @@ ratios carry over.
   included, against Catling & Zahnle 2020.
 - **`Lifeless`:** none.
 
+## Decisions (user, 2026-11-26)
+
+The user took every recommendation of the study:
+
+- **`Modern`: option 3.** The partial pressure by weight is Earth's 1750
+  natural flux per m² times its 1750 lifetime times the host factor
+  times the planet's gravity (Prather et al. 2012 for the flux and the
+  lifetime, `Source:`). No methane feedback for now. Carrying Earth's
+  flux per m² to every `Modern` planet is a `Definition:` of the model's
+  scope, as `O2_PER_N2` is.
+- **The host factor** is Rugheimer & Kaltenegger 2018's ratios,
+  interpolated in the logarithm and held past the ends: calibration 1
+  below, with its cliff and its known faults written down.
+- **Methane first, with its lines** (study 36's second pull request).
+  N₂O comes later, with its lines and the `FORMAT` change of a new gas.
+- **`Oxidising`** keeps no CH₄ and no N₂O until #717 gives it O₂; a
+  study follows then. **`Anoxic`** gets its own study and issue
+  (Archean biogenic methane, `METHANE_SURVIVES` for oxygen-free airs).
+- **Several stars:** the loss rates add, each star weighted by its share
+  of the planet's light (calibration 3 below).
+- **Later:** an issue for fluxes derived from the planet (land,
+  wetlands, temperature, productivity) and for the methane feedback.
+
 ## Calibrations
 
-Proposed, none in the code yet.
+Decided 2026-11-26, none in the code yet.
 
-### Calibration 1 (proposed): the host factor
+### Calibration 1 (decided): the host factor
 
 What: the lifetime of each gas around a host is Earth's times the ratio
 of Rugheimer & Kaltenegger 2018's surface abundance around that host to
@@ -321,13 +344,14 @@ known faults: the 243-fold step between 5772 and 5500 K, which belongs
 to τ Ceti's measured ultraviolet; F0V above the Sun for methane; the M8V
 value fixed by the authors, not computed.
 
-### Calibration 2 (proposed, or a declared scope): Earth's flux per m²
+### Scope, not a calibration: Earth's flux per m²
 
-Earth's pre-industrial natural fluxes, per square metre, are carried to
+A `Definition:` of the model's scope (decided 2026-11-26). Earth's
+pre-industrial natural fluxes, per square metre, are carried to
 every `Modern` planet, as `O2_PER_N2` carries Earth's O₂ by its N₂. No
 source gives a biosphere's flux from what the app knows of a planet.
 
-### Calibration 3 (proposed, or a declared scope): several stars
+### Calibration 3 (decided): several stars
 
 Loss rates add: $1/\tau = \sum_i w_i/\tau_i$, each star's factor
 weighted by its share of the planet's light. The grids hold one star at
