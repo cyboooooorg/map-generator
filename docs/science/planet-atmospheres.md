@@ -3329,8 +3329,10 @@ ways (a gap of 2e-11 K), frozen, and the outer edge is 1.4326 AU both
 ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, see below;
 1.4443 AU once the stellar spectra of #730 came in, 1.4355 AU since
 #729, below, and 1.4365 AU since #734). Since methane's greenhouse is its
-pairs only (#703) the edge is 1.2588 AU both ways, and at 9.57 AU the climate settles at
-80.52 K (a gap of 5e-13 K), the two searches giving 21.87 and 21.84 bar.
+pairs only (#703) the edge was 1.2588 AU both ways, and 1.2534 AU since
+CO₂'s phase step was split (#746); at 9.57 AU the climate settles at
+80.52 K (a gap of 3e-12 K), the two searches giving 23.67 and 23.85 bar
+(21.87 and 21.84 bar before #746).
 No regulated body can have a condensing air: the thermostat holds
 288 K, above the critical points of methane
 (190.564 K, Setzmann & Wagner 1991) and nitrogen (126.192 K, Span et al.
@@ -3374,7 +3376,8 @@ then fell to the floor of the surface solver, the dew point of its
 vapour, 284.0103 K, at 1, 1.3 and 1.6 AU. Now it sits at 288.0000 K at 1
 AU (3.94 bar of CO₂) and 288.0004 K at 1.3 AU (7.73 bar), and is frozen
 at 1.6 AU. Its outer edge moves in from 1.6470 to 1.4331 AU (1.4355 AU
-since #730 and #729, 1.4365 AU since #734, 1.2588 AU since #703). The old
+since #730 and #729, 1.4365 AU since #734, 1.2588 AU since #703,
+1.2534 AU since #746). The old
 edge came from the top end of the search: from about 1.43 to 1.65 AU
 even the most CO₂ sends out more from a 288 K surface than the air with
 that CO₂ absorbs (at 1.6 AU under a 0.3 albedo, 57.6 against 51.0 W/m²),
@@ -3619,14 +3622,18 @@ of time: the cold side and the `cycles` flag say that no stable warm
 state is claimed. The edge of a methane Earth moves from 1.4443 to
 1.4355 AU with it (measured, `one_greenhouse_search_on_a_condensing_air`;
 1.4365 AU since #734), and that test went from 833 s to 74 s (release).
-Since methane's grey stand-in is retired (#703) its edge is 1.2588 AU
-and the orbits with no fixed point run from 1.268 to 1.277 AU (probed
+Since methane's grey stand-in is retired (#703) its edge was 1.2588 AU
+and the orbits with no fixed point ran from 1.268 to 1.277 AU (probed
 every 0.001 AU); the tier-3 test
 `a_climate_with_no_fixed_point_stops_on_its_cold_side` moved from 1.44
 to 1.272 AU, where the climate cycled for 16 steps and was stored at
-227.17 K with 8.01 bar of CO₂ under the plain collapse; since the
-collapse of #743 it cycles for 17 steps and is stored at 232.79 K with
-9.91 bar (see "A collapse from the fold (#731)" below).
+227.17 K with 8.01 bar of CO₂ under the plain collapse, then for 17
+steps at 232.79 K with 9.91 bar under the collapse of #743. Since CO₂'s
+phase step was split (#746) the edge is 1.2534 AU and the orbits with
+no fixed point run from 1.261 to 1.267 AU (1.260 settles at its maximum
+greenhouse, 1.268 frozen); 1.272 AU now converges (227.31 K, 8.05 bar),
+so the test moved to 1.264 AU, where the climate cycles for 21 steps
+and is stored at 231.65 K with 9.50 bar.
 
 #### A collapse from the fold (#731)
 
@@ -3652,15 +3659,24 @@ step can be stepped over; the plain step finds every one (tier 1,
 synthetic collapses in the measured shape). Before #703's pairs, at
 half the step the methane Earth's climates at 1.42875, 1.4355 and
 1.44 AU, around its outer edge, did not move (tier 3,
-`collapse_step_is_converged`). Since the pairs the edge is 1.2588 AU and
-the test holds 1.25, 1.2588 and 1.272 AU (`STEP_ORBITS`). The first two
-do not move. Past the edge, from 1.268 to 1.278 AU, the collapse lands
-on one of two balances depending on the step: 9.91 bar and 232.79 K at
-`COLLAPSE_STEP`, 8.00 bar and 227.15 K at half of it, 8.01 bar with the
-plain step and 9.93 bar at a quarter (measured on the merged branch,
-2026-11-26). From 1.28 AU on, one balance is left and the step moves
-the climate by under 0.01 K. This is open: the step is not converged
-there.
+`collapse_step_is_converged`). With the pairs and the split phase step
+of #746 the edge is 1.2534 AU and the test holds 1.25, 1.2534 and
+1.264 AU (`STEP_ORBITS`). The first two do not move. Past the edge the
+step moves the climate (measured 2026-11-26, at `COLLAPSE_STEP`, half,
+a quarter and the plain step):
+
+- in the cycling band, 1.261 to 1.267 AU, the stored cold side holds
+  9.4 to 9.5, 10.3 to 10.5, 10.8 to 11.1 and 11.6 to 11.7 bar
+  (231.4 to 237.4 K); at 1.264 AU, 231.65 K at the full step against
+  234.22 K at half, so the test fails;
+- at 1.268 AU, a converged climate, 9.26, 9.78, 10.84 and 11.42 bar
+  (230.96 to 236.58 K);
+- from 1.272 AU on, the step moves the climate by under 0.1 K (227.31
+  to 227.37 K at 1.272 AU, 221.56 to 221.60 K at 1.28 AU).
+
+Before #746 the band was 1.268 to 1.278 AU and the collapse landed on
+9.91 or 8.00 bar there; those two balances are gone, but the step is
+still not converged just past the edge. This is open.
 
 The gap's noise is how much `φ` moves within the temperature tolerance
 of the climate solve, `φ(T + TOLERANCE_K) − φ(T)`: 0.005 bar at 248 K
@@ -3706,7 +3722,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `PLATEAU_SURFACES_K` | 500 to 640 K by 20 K | Calibration | every 10 K and to 700 K, the plateau moves under 0.5 W/m² | 3 |
 | `COLLAPSE_ITERATIONS` | 100 | Definition | a collapsing Earth at 1.6 AU settles under it | 1 |
 | `COLLAPSE_TOLERANCE` | 1e-4 | Calibration | at 1e-5 the temperature moves under 0.01 K | 3 |
-| `COLLAPSE_STEP` | 0.005 of the CO₂ | Calibration | at 0.0025 a methane Earth's climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs (#731); since them, 1.25 and 1.2588 AU do not move, and from 1.268 to 1.278 AU the collapse lands on 9.9 or 8.0 bar by the step (open) | 3 |
+| `COLLAPSE_STEP` | 0.005 of the CO₂ | Calibration | at 0.0025 a methane Earth's climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs (#731); since them and #746, 1.25 and 1.2534 AU do not move, and from 1.261 to 1.268 AU the climate moves by up to 5.6 K with the step (open) | 3 |
 | `PHASE_BAND` | 1 K | Calibration | Titan-like and Triton-like sweeps settle across their points | 3 |
 | `THAW_STEPS` | 13 | Calibration | at 16 steps Earth's thaw CO₂ moves under 0.1 % (measured: +0.165 % at 12 steps, +0.063 % at 13, 0.180932, 0.180748 and 0.180634 bar at 12, 13 and 16) | 3 |
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |
