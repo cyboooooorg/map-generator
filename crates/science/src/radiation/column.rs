@@ -21,8 +21,8 @@
 //! The radiation is summed bin by bin over the thermal infrared
 //! ([`super::spectrum`]): in each bin the transmission to space of CO₂'s
 //! and water's lines (a correlated-k table, a few g-points per bin), of
-//! their continua, of the CO₂–CO₂ pairs and of methane's grey stand-in,
-//! and the two-stream, non-scattering emission of each layer's mean
+//! their continua and of the collision-induced pairs (CO₂, N₂, O₂ and
+//! methane), and the two-stream, non-scattering emission of each layer's mean
 //! Planck flux with the diffusivity 1.66. Whatever no gas closes stays
 //! open: water's window, the far wings of thin CO₂.
 //!
@@ -1271,8 +1271,8 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
     if has_water {
         water.above(&top.water, m);
     }
-    for (b, (depth, rate)) in smooth.iter_mut().zip(&top.smooth).take(bins).enumerate() {
-        *depth = (DIFFUSIVITY * spectrum::smooth_above(&top_level, f64::from(*rate), b)) as f32;
+    for (depth, rate) in smooth.iter_mut().zip(&top.smooth).take(bins) {
+        *depth = (DIFFUSIVITY * spectrum::smooth_above(f64::from(*rate))) as f32;
     }
     let through = |b: usize, smooth: &[f32; BINS], co2: &Depths, water: &Depths| {
         let mut through = fast_math::exp(-smooth[b]);
@@ -1455,7 +1455,7 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
     let (mut planck, mut planck_below) = ([0.0; BANDS], [0.0; BANDS]);
     let mut seen = [0.0; BANDS];
     absorption_spectrum(&column.level(n), &mut rate);
-    depth_above(&column.level(n), &rate, &mut rate_below);
+    depth_above(&rate, &mut rate_below);
     planck_spectrum(column.temperature[n], &mut planck);
     let mut out = [0.0; BANDS];
     for k in 0..BANDS {

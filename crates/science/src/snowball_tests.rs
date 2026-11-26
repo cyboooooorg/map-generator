@@ -49,10 +49,10 @@ const HOFFMAN_SHARE: (f64, f64) = (0.013, 0.016);
 
 /// Definition: a test input, the extra CO₂ to thaw that the tier-3 test
 /// `earth_snowballs_as_often_as_hoffman_dates` measures on the reference
-/// Earth at 1 AU (0.145764 bar, kept to the 0.1458 bar of the fit of
+/// Earth at 1 AU (0.140848 bar, kept to the 0.1408 bar of the fit of
 /// [`SNOWBALL_WARM_BAR`]). Not a fact of Earth: the tier-1 test checks
 /// only the arithmetic of the law on it.
-const EARTH_THAW_EXTRA: Bar = Bar(0.1458);
+const EARTH_THAW_EXTRA: Bar = Bar(0.1408);
 
 /// Definition: a test input, the reference Earth's recorded volcanic
 /// intensity, 0.506064, that the same tier-3 test reads, as the fit of

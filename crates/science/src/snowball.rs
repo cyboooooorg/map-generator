@@ -15,26 +15,27 @@ use crate::relief::volcanoes::EARTH_VOLCANIC_INTENSITY;
 use crate::units::{Bar, Fraction};
 
 /// Calibration: the CO₂ Earth's volcanism gives the air over one
-/// temperate phase between two snowballs, 10.1 bar. Target: Earth's
+/// temperate phase between two snowballs, 9.80 bar. Target: Earth's
 /// dated share of its history in snowball states, `f⊕` = 0.014 (0.013
 /// to 0.016; the Sturtian and Marinoan glaciations, 63 My over 4.6 Gyr,
 /// Hoffman et al. 2017, *Sci. Adv.* 3, e1600983, Table 1). Method:
-/// `W = d⊕ (1 − f⊕) / (rate⊕ f⊕)` (study 25) = 10.14, to three figures,
-/// with `d⊕` = 0.1458 bar the extra CO₂ the reference Earth at 1 AU
-/// needs to thaw (thaw 0.149970 bar less froze 0.004206 bar, 0.145764,
+/// `W = d⊕ (1 − f⊕) / (rate⊕ f⊕)` (study 25) = 9.80, to three figures,
+/// with `d⊕` = 0.1408 bar the extra CO₂ the reference Earth at 1 AU
+/// needs to thaw (thaw 0.144919 bar less froze 0.004071 bar, 0.140848,
 /// measured by the climate solver of `system` at its 13 thaw steps,
-/// under the stellar spectra of issue #655, with Earth's argon of #694
-/// and the cloud albedo refitted with ozone over the climate's own
-/// ground, issue #705; it was 0.1468 bar and `W` 10.2 bar with the cloud
+/// under the stellar spectra of issue #655, with Earth's argon of #694,
+/// the cloud albedo refitted with ozone over the climate's own ground,
+/// issue #705, and the N₂ and O₂ pairs of #703; it was 0.1458 bar and
+/// `W` 10.1 bar before the pairs, 0.1468 bar and 10.2 bar with the cloud
 /// albedo of #655, 0.1788 bar and 12.4 bar under the black-body Sun) and
 /// `rate⊕` = 0.506064 / 0.5 = 1.0121, its recorded volcanic intensity
-/// over [`EARTH_VOLCANIC_INTENSITY`]; Earth's chance is then 0.0141.
+/// over [`EARTH_VOLCANIC_INTENSITY`]; Earth's chance is then 0.0140.
 /// Searched and not found: a snowball frequency for another planet.
 /// Study:
 /// [25](https://github.com/cyboooooorg/map-generator/wiki/25-climate-solver-audit),
 /// `docs/science/planet-atmospheres.md`, "Calibration of
 /// `SNOWBALL_WARM_BAR` (refit)".
-pub const SNOWBALL_WARM_BAR: Bar = Bar(10.1);
+pub const SNOWBALL_WARM_BAR: Bar = Bar(9.80);
 
 /// The share of its history a bistable planet spends frozen, from the
 /// CO₂ it needs `extra` above what it froze with to thaw (`thaw − froze`;

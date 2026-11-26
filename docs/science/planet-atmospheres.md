@@ -2174,24 +2174,38 @@ balances past the plateau. Wet bodies keep their derived albedo (Earth's
 about 0.3), and so does a runaway whose escape took all its water
 (Mercury, Venus), which has no moist air left.
 
-**Methane's stand-in.** Methane keeps one grey optical depth, over 0-650
-cm⁻¹ only (Courtin, Gautier & McKay 1995 place Titan's N₂–N₂ and CH₄–N₂
-collision-induced bands there), `τ = k (u B)^½` with `u` its saturated
-amount and `B` the air it collides with (see **Methane** below), and
-`k` = 15.1 (`CH4_OPACITY`), calibrated on Titan's 93.65 K (13.4 before
-#646, with the legacy methane line, 14.3 on the grey column, 7.75 before
-#563, 6.0 before #530, 3.3 before #443, 3.4 before #441). A spectral Titan is left for later.
+**Methane's pairs** (study 36, issue #703). Methane's infrared is the
+collision-induced absorption of its pairs with nitrogen and with itself,
+HITRAN's `N2-CH4_2024.cia` (Finenko et al. 2022) and `CH4-CH4_2011.cia`
+(Borysow & Frommhold 1987), with nitrogen's own N₂–N₂ pairs
+(Chistikov et al. 2019), binned into the spectral column
+(`spectrum::PAIRS`; see [Which gases does the infrared column still
+miss?](longwave-absorbers.md)). They settle the sourced Titan at 92.30 K
+against the measured 93.65 ± 0.25 K, without a fitted constant
+(N₂–N₂ alone 83.95 K, with N₂–CH₄ 92.23 K, nothing 74.88 K). They replace
+the legacy's grey stand-in, `τ = k (u B)^½` over 0-650 cm⁻¹ with
+`k` = 15.1 (`CH4_OPACITY`, calibrated on Titan's 93.65 K: 13.4 before
+#646, 14.3 on the grey column, 7.75 before #563, 6.0 before #530, 3.3
+before #443, 3.4 before #441) and `u` saturating at 0.01 bar
+(`CH4_SATURATION_BAR`), retired on the user's decision of 2026-11-25.
 
 Titan's real greenhouse is mostly collision-induced absorption by N₂,
 CH₄ and H₂, which warms it by 21 K, while its haze cools it by 9 K
 (McKay, Pollack & Courtin 1991, doi:10.1126/science.11538492, abstract
-checked); the methane opacity carries all of the greenhouse here, the
-nitrogen's own included, and the anti-greenhouse (below) the cooling.
+checked); the column holds the N₂ and CH₄ pairs, and the anti-greenhouse
+(below) the cooling. Missing: N₂–H₂ pairs (H₂ is not a gas of the model,
+issue #720), methane's lines, the haze's infrared, and the methane the
+cold trap's ratio leaves out of the lower troposphere (issue #744,
+below), which the tier-1 test allows 1.4 K for (`balance_tests.rs`,
+`TITAN_MISSING_WARMING_K`; its floor is 93.65 − 0.25 − 1.4 = 92.00 K,
+0.3 K under the column's 92.30 K).
 
-**Methane** (issue #443). The `sqrt(p_CH₄ P)` law, calibrated on Titan,
-was stretched 500-fold past it: a planet at an equilibrium temperature of
-114 K under 26 bar of methane (seed 182, planet d) came out at 351 K with
-liquid water. Three rules bound it:
+**Methane** (issue #443). The legacy's grey `sqrt(p_CH₄ P)` law,
+calibrated on Titan, was stretched 500-fold past it: a planet at an
+equilibrium temperature of 114 K under 26 bar of methane (seed 182,
+planet d) came out at 351 K with liquid water. Three rules bounded it;
+since study 36 retired the grey law for HITRAN's pairs, the first two
+bound the pairs' methane, and the third is gone:
 
 - *Condensation at the surface.* Inside the climate's fixed point
   (`atmosphere::condense`, applied at each step to the temperature the
@@ -2215,18 +2229,21 @@ liquid water. Three rules bound it:
   pure methane's saturation pressure at the skin temperature `T_eq / 2^¼`
   allows at a 0.1 bar tropopause (`TROPOPAUSE_BAR`: the common tropopause
   of thick atmospheres, Robinson & Catling 2014, doi:10.1038/ngeo2020):
-  Titan's skin at 70 K lets about 3 % through.
-- *Saturation.* The amount the opacity counts is
+  Titan's skin at 70 K lets about 3 % through. The column applies that
+  ratio at every level, not only above the tropopause, so Titan's lower
+  troposphere holds about 40 % of its sourced surface methane (a
+  review's estimate, derived, issue #744), likely a large share of the
+  1.35 K the pairs leave Titan under its measurement.
+- *Saturation* (legacy, retired by study 36). The grey law counted
   `u = p / (1 + p / 0.01 bar)` (`CH4_SATURATION_BAR`), and the pressure
-  it collides with counts the methane as `u`:
-  `τ = 15.1 (u (P − p + u))^½`. Past Titan's amounts its bands are opaque
-  at their centres, and more methane only widens their wings (the
-  logarithmic forcing of a saturated band, Pierrehumbert 2010, §4.4); a
-  body at 90 to 120 K radiates at 25 to 60 µm, where methane has no
-  strong band of its own. With it, raising Titan's methane from 1 to
-  10 bar holds back under a third of the outgoing radiation that 0.01
-  to 0.1 bar holds back (with the opacity 6.0, 0.6 K of warming against
-  2.6 K).
+  it collides with counted the methane as `u`:
+  `τ = 15.1 (u (P − p + u))^½`, so that raising Titan's methane from 1
+  to 10 bar held back under a third of the outgoing radiation that 0.01
+  to 0.1 bar held back. The pairs need no such bound: their absorption
+  is HITRAN's at every amount, and grows as the product of the two
+  gases' densities. On the legacy's seed 182 planet d (4.4 bar of N₂,
+  26 bar of methane, a 114 K equilibrium) they give 113.48 K where the
+  grey law gave 103.06 K (study 36), far from legacy issue #443's 351 K.
 - *Anti-greenhouse* (issues #530, #563). The stratosphere, the methane
   above the tropopause in its near-infrared bands and the organic haze
   its photolysis makes, absorbs starlight and radiates it half back to
@@ -2324,10 +2341,11 @@ grey laws (`BROADENING_KNEE_BAR`, `LOCAL_KNEE_BAR`,
 `WATER_FOREIGN_BROADENING`, issues #440 and #441) are gone with them.
 Argon counts as air in the broadening, although it broadens less than N₂
 (0.78 of N₂ for CO₂, about 0.37 of air for water, measured): a departure
-(*Argon (study 29)* above). Methane's stand-in keeps the whole pressure, its
-own counted as the saturated amount `u` (see **Methane** above): it stands for
-Titan's collision-induced greenhouse, which grows with the nitrogen faster than
-line broadening.
+(*Argon (study 29)* above). Methane's grey stand-in kept the whole
+pressure, its own counted as the saturated amount `u` (see **Methane**
+above), standing for Titan's collision-induced greenhouse; since study 36
+the column holds that greenhouse as HITRAN's N₂–CH₄ and CH₄–CH₄ pairs,
+which grow as the product of the two gases' densities.
 
 **Thick nitrogen.** At 1 AU with modern CO₂ (4e-4 bar) and no
 thermostat, an Earth keeps a moist balance at 300, 310 and 319 K under 2,
@@ -2855,8 +2873,13 @@ amount covers (`frost / 0.02 bar` of N₂ alone: the most volatile frost
 condenses last and lies over the others, as Triton's N₂ lies over its
 CO₂). A grey surface sends out `ε σ T⁴`: `surface_temperature_k` and the
 wet balance take the column's outgoing radiation times `ε`, as through a
-transparent air, which holds over a nitrogen frost (its vapour is at
-most 0.125 bar). The emissivity is solved in the same fixed point as the
+transparent air. That held over a nitrogen frost (its vapour is at most
+0.125 bar) while the air absorbed nothing there; since the N₂ pairs of
+study 36 it absorbs (6 % to 16 % of `σ T⁴` near the triple point, study
+38), and `ε × OLR` scales the air's own emission by `ε` too and leaves
+out the frost's reflection of the air's downward emission, `(1 − ε)` of
+it: about 1 to 3 % of the outgoing radiation over the frost (a review's
+estimate, derived, not verified; issue #745). The emissivity is solved in the same fixed point as the
 albedo, damped the same way, and stored with the climate so that it
 reproduces (worlds stored before it read 1). The legacy's 0.89 was a calibration on
 Triton (above); Stansberry, Pisano & Yelle 1996 (*Planet. Space Sci.*
@@ -2883,7 +2906,13 @@ under the point (`frozen_share`): the frost's cover retreats and
 methane's activity falls from 1 to 0.5 across that band. The band is a
 numerical smoothing, not physics; 1 K is the narrowest over which the
 damped fixed point settles at the triple point (over a band `w` the
-emissivity's loop gain is about `1.8 K / w`). The condensation's fixed
+emissivity's loop gain is about `1.8 K / w`). That holds only while the
+emissivity's rise outweighs the albedo's fall across the band, over a
+ground brighter than about 0.69 for N₂ frost (study 38): over a darker
+ground, as the Titan-like body of the nitrogen sweep (water ice, 0.6),
+the albedo wins (about `3.3 K / w` of radiative temperature, derived)
+and the band holds an unstable balance between the frost and the
+liquid, not a solution at the triple point. The condensation's fixed
 point solves its temperature in the bracket its last two steps make
 when they overshoot, and the albedo's fixed point halves its damping
 when a step turns back. Each of its steps goes as far as the secant
@@ -2901,18 +2930,55 @@ two steps between settled climates, from about 62 to 74 K and over about
 phase change.
 
 The rewrite's climate does not smooth that step away: across nitrogen's
-triple point its sweep jumps by 3.4 K, from 59.77 K (frost) at flux
-0.006861 to 63.15 K (liquid) at 0.006878, +0.24 % of flux. It is a
+triple point its sweep jumps from the frost to the liquid. It is a
 bistability, as the runaway edge's step is (#523): the nitrogen frost
-(Bond albedo 0.754, emissivity 0.80) and the melting frost or liquid
-under it (0.613 to 0.616, 1.00) are both stable at one flux, and the
-warm start picks the branch. The absorbed light rises by the factor the
-emissivity and the temperature raise `ε T⁴`, about 1.56, which is why a
-jump the sweep lets through must leave the frost (under the stellar
-spectra of #655 it lands on the melting frost at 63.13 K, just below the
-triple point; tier-3 test
-`the_fixed_point_converges_until_the_nitrogen_frost_melts`). Legacy's
-1 K band has no source (study 25).
+(Bond albedo 0.752, emissivity 0.80) and the liquid over the darker
+ground under it (0.616, 1.00) are both stable over a range of light, and
+the warm start picks the branch. Study 38 ([Can a nitrogen world be
+frozen or melted under the same light?](nitrogen-phases.md)) checked it
+against the literature and the model's own balance: a bright N₂ frost
+and a liquid that shows the darker ground under it are both stable
+under the same light (Charnay et al. 2014,
+doi:10.1016/j.icarus.2014.07.009), over 0.005918 to 0.007041 Earth
+fluxes for this body with the N₂ pairs of #703 (0.006818 to 0.008028
+while its air was transparent). The sweep's 0.24 % jump before the
+pairs (59.77 K at flux 0.006861 to 63.15 K at 0.006878) was where the
+warm start landed, not the width of the bistability, 18 % of flux. The
+melting band between the two branches, where `PHASE_BAND` ramps the
+frost's cover, is the unstable middle branch of an S curve, not a third
+state. Legacy's 1 K band has no source (study
+25).
+
+Before #703's first pull request the solver could stop on that
+unstable branch: the
+bracket's Illinois steps (#729) find a zero of the push, and its stop
+test did not ask whether the zero attracts; it also settled one
+residual, `(1 − A) / ε`, with two numbers, so the albedo and emissivity
+it stored were not the derived ones (0.6552 and 0.9582 against 0.6690
+and 0.9197 at 62.739 K, study 38). On #703's branch the warm-start
+sweep then jumped twice, 59.31 to 62.78 K and 62.78 to 64.50 K (flux
+0.006236 to 0.006252 to 0.006269). Since that pull request `settle`
+keeps only a
+root that attracts (the push taken again at a radiative equilibrium
+`ALBEDO_TOLERANCE_K` colder must fall from there to the root, the
+condition the bracket asks of its ends; a root the plain step reached
+with its push falling needs no probe), leaves an unstable
+one from its colder side (the side #729 stores a jump on), and settles
+only once the albedo's and the emissivity's own residuals are within
+the tolerance too. The sweep jumps once, 59.361 K (frost) at 0.006252
+to 64.503 K (liquid) at 0.006269; Earth, Mars, Titan and the
+Triton-like body settle where they did, to the printed digit. The
+tier-3 test `the_fixed_point_converges_until_the_nitrogen_frost_melts`
+checks that the absorbed light rises across the jump as the column's
+own `ε OLR` does (×1.5520 against ×1.5518): `ε T⁴` (×1.7424) was the
+premise of a transparent air, which the pairs end (the column sends out
+6 % to 16 % less than `σ T⁴`, 0.9432 and 0.8417 of it, study 38). The tier-3 test
+`a_nitrogen_world_keeps_its_frost_and_its_liquid_over_a_range_of_light`
+follows both branches: the frost holds up to 0.0070506 Earth fluxes and
+the liquid down to 0.0059258, within three steps of the folds study 38
+measured, every climate converged, on its derived pair, and attracting.
+The column still draws a dry adiabat where a saturated N₂ air follows
+its saturation curve (study 38).
 
 **Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
 that keeps water has two climates when the ice-albedo feedback makes it
@@ -2927,15 +2993,15 @@ its maximum greenhouse where none thaws it, less what its cold surface
 frosts out (issue #522).
 Where both exist the planet is a snowball (`Climate::snowball`) when its
 formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
-`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (10.1 bar in the
+`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (9.80 bar in the
 rewrite, 0.8 bar in legacy): the share of its history it spends frozen,
 with `d` the CO₂ that thaws it and `v / v⊕` its volcanism against Earth's
 (legacy's 0.8 bar gave Earth, which it remembered frozen about a tenth
 of its history, a chance of 0.1: on the spectral column Earth at 1 AU
 needed 0.091 bar more CO₂ to thaw, a chance of 0.102; 0.031 bar on the
 grey column. Study 25 found the dated snowballs are 1.4 % of Earth's
-history, not a tenth; the rewrite refits `W` to 10.1 bar and Earth's
-chance is 0.0141, see "Calibration of `SNOWBALL_WARM_BAR`" below). Where no
+history, not a tenth; the rewrite refits `W` to 9.80 bar and Earth's
+chance is 0.0140, see "Calibration of `SNOWBALL_WARM_BAR`" below). Where no
 CO₂ up to its maximum greenhouse thaws it (the chance is then 1, from
 about 1.4 AU for an Earth-like planet round the Sun: an icy body's cold column condenses and scatters its CO₂ before it
 warms the ice to a thaw), the frozen state is for good: the planet is
@@ -3155,18 +3221,19 @@ their measured air (see "Test air and Solar System bounds" below):
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
-| Earth | 288 K, water, regulated, thermostat CO₂ 4.206e-3 bar, Bond albedo 0.3070 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone, Bond albedo 0.2913 and 288.02 K at 280 ppm (on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
+| Earth | 288 K, water, regulated, thermostat CO₂ 4.071e-3 bar, Bond albedo 0.3071 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone, Bond albedo 0.2914 and 288.18 K at 280 ppm (before the N₂ and O₂ pairs of #703: 4.206e-3 bar and 288.02 K; on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
 | Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the 577 K pin, the model's output (#594), moves to the tier-2 net in 2d-4 | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
-| Titan | 93.86 K on the measured air, hydrocarbons; the reference Titan settles at 94.24 K on the chain's own air (104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
+| Titan | 92.64 K on the measured air, hydrocarbons; the reference Titan settles at 92.97 K on the chain's own air (93.86 K and 94.24 K under methane's grey stand-in, before #703; 104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | its equilibrium temperature, dry, temperate | within 1 K of it | airless |
 
 The reference Titan settled at 104.8 K because of its upstream nitrogen
 inventory (2.876 bar against 1.384 bar measured, +11.2 K; #679), so the
 climate is tested on Titan's measured air, not on the reference trial.
 Since #679 (*Titan's nitrogen*) the chain gives it 1.422 bar of N₂ and it
-settles at 94.24 K, 1.512 bar, with 0.091 bar of CH₄ over its seas; 2d-4
-moves the test onto the chain's own air.
+settled at 94.24 K, 1.512 bar, with 0.091 bar of CH₄ over its seas under
+methane's grey stand-in; since its greenhouse is its pairs only (#703)
+it settles at 92.97 K; 2d-4 moves the test onto the chain's own air.
 Earth's O₂ comes from life, which the chain adds later: its reference air
 has none, and the climate is solved again after oxygenation in 2d-4
 (#659), so the 280 ppm check runs on Earth's measured air (N₂ 78.08 %,
@@ -3174,8 +3241,11 @@ O₂ 20.95 % of 1.014 bar), under that air's own Bond albedo with the
 ozone its O₂ holds (`ozone_column`, [ozone.md](ozone.md)), taken at
 the reference Earth's temperature. Since #705 the cloud albedo is
 fitted with that ozone in (0.322), so the reference Earth without O₂
-is brighter (0.3070) and its thermostat holds 288 K with twice the CO₂. Dry bodies are never a runaway: Mercury and a
-dry Venus are `Temperate`.
+is brighter (0.3070; 0.3071 since the N₂ and O₂ pairs of #703, the
+heavy tests' 0.30703 and 0.30708) and its thermostat holds 288 K with
+4.071e-3 bar of CO₂, about twice the 2.058e-3 bar it held before #705
+(4.206e-3 bar before the pairs). Dry bodies are never a runaway: Mercury
+and a dry Venus are `Temperate`.
 
 The wet column against CERES (#680, study 32): on Earth's measured air
 at 288 K and 280 ppm the clear column sends out 274.72 W/m² on `main`
@@ -3258,8 +3328,11 @@ was split, radiative transfer page, *CO₂'s phase step*), yet the settled clima
 ways (a gap of 2e-11 K), frozen, and the outer edge is 1.4326 AU both
 ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, see below;
 1.4443 AU once the stellar spectra of #730 came in, 1.4355 AU since
-#729, below, 1.4365 AU since #734, and 1.4351 AU since CO₂'s phase step
-was split).
+#729, below, and 1.4365 AU since #734). Since methane's greenhouse is its
+pairs only (#703) the edge was 1.2588 AU both ways, and 1.2534 AU since
+CO₂'s phase step was split (#746); at 9.57 AU the climate settles at
+80.52 K (a gap of 3e-12 K), the two searches giving 23.67 and 23.85 bar
+(21.87 and 21.84 bar before #746).
 No regulated body can have a condensing air: the thermostat holds
 288 K, above the critical points of methane
 (190.564 K, Setzmann & Wagner 1991) and nitrogen (126.192 K, Span et al.
@@ -3303,8 +3376,8 @@ then fell to the floor of the surface solver, the dew point of its
 vapour, 284.0103 K, at 1, 1.3 and 1.6 AU. Now it sits at 288.0000 K at 1
 AU (3.94 bar of CO₂) and 288.0004 K at 1.3 AU (7.73 bar), and is frozen
 at 1.6 AU. Its outer edge moves in from 1.6470 to 1.4331 AU (1.4355 AU
-since #730 and #729, 1.4365 AU since #734, 1.4351 AU since CO₂'s phase
-step was split). The old
+since #730 and #729, 1.4365 AU since #734, 1.2588 AU since #703,
+1.2534 AU since #746). The old
 edge came from the top end of the search: from about 1.43 to 1.65 AU
 even the most CO₂ sends out more from a 288 K surface than the air with
 that CO₂ absorbs (at 1.6 AU under a 0.3 albedo, 57.6 against 51.0 W/m²),
@@ -3434,17 +3507,22 @@ and thawed at 0.148885 bar, so `d⊕` = 0.1468 bar (0.146828) and `W` =
 10.22, kept as 10.2 bar, which gave Earth a chance of 0.0140 (it
 fell to 0.01168 under 12.4 bar). Refitted again with #705's cloud
 albedo (0.322, fitted with ozone over the climate's own ground; the
-reference Earth holds no O₂, so no ozone): it freezes with 0.004206 bar
-and thaws at 0.149970 bar, so `d⊕` = 0.1458 bar (0.145764) and `W` =
-10.14, kept as **10.1 bar**, which gives Earth a chance of 0.0141 (it
-would be 0.01392 under 10.2 bar, inside the window too). The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
+reference Earth holds no O₂, so no ozone): it froze with 0.004206 bar
+and thawed at 0.149970 bar, so `d⊕` = 0.1458 bar (0.145764) and `W` =
+10.14, kept as 10.1 bar, which gave Earth a chance of 0.0141 (it
+would be 0.01392 under 10.2 bar, inside the window too). Refitted again
+with the N₂ and O₂ pairs of #703 (study 36): the reference Earth freezes
+with 0.004071 bar and thaws at 0.144919 bar, so `d⊕` = 0.1408 bar
+(0.140848) and `W` = 9.80, kept as **9.80 bar**, which gives Earth a
+chance of 0.0140 (it fell to 0.01359 under 10.1 bar, inside the window
+too). The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
 holds Earth's chance in 0.013 to 0.016 on the full solve (65 s at the
 tier-1 opt-level); a tier-1 test of `science::snowball` holds the
 arithmetic of the fit on the measured `d⊕` and `rate⊕`.
 Hoffman et al. quote Walker et al. 1981: "Even the present rate of
 release would yield 1 bar of carbon dioxide in only 20 million years",
 so 6.4 bar would be about 130 My of today's outgassing per temperate
-phase, and 10.1 bar is about 200 My.
+phase, and 9.80 bar is about 200 My.
 Searched and not found: a snowball frequency for another planet, and
 the length of the Paleoproterozoic snowballs. Where no CO₂ thaws the
 body, `thaw_bar` is infinite and the trace takes no non-finite value:
@@ -3466,6 +3544,15 @@ the melting curve of the stable ice at the surface pressure
 
 #### Calibration of `CH4_OPACITY` (issue #646, refit)
 
+Retired by study 36 (issue #703, the user's decision of 2026-11-25):
+HITRAN's N₂–N₂, N₂–CH₄ and CH₄–CH₄ pairs replace the grey opacity and
+`CH4_SATURATION_BAR`, and settle the same column at 92.30 K (92.296 K
+in the tier-1 test, now
+`titans_pairs_hold_its_column_just_under_its_measured_surface`, which
+allows 1.4 K under the measurement for the N₂–H₂ pairs, methane's lines
+and the haze's infrared the column lacks). The record of the fit
+follows.
+
 Target: Titan's surface, 93.65 ± 0.25 K at 1467 hPa (Fulchignoni et
 al. 2005), on the sourced column of `radiation::test_points` (1.467
 bar, 5.65 % methane, effective temperature 82 K), with the new methane
@@ -3481,7 +3568,7 @@ Result: 15.1, from 13.4. The bisection, on the column through
 14.7 gave 93.06 K, 15.35 gave 93.95 K, 15.0 gave 93.47 K, 15.2 gave
 93.74 K, 15.1 gives 93.60 K (15.13 and 15.14 bracket 93.65 K at the
 fourth figure). `titans_column_sits_at_its_measured_surface` (tier 1)
-holds it. Searched and not found: a grey or band opacity of Titan's
+held it. Searched and not found: a grey or band opacity of Titan's
 collision-induced greenhouse usable as one number; HITRAN's N₂–N₂ and
 N₂–CH₄ CIA tables would replace the fit, and were not extracted.
 
@@ -3516,7 +3603,13 @@ climate has a
 jump and no fixed point: it is stored on its colder side, the one a
 cooling planet reaches, with `converged: false` and the cause node
 `planet.climate.cycles` true (decided with the user, 2026-11-26, after
-study 25: the study does not cover it).
+study 25: the study does not cover it). A bracket that attracts can
+still hold three roots, the two stable branches of a bistable body and
+the unstable one between them, and its steps can stop on the middle
+one: since #703's first pull request a root is kept only where it
+attracts, and an unstable
+one is left from its cold side (see the nitrogen sweep above and
+[nitrogen-phases.md](nitrogen-phases.md)).
 
 **Departure.** Kadoya and Tajika 2014, Menou 2015 and Haqq-Misra et al.
 2016 find limit cycles in time near the outer edge: the carbonate-silicate
@@ -3528,8 +3621,19 @@ future law would rest on these papers for. The rewrite draws no share
 of time: the cold side and the `cycles` flag say that no stable warm
 state is claimed. The edge of a methane Earth moves from 1.4443 to
 1.4355 AU with it (measured, `one_greenhouse_search_on_a_condensing_air`;
-1.4365 AU since #734, 1.4351 AU since CO₂'s phase step was split),
-and that test went from 833 s to 74 s (release).
+1.4365 AU since #734), and that test went from 833 s to 74 s (release).
+Since methane's grey stand-in is retired (#703) its edge was 1.2588 AU
+and the orbits with no fixed point ran from 1.268 to 1.277 AU (probed
+every 0.001 AU); the tier-3 test
+`a_climate_with_no_fixed_point_stops_on_its_cold_side` moved from 1.44
+to 1.272 AU, where the climate cycled for 16 steps and was stored at
+227.17 K with 8.01 bar of CO₂ under the plain collapse, then for 17
+steps at 232.79 K with 9.91 bar under the collapse of #743. Since CO₂'s
+phase step was split (#746) the edge is 1.2534 AU and the orbits with
+no fixed point run from 1.261 to 1.267 AU (1.260 settles at its maximum
+greenhouse, 1.268 frozen); 1.272 AU now converges (227.31 K, 8.05 bar),
+so the test moved to 1.264 AU, where the climate cycles for 21 steps
+and is stored at 231.65 K with 9.50 bar.
 
 #### A collapse from the fold (#731)
 
@@ -3552,9 +3656,30 @@ zero of the secant through the last two points. Where `g` falls below
 minus its noise, the step has passed a balance: the search brackets it
 and closes in by the Illinois rule. A warm balance narrower than one
 step can be stepped over; the plain step finds every one (tier 1,
-synthetic collapses in the measured shape). At half the step the
-methane Earth's climates at 1.42875, 1.4355 and 1.44 AU, around its
-outer edge, do not move (tier 3, `collapse_step_is_converged`).
+synthetic collapses in the measured shape). Before #703's pairs, at
+half the step the methane Earth's climates at 1.42875, 1.4355 and
+1.44 AU, around its outer edge, did not move (tier 3,
+`collapse_step_is_converged`). With the pairs and the split phase step
+of #746 the edge is 1.2534 AU and the test holds 1.25, 1.2534 and
+1.264 AU (`STEP_ORBITS`); none moves at half the step (at 1.264 AU,
+231.6489 against 231.6492 K). Measured on 2026-11-26 at `COLLAPSE_STEP`,
+half, a quarter and the plain step, the climates just past the edge
+stay within:
+
+- 0.11 K at 1.268 AU, a converged climate (230.92 to 231.03 K, 9.25 to
+  9.28 bar of CO₂);
+- 0.08 K at 1.264 AU, 0.22 K at 1.266 AU and 0.33 K at 1.262 AU, on the
+  cold side where a cycling climate is stored (231.39 to 231.77 K, 9.41
+  to 9.54 bar): where a climate cycles, the step can change where the
+  cycle stops, by a few tenths of a kelvin.
+
+Before #747 they moved by up to 5.6 K (9.26 to 11.42 bar at 1.268 AU),
+and before #746 they landed on 9.91 or 8.00 bar. The cause was the cap
+on a collapse's steps, not the step: just past the edge the CO₂ falls
+from 14.2 to about 9.3 bar on a flat gap and needs up to 207 plain
+steps, and stopped at 100 the collapse kept a climate that depended on
+the step. `COLLAPSE_ITERATIONS` is 300 since #747, and a collapse
+stopped at it is not converged.
 
 The gap's noise is how much `φ` moves within the temperature tolerance
 of the climate solve, `φ(T + TOLERANCE_K) − φ(T)`: 0.005 bar at 248 K
@@ -3569,14 +3694,16 @@ step at all, as in legacy. This follows the decision of #729 (at a
 discontinuity, the cold side; decided with the user, 2026-11-26). Before
 #734, on the methane Earth's edge search, 28 of 280 collapses that
 legacy stopped warm on noise fell cold, and the search went from 74 s to
-59 s (release), its crawls from the fold gone. Since #734 the maximum
+59 s (release), its crawls from the fold gone. Before #703's pairs, and
+since #734, the maximum
 greenhouse sits on the fold less often: 12 of 272 collapses (from 16.14
 and 16.23 bar, about 247 K) fall cold, at 16 to 18 climates each where
 the stops on noise took 2 to 6; the others keep their balance within
-0.001 K. The outer edge stays at 1.4365 AU (1.4351 AU since CO₂'s phase
-step was split, which puts 1.4355 AU just past it again), and
-`one_greenhouse_search_on_a_condensing_air` takes 40 s against 37 s
-with the plain step: the rule costs that, for a result that no longer
+0.001 K. The outer edge stayed at 1.4365 AU, and
+`one_greenhouse_search_on_a_condensing_air` took 40 s against 37 s
+with the plain step (these figures date from before #703's pairs, which
+moved the edge to 1.2588 AU; not measured again): the rule costs that,
+for a result that no longer
 depends on the solver's last digits. Within the noise the steps stay
 at least the noise, and inside a bracket a point below the balance
 within its noise ends the search: the solve's 0.01 K tolerance lets the
@@ -3612,7 +3739,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `PLATEAU_SURFACES_K` | 500 to 640 K by 20 K | Calibration | every 10 K and to 700 K, the plateau moves under 0.5 W/m² | 3 |
 | `COLLAPSE_ITERATIONS` | 300 | Definition | a collapsing Earth at 1.6 AU settles under it (tier 1); a methane Earth just past its outer edge with #703's pairs needs up to 207 steps, plain; a collapse stopped at it leaves its climate not converged | 1, 3 |
 | `COLLAPSE_TOLERANCE` | 1e-4 | Calibration | at 1e-5 the temperature moves under 0.01 K | 3 |
-| `COLLAPSE_STEP` | 0.005 of the CO₂ | Calibration | at 0.0025 a methane Earth's climates at 1.42875, 1.4355 and 1.44 AU do not move (#731) | 3 |
+| `COLLAPSE_STEP` | 0.005 of the CO₂ | Calibration | at 0.0025 a methane Earth's climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs (#731); since them and #746, 1.25, 1.2534 and 1.264 AU do not move, and from 1.262 to 1.268 AU full, half, quarter and plain steps stay within 0.11 K on a converged climate and 0.33 K on a cycle's cold side (5.6 K before the cap of #747) | 3 |
 | `PHASE_BAND` | 1 K | Calibration | Titan-like and Triton-like sweeps settle across their points | 3 |
 | `THAW_STEPS` | 13 | Calibration | at 16 steps Earth's thaw CO₂ moves under 0.1 % (measured: +0.165 % at 12 steps, +0.063 % at 13, 0.180932, 0.180748 and 0.180634 bar at 12, 13 and 16) | 3 |
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |
@@ -3752,8 +3879,8 @@ The first two go together: refitting the clouds alone would cool Earth
 by 3.4 K. Venus (supercritical, 85 bar of CO₂), Mars (6.36 mbar, below
 273.16 K at every level) and Titan (no water) do not cross the phase
 step; ozone and methane in the longwave would warm a body only where
-its air holds them (Titan's methane is already in the column, as the
-grey stand-in of its collision-induced greenhouse).
+its air holds them (Titan's methane is already in the column, through
+its collision-induced pairs).
 
 ### Boiling and the steam envelope of the rewrite (study 26)
 
@@ -4580,6 +4707,9 @@ another paper, from memory) is said where it is used.
   doi:10.1016/j.pss.2024.105863, arXiv:2403.09917, NH₃'s sublimation
   pressure at 80 to 120 K.
 - Bono et al. 2019, the age of Earth's inner core.
+- Borysow and Frommhold 1987, *Astrophys. J.* 318, 940,
+  doi:10.1086/165426, the CH₄–CH₄ pairs of HITRAN's `CH4-CH4_2011.cia`
+  (through HITRAN's references, not read).
 - Boukrouche, Lichtenberg and Pierrehumbert 2021, *ApJ* 919, 130,
   doi:10.3847/1538-4357/ac1345, arXiv:2107.14150, the end of the
   plateau (Fig. 9) and the post-runaway equilibrium (§ 4.3; read).
@@ -4598,8 +4728,15 @@ another paper, from memory) is said where it is used.
   doi:10.5670/oceanog.2010.51, Table 1, the volume and area of Earth's
   ocean (read).
 - Charnay et al. 2013, doi:10.1002/jgrd.50808.
+- Charnay, Forget, Tobie, Sotin and Wordsworth 2014, "Titan's past and
+  future: 3D modeling of a pure nitrogen atmosphere and geological
+  implications", *Icarus* 241, 269, doi:10.1016/j.icarus.2014.07.009
+  (arXiv:1407.1791, read for study 38: §2, §4.2, §4.3, Table 2).
 - Chen, Aziz and Lim 1971, *Can. J. Phys.* 49, 1569,
   doi:10.1139/p71-183, the vapour pressure of solid argon (record only).
+- Chistikov et al. 2019, *J. Chem. Phys.* 151 (19),
+  doi:10.1063/1.5125756, the N₂–N₂ roto-translational pairs of HITRAN's
+  `N2-N2_2021.cia` (through HITRAN's references, not read).
 - Christensen 2006, doi:10.1038/nature05342, the deep dynamo.
 - Christensen 2010, doi:10.1007/s11214-009-9553-2, the energy-flux
   scaling of the field.
@@ -4647,6 +4784,9 @@ another paper, from memory) is said where it is used.
   calcite.
 - Feistel and Wagner 2007, *Geochim. Cosmochim. Acta* 71, 36, the
   sublimation pressure of water ice, as Lisse et al. 2021 reproduce it.
+- Finenko et al. 2022, *Astrophys. J. Suppl.* 258, 33,
+  doi:10.3847/1538-4365/ac36d3, the N₂–CH₄ pairs of HITRAN's
+  `N2-CH4_2024.cia` (through HITRAN's references, not read).
 - Foley, Bercovici and Landuyt 2012, tectonics against
   planet size.
 - Fonseca and Lobo 1989, NH₃'s triple-point pressure, through the

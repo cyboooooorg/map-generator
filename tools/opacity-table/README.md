@@ -3,8 +3,9 @@
 Builds `crates/science/data/opacity.bin`, and with `--shortwave`
 `crates/science/data/shortwave.bin`. The second table covers the star's
 near infrared on the Bond albedo's bands from 0.7 to 5 µm, with MT_CKD's
-water continuum binned in. With `--continua` it writes instead the two
-text files of the continua, `mt-ckd-water.tsv` and `co2-cia.tsv`, and
+water continuum binned in. With `--continua` it writes instead the three
+text files of the continua and the collision-induced pairs,
+`mt-ckd-water.tsv`, `co2-cia.tsv` and `pairs-cia.tsv`, and
 with `--ozone` ozone's shortwave cross-sections on the same bands,
 `ozone.tsv`.
 
@@ -67,12 +68,17 @@ It fetches:
 - HITRAN2024's CO₂–CO₂ collision-induced absorption,
   `https://hitran.org/data/CIA/main/CO2-CO2_2024.cia` (read by
   `--continua`).
+- HITRAN's nitrogen, oxygen and methane pairs (read by `--continua`):
+  `https://hitran.org/data/CIA/main/N2-N2_2021.cia`, `O2-O2_2024.cia`,
+  `O2-N2_2024.cia` and `N2-CH4_2024.cia` from the same directory, and
+  `https://hitran.org/data/CIA/alternate/CH4-CH4_2011.cia` (the only
+  CH₄–CH₄ file HITRAN serves).
 - Serdyuchenko et al. 2014's ozone cross-sections (IUP Bremen),
   `https://www.iup.uni-bremen.de/gruppen/molspec/downloads/serdyuchenkogorshelev5digits.dat`
   (read by `--ozone`).
 
 The script ends by checking the SHA-256 of `absco-ref_wv-mt-ckd.nc`,
-`contnm.f90`, `CO2-CO2_2024.cia` and
+`contnm.f90`, the six CIA files and
 `serdyuchenkogorshelev5digits.dat` against the values it records
 (`shasum -a 256 -c`) and fails on a mismatch. HITRAN serves its current
 edition, so a changed CIA file means a new edition to review.
@@ -108,7 +114,7 @@ To write the continuum files:
 cargo run --release -j 4 -p opacity-table -- --continua
 ```
 
-It needs only `absco-ref_wv-mt-ckd.nc` and `CO2-CO2_2024.cia` and takes
+It needs only `absco-ref_wv-mt-ckd.nc` and the six CIA files and takes
 a second. `crates/science/data/mt-ckd-water.tsv` holds MT_CKD's water
 continuum at every 50 cm⁻¹ from 0 to 5000 cm⁻¹ (the file's points, not
 bin means: `wavenumber_cm self_296K exponent foreign_296K`).
@@ -116,8 +122,15 @@ bin means: `wavenumber_cm self_296K exponent foreign_296K`).
 molecule², averaged (trapezoid) over each 20 cm⁻¹ cell at 200, 300, 450
 and 800 K (`cell_start_cm k_200K k_300K k_450K k_800K`): each band of the
 file takes the set nearest each temperature, and cells under
-1e-50 cm⁵ at every temperature are left out. `--out FILE` redirects both
-files to the directory of `FILE`.
+1e-50 cm⁵ at every temperature are left out.
+`crates/science/data/pairs-cia.tsv` holds the N₂–N₂, O₂–O₂, O₂–N₂,
+N₂–CH₄ and CH₄–CH₄ pairs on the same cells up to 5000 cm⁻¹, at every
+10 K from 70 to 400 K (`pair cell_start_cm k_70K … k_400K`): each band of
+a file (its blocks that share wavenumbers) is averaged over the cell and
+interpolated linearly in temperature between its blocks, held at its
+ends; the bands that reach a cell add up (provenance and method in
+`crates/science/data/OPACITY.md`, "Continua"). `--out FILE` redirects the
+three files to the directory of `FILE`.
 
 To write ozone's cross-sections:
 
@@ -137,7 +150,7 @@ Then run the spectrum and column tests of `science` (`mise run test:tier1`).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--continua` | off | Write `mt-ckd-water.tsv` and `co2-cia.tsv` instead of a table |
+| `--continua` | off | Write `mt-ckd-water.tsv`, `co2-cia.tsv` and `pairs-cia.tsv` instead of a table |
 | `--shortwave` | off | Build `shortwave.bin`: the albedo's bands over 0.7-5 µm, 13 temperatures, MT_CKD's water continuum |
 | `--ozone` | off | Write `ozone.tsv`: ozone's cross-sections as g-points on the albedo's bands, 223 and 233 K |
 | `--raw DIR` | `tools/opacity-table/raw` | Where `fetch.sh` put the downloads |
@@ -162,6 +175,7 @@ They run on embedded or synthetic lines and never download anything: the
 HITRAN record format, the temperature scaling of a line strength against
 HITRAN's documented formula, the Voigt function against its integral,
 the CO₂ pedestal against LBLRTM's formula, the parsing and binning of the
-CO₂ continuum, the
+CO₂ continuum and of the CIA files (nearest set, and the bands
+interpolated in temperature), the
 layered line sum against the direct sum, and the g-points against the
 line-by-line mean transmission over paths of 1e-4 to 1e2 kg/m².

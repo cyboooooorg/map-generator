@@ -415,12 +415,17 @@ bands:
   Terragni et al. 2025) and the overtone bands near 2500-4500 cm⁻¹
   (Baranov 2018; Tran et al. 2024). Its absorption goes with the square
   of the density.
-- **Methane on Titan.** Methane and nitrogen make cold, thick air whose
-  absorption is dominated by CIA over 0-650 cm⁻¹ (Courtin et al. 1995;
-  McKay et al. 1991). The app has no spectral data for it: it uses a grey
-  stand-in, described under the departures.
-- **Gases that only broaden.** N₂, O₂ and argon absorb nothing the column
-  counts, but their collisions widen the lines of CO₂ and water. HITRAN's
+- **Nitrogen, oxygen and methane pairs.** Methane and nitrogen make
+  cold, thick air whose absorption is dominated by CIA over 0-650 cm⁻¹
+  (Courtin et al. 1995; McKay et al. 1991). Since study 36 (issue #703)
+  the column takes HITRAN's N₂–N₂, O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄
+  files with the CO₂ pairs (`spectrum::PAIRS`, `pairs-cia.tsv`; sources
+  in `crates/science/data/OPACITY.md` and
+  [longwave-absorbers.md](longwave-absorbers.md)). Methane has no lines
+  in the column yet: it absorbs through its pairs only.
+- **Gases that only broaden.** Argon absorbs nothing the column counts,
+  and N₂ and O₂ nothing but their pairs, but their collisions widen the
+  lines of CO₂ and water. HITRAN's
   "air" width is that of N₂ and O₂; argon is a weaker broadener. For CO₂,
   the band-averaged broadening of argon relative to N₂ is 0.78 in the
   15 µm band (Reichle 1969, § 6.7 and § 7.6.2, pp. 70-72 and 96-97, read
@@ -889,16 +894,18 @@ CH₄/CO₂ ratio of 0.2.
   global-mean line-by-line split of the absorption by gas was found
   (Ramanathan & Vogelmann 1997, *Ambio* 26, 38, could not be opened).
   The share of the reflected light that ozone removes was not found.
-- **Ozone, N₂O and the halocarbons are not modelled in the infrared,
-  and methane only as a stand-in.** The column's one methane
-  opacity is the grey stand-in of Titan's collision-induced greenhouse
-  (`radiation::methane`, a calibration on Titan), not methane's bands;
-  Earth's test air holds no methane. Ozone's share of Earth's clear-sky
-  outgoing radiation is 4 to 10 W/m² across the sources read (Schmidt
-  et al. 2010, all sky; Kiehl & Trenberth 1997, clear sky, on one
-  profile); no global-mean line-by-line value with ozone removed was
-  found. Methane, N₂O and the halocarbons take 3.6 W/m² (Hogan &
-  Matricardi 2020, line by line).
+- **Ozone, N₂O, the halocarbons and methane's lines are not modelled
+  in the infrared.** Methane absorbs only through its collision-induced
+  pairs (N₂–CH₄, CH₄–CH₄, HITRAN), which make Titan's greenhouse since
+  study 36; Earth's test air holds no methane. Ozone's share of Earth's
+  clear-sky outgoing radiation is 4 to 10 W/m² across the sources read
+  (Schmidt et al. 2010, all sky; Kiehl & Trenberth 1997, clear sky, on
+  one profile); no global-mean line-by-line value with ozone removed was
+  found. Methane, N₂O and the halocarbons take 3.4 W/m² (Hogan &
+  Matricardi 2020, line by line). Study 36 (issue #703) weighs each one;
+  N₂'s and O₂'s pairs are in the column since its first pull request:
+  see [Which gases does the infrared column still
+  miss?](longwave-absorbers.md).
 - **Which saturation Manabe & Wetherald's humidity refers to** below
   0 °C: the 1967 paper, read in study 33, names none ("the saturation
   vapor pressure of water vapor"), and its implementations differ
@@ -935,9 +942,10 @@ reads the forcings, never the central object's kind).
    body at 640 K emits 99.6 % of its light below 5000 cm⁻¹) and a tail
    past 5000 cm⁻¹ that takes the absorption of the last bin. In each bin,
    CO₂ and water lines (eight $g$-points each, overlapped at random), the
-   water and CO₂ continua, CO₂ pairs and methane's stand-in set the
-   transmission; the layers' mean Planck fluxes are summed with the
-   diffusivity 1.66.
+   water and CO₂ continua, and the collision-induced pairs of CO₂, N₂, O₂
+   and methane (HITRAN's CIA files, one optical depth per bin growing as
+   the product of the two gases' densities) set the transmission; the
+   layers' mean Planck fluxes are summed with the diffusivity 1.66.
 3. **The shortwave.** 240 bands, even in $\ln\lambda$, from 0.2 to 5 µm,
    weighted by the star's spectrum from the table of model spectra
    (`data/stellar-spectra.tsv`, by its effective temperature and
@@ -970,7 +978,7 @@ reads the forcings, never the central object's kind).
    albedo as a fixed point: the albedo reads the column (its humidity, its
    clouds), and the column reads the temperature.
 
-Three tables hold the spectroscopy, built offline by
+These tables hold the spectroscopy, built offline by
 [`tools/opacity-table`](https://github.com/cyboooooorg/map-generator/blob/main/tools/opacity-table/README.md)
 and never by the generator:
 
@@ -979,6 +987,8 @@ and never by the generator:
 | `opacity.bin` | The infrared: CO₂ and water lines as 8 $g$-points in each 20 cm⁻¹ bin, on 15 pressures (1e-5 to 100 bar) and 16 temperatures (100 to 900 K), plus MT_CKD's CO₂ continuum | 3.8 MB |
 | `shortwave.bin` (2b-2) | The same lines and sets on the 147 albedo bands from 0.7 to 5 µm (2000 to 14 364 cm⁻¹), plus MT_CKD's water and CO₂ continua | 1.8 MB |
 | `ozone.tsv` (#653) | Ozone's cross-sections (Serdyuchenko et al. 2014) at 223 and 233 K as 8 $g$-points on each of the 240 albedo bands, 0.2 to 1.1 µm | 27 kB |
+| `co2-cia.tsv` | HITRAN's CO₂–CO₂ pairs on 20 cm⁻¹ cells at 200, 300, 450 and 800 K | 7 kB |
+| `pairs-cia.tsv` (#703) | HITRAN's N₂–N₂, O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄ pairs on 20 cm⁻¹ cells at every 10 K from 70 to 400 K | 131 kB |
 
 Their inputs, versions, download dates and checksums, the regeneration
 commands and the stale paths are in
@@ -1005,10 +1015,11 @@ the Bond albedo are there too (change 2b-2).
 - `crates/science/src/radiation/`: `column` (the grid, the adiabats, the
   skin temperature, the cloud greenhouse and `outgoing_longwave`),
   `spectrum` (the 250 bins, the lines, the water and CO₂ continua and the
-  CO₂ pairs read from `co2-cia.tsv`), `ktable` (the reader of
-  `opacity.bin`), `methane` (the grey stand-in), `clouds` (the cloud
-  cover), `gases` (the partial pressures and the heat capacities) and
-  `fast_math` (the single-precision exponential of the sum).
+  collision-induced pairs read from `co2-cia.tsv` and `pairs-cia.tsv`),
+  `ktable` (the reader of `opacity.bin`), `methane` (the
+  anti-greenhouse), `clouds` (the cloud cover), `gases` (the partial
+  pressures and the heat capacities) and `fast_math` (the
+  single-precision exponential of the sum).
 - The shortwave, in the same directory: `starlight` (the 240 bands and
   the star's weights from the table of spectra), `shortwave` (the reader of
   `data/shortwave.bin`, the two-stream layers, their stacks and `Paths`,
@@ -1071,23 +1082,38 @@ the Bond albedo are there too (change 2b-2).
   1987), not a fitted curve: neither CoolProp nor Setzmann & Wagner give
   one. thermopack carries a sublimation equation credited to Lemmon 2002,
   not read at its source and not adopted.
-- **Methane's grey stand-in.** Methane takes one grey optical depth over
-  0-650 cm⁻¹, $\tau = k\,(uB)^{1/2}$, with $u$ its saturated amount, $B$
-  the air it collides with and $k$ = 15.1. It was calibrated on Titan's
-  surface, 93.65 ± 0.25 K at 1467 hPa (Fulchignoni et al. 2005), with 5.65 %
-  of methane at the surface (Niemann et al. 2010) and the greenhouse of
-  +21 K and anti-greenhouse of −9 K of McKay et al. (1991).
-  What was searched: spectral CIA tables of N₂–N₂ and N₂–CH₄ exist in
-  HITRAN, and would give the spectral Titan; they were not extracted. The
-  saturated methane amount (0.01 bar), the share of methane's near-infrared
-  layer and the cold-trap construction that fixes it (the saturation
-  pressure at the skin temperature, over the tropopause pressure) are the
+- **Titan's greenhouse is its pairs only.** Since study 36 (issue #703)
+  methane's infrared is HITRAN's N₂–CH₄ and CH₄–CH₄ pairs, with N₂–N₂,
+  which settle the sourced Titan (1.467 bar, 5.65 % of methane at the
+  surface, Niemann et al. 2010) at 92.30 K against the measured
+  93.65 ± 0.25 K (Fulchignoni et al. 2005), without a fitted constant.
+  The column misses N₂–H₂ pairs (Titan's H₂ is not a gas of the model,
+  issue #720), methane's own lines and the haze's infrared, and it holds
+  too little methane low down: it applies the cold trap's mixing ratio
+  (`radiating_methane_bar`) at every level, so its lower troposphere
+  holds about 40 % of the sourced surface CH₄ (a review's estimate,
+  derived, issue #744), likely a large share of the gap since N₂–CH₄ is
+  linear in CH₄. The tier-1 test allows the column 1.4 K under the
+  measurement for them (a calibration on the measured gap): its floor is
+  93.65 − 0.25 − 1.4 = 92.00 K, 0.3 K under the column's 92.30 K. The
+  grey stand-in it replaced (`CH4_OPACITY` 15.1, `CH4_SATURATION_BAR`
+  0.01 bar, two calibrations on Titan, see `planet-atmospheres.md`,
+  "Calibration of `CH4_OPACITY`") put it at 93.60 K. The cold-trap
+  construction that sets how much methane radiates (the saturation
+  pressure at the skin temperature, over the tropopause pressure) is the
   app's own model: each ingredient is sourced, the combination is not.
-  The legacy value, 13.4, was fitted with the legacy methane sublimation
-  line (9.1 kJ/mol); with the port's (9.7 kJ/mol) methane's saturation is
-  22 % lower at the 69 K skin of the tests' Titan column, which cooled to
-  91.24 K. It was refitted to 15.1 on that column (#646; see
-  `planet-atmospheres.md`, "Calibration of `CH4_OPACITY`").
+- **N₂'s and O₂'s pairs take more than the line-by-line sources** on
+  Earth: 0.41 W/m² of the clear sky at 288 K, against 0.25 (Hogan &
+  Matricardi 2020) to 0.28 (Höpfner et al. 2012), most of the excess in
+  N₂'s roto-translational band below 650 cm⁻¹, which water hides. Its
+  cause is not isolated (issue #718).
+- **The pairs' temperatures** are held at the ends of `pairs-cia.tsv`,
+  70 and 400 K: Titan's 69 K skin takes the 70 K column, Venus's 735 K
+  surface the 400 K one (HITRAN's blocks stop between 330 and 400 K, and
+  each band is held at its warmest block past it). The CO₂–CO₂ pairs
+  keep their own table, `co2-cia.tsv`, from 200 to 800 K. The shortwave
+  table takes only the CO₂–CO₂ pairs, not N₂'s fundamental at 4.3 µm nor
+  O₂'s near-infrared bands.
 - **The cloud's water, the deck and the haze.** These are calibrations,
   not laws. What was searched and not found:
   - *Cloud cover.* The cover is $RH^{0.25}\,(1 - e^{-p_{H_2O}/p_c})$ with
@@ -1120,7 +1146,8 @@ the Bond albedo are there too (change 2b-2).
     measured runs). It was 0.296 over 0.122 without ozone under the table's Sun,
     and 0.276 under the black-body Sun (#655). The legacy fitted 0.252 on 0.30.
     A body without O₂ holds no ozone and comes out brighter under it than under
-    0.296: the reference Earth, without O₂ until planet PR 2d-4, has 0.3070.
+    0.296: the reference Earth, without O₂ until planet PR 2d-4, has 0.3070
+    (0.3071 since the N₂ and O₂ pairs of #703).
   - *Sulphuric deck.* The deck appears from 1e-3 bar of SO₂ in a surface
     above 273.15 K, over a share of the disc that grows over 40 K. The
     sourced route is the binary H₂SO₄–H₂O condensation (Zeleznik 1991;
@@ -1238,7 +1265,7 @@ the Bond albedo are there too (change 2b-2).
   lies within 15 % of the split of 0.2885 (0.5 × 1.5/2.6). Before the
   refit the sourced Titan gave 0.2516, −17.9 % on McKay's value. The
   saturated methane amount of that Titan, 2.03e-3 bar, is the cold-trap
-  construction of the grey stand-in above.
+  construction of Titan's greenhouse above.
 - **Numerical choices with no source.** The $g$-split of eight intervals
   (edges 0, 0.3, 0.6, 0.8, 0.9, 0.96, 0.99, 0.998, 1, narrow where the line
   cores make $k(g)$ steep: Lacis & Oinas 1991 describe the method, not
@@ -1437,8 +1464,9 @@ continuum. Issue #643 tracks it.
 **Earth's outgoing longwave against CERES (study 32, issue #680).** The
 climate's column for Earth (288 K, 280 ppm of CO₂, Earth's measured air,
 77 % relative humidity at the surface, skin 214.51 K) sends out
-274.63 W/m² under a clear sky and 241.25 W/m² under its clouds (274.72
-and 241.81 W/m² before the phase step above was split). Against
+274.22 W/m² under a clear sky since the N₂ and O₂ pairs of #703
+(274.63 W/m² before them, and 241.25 W/m² under its clouds; 274.72 and
+241.81 W/m² before the phase step above was split). Against
 CERES's 267.9 W/m² the clear sky looked 7 W/m² too bright. The
 comparison is not like for like. The study (Wiki,
 [32-longwave-against-ceres-audit](https://github.com/cyboooooorg/map-generator/wiki/32-longwave-against-ceres-audit))
@@ -1450,30 +1478,34 @@ its own code (diagnostics, nothing fitted on them):
 | Clear sky of the cloud-free scenes, Ed4.0, 2005-2015 | 268.1 | CERES EBAF Ed4.0 data quality summary, Table 6-1 |
 | The same air without its clouds (the column's clear sky) | −2.2, to 265.9 | Loeb et al. 2020, Table 3 |
 | Ozone, absent from the column | +4 to +10 | Schmidt et al. 2010, Table 1 (all sky, removed: 2.7 % of 155) to Kiehl & Trenberth 1997, Table 3 (clear sky: 8 alone, 10 with its overlaps) |
-| Methane, N₂O, halocarbons, N₂ and O₂ at present-day amounts | +3.6 | Hogan & Matricardi 2020, Table 4 (line by line, each removed) |
+| Methane, N₂O and halocarbons at present-day amounts (N₂ and O₂ out since the column holds their pairs, #703) | +3.39 (+3.64 with N₂ and O₂ before) | Hogan & Matricardi 2020, Table 4 (line by line, each removed) |
 | CO₂ from about 389 ppm (July 2005 to June 2015, NOAA) to 280 ppm | +1.75 | the column |
 | A black surface, where RFMIP's surfaces have an emissivity of 0.98 | at most +1.6 | 2 % of the clear-sky net surface flux, 81.0 W/m² (Loeb et al. 2020, Table 3) |
 
-A column of water vapour and CO₂ alone should therefore send out 275.5
-to 282.9 W/m² at 280 ppm (the sum of the table). The column's
-274.63 W/m² (274.72 before the split) lies 0.85 W/m² under that range,
-not above it: it falls inside only the window widened by CERES's
-uncertainty, below.
+A column of water vapour and CO₂ alone should therefore have sent out
+275.5 to 282.9 W/m² at 280 ppm (the sum of the table, study 32). Since
+the column holds the N₂ and O₂ pairs (study 36, issue #703) the sum
+leaves them out: about 275.2 to 282.6 W/m². The column's 274.22 W/m²
+(274.63 before the pairs, 274.72 before the split) lies about 1 W/m²
+under that range, not above it: it falls inside only the window widened
+by CERES's uncertainty, below.
 
 The test `earths_clear_sky_column_is_ceres_like_for_like` (tier 1)
 holds it there. It builds the window from the table: 268.1 − 2.2 +
-3.64 (Hogan & Matricardi) + 1.76 (Myhre et al. 1998's
+3.39 (`MINOR_GASES_W_M2`, Hogan & Matricardi's CH₄, N₂O and
+halocarbons; 3.64 with N₂ and O₂ before #703) + 1.76 (Myhre et al. 1998's
 $5.35 \ln(389/280)$ for the CO₂ of CERES's years, NOAA), plus ozone from
 4.2 to 10 and a black ground from 0 to 1.6, widened by CERES's
 uncertainty (0.75 % of 268.1 and 2.75 W/m², the two terms of the data
 quality summary, combined here in quadrature: 3.4 W/m²):
-272.1 to 286.3 W/m². It runs the climate's own clear column
-(`Profile::CLEAR`) on Earth's measured air (78.08 % N₂ and 20.95 % O₂ of
-1.014 bar, NASA's fact sheet), 280 ppm, 77 % surface
-humidity at 288 K, under the skin of CERES's all-sky 240.1 W/m²: the
+271.83 to 286.08 W/m² (272.1 to 286.3 before #703). It runs the
+climate's own clear column (`Profile::CLEAR`) on Earth's measured air
+(78.08 % N₂ and 20.95 % O₂ of 1.014 bar, NASA's fact sheet), 280 ppm,
+77 % surface humidity at 288 K, under the skin of CERES's all-sky 240.1 W/m²: the
 column's `skin_temperature`, `2^-¼` of the effective temperature
-$(240.1/\sigma)^{1/4} = 255.09$ K, 214.51 K. It gives 274.63 W/m² (274.72
-before the split), inside the window but under its nominal part. It
+$(240.1/\sigma)^{1/4} = 255.09$ K, 214.51 K. It gives 274.22 W/m² (274.63
+before the N₂ and O₂ pairs, 274.72 before the split), inside the window
+but under its nominal part. It
 replaces `earth_clear_sky_olr`, which ran a fixed 6.5 K/km profile with a
 uniform 77 % humidity, 11 W/m² darker than the climate's, against
 267.9 ± 10 W/m² (a calibrated tolerance). The window narrows when the
@@ -1565,8 +1597,9 @@ under a 214.4 K skin (the test's 214.51 K moves each by about
   adds about 0.3 W/m² (0.15 K) under the clouds. Since #705 the cloud
   albedo is fitted with ozone over the climate's own ground: Earth's
   measured air, with its ozone, has a Bond albedo of 0.2913 at 288 K
-  and its 280 ppm climate is 288.02 K (`earth_has_its_climate`); the
-  reference Earth without O₂ has 0.3070.
+  and its 280 ppm climate is 288.02 K (`earth_has_its_climate`), 288.18 K
+  since the N₂ and O₂ pairs of #703; the reference Earth without O₂ has
+  0.3070 (0.3071 since the pairs).
 
 **Sources the audit could not read.** Kasting 1991 (Appendix B),
 Pierrehumbert 2010 (equation 2.33), the CRC polarizabilities and Sobolev
@@ -1878,12 +1911,19 @@ publisher's page (Tables 1 to 5).
 110. Zeleznik, F. J. 1991, *J. Phys. Chem. Ref. Data* 20, 1157,
      doi:10.1063/1.555899.
 111. Zuluaga, J. I. et al. 2022, arXiv:2207.08636 (for Sobolev's relation).
+112. Höpfner, M., Milz, M., Buehler, S., Orphal, J., Stiller, G. 2012,
+     "The natural greenhouse effect of atmospheric oxygen (O₂) and nitrogen
+     (N₂)", *Geophys. Res. Lett.* 39, L10706, doi:10.1029/2012GL051409
+     (author copy read, Table 1).
 
 ## See also
 
 - [What is the habitable zone?](habitable-zone.md): the edges that this
   page's plateau and maximum greenhouse produce.
 - [What decides whether a world has an atmosphere?](atmospheres.md)
+- [Which gases does the infrared column still
+  miss?](longwave-absorbers.md): methane, N₂O, halocarbons and the
+  collision-induced pairs the column lacks (study 36).
 - [Planet atmospheres](planet-atmospheres.md): the legacy description of
   the same chain (climate column, absorbers, albedo, near-infrared
   absorption), kept until it is rewritten.

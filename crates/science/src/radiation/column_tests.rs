@@ -209,15 +209,58 @@ const CERES_ALL_SKY_W_M2: f64 = 240.1;
 const TOTAL_REGION_W_M2: f64 = -2.2;
 
 /// Source: what methane, N₂O, CFC-11 (with the other halocarbons as its
-/// equivalent), CFC-12, N₂ and O₂ take from Earth's clear-sky outgoing
-/// radiation, each removed from a present-day atmosphere: 1.5, 1.5, 0.22,
-/// 0.17, 0.15 and 0.096 W/m² (Hogan & Matricardi 2020, *Geosci. Model
-/// Dev.* 13, 6501, doi:10.5194/gmd-13-6501-2020, Table 4, line by line).
-/// The column has no opacity for N₂O, the halocarbons, N₂ or O₂; its only
-/// methane opacity is the grey stand-in of Titan's collision-induced
-/// greenhouse (`radiation::methane`), and Earth's test air holds no
-/// methane, so none of these absorbs in the test.
-const MINOR_GASES_W_M2: f64 = 1.5 + 1.5 + 0.22 + 0.17 + 0.15 + 0.096;
+/// equivalent) and CFC-12 take from Earth's clear-sky outgoing
+/// radiation, each removed from a present-day atmosphere: 1.5, 1.5, 0.22
+/// and 0.17 W/m² (Hogan & Matricardi 2020, *Geosci. Model Dev.* 13,
+/// 6501, doi:10.5194/gmd-13-6501-2020, Table 4, line by line). The column
+/// has no lines of N₂O, the halocarbons or methane (methane absorbs only
+/// through its pairs, and Earth's test air holds none), so none of these
+/// absorbs in the test. N₂'s and O₂'s pairs (0.15 and 0.096 W/m² in the
+/// same table) are in the column since study 36
+/// ([`earths_nitrogen_and_oxygen_pairs_take_what_line_by_line_codes_find`]).
+const MINOR_GASES_W_M2: f64 = 1.5 + 1.5 + 0.22 + 0.17;
+
+/// Source: what N₂'s and O₂'s collision-induced pairs take from Earth's
+/// clear-sky outgoing radiation, W/m², each gas's absorption removed from
+/// a present-day atmosphere and the two summed: 0.15 + 0.096 (Hogan &
+/// Matricardi 2020, Table 4, LBLRTM on 50 profiles) and 0.17 + 0.11
+/// (Höpfner et al. 2012, *Geophys. Res. Lett.* 39, L10706,
+/// doi:10.1029/2012GL051409, Table 1, KOPRA, the cloud-free global mean
+/// of one day; "0.28 Wm-2" in their conclusions).
+const PAIRS_LINE_BY_LINE_W_M2: (f64, f64) = (0.15 + 0.096, 0.17 + 0.11);
+
+/// Calibration: how much more than the larger of
+/// [`PAIRS_LINE_BY_LINE_W_M2`] the column's N₂ and O₂ pairs may take,
+/// W/m², 0.15. Study 36 (`docs/science/longwave-absorbers.md`, "In the
+/// app") measured 0.406 W/m² on this test's column, 0.126 more than
+/// Höpfner et al.'s 0.28: N₂'s pairs take about 0.27 against 0.15 to
+/// 0.17, most of the excess in N₂'s roto-translational band below
+/// 650 cm⁻¹, which water hides, and O₂'s 0.134 against 0.096 to 0.11.
+/// Its cause is not isolated (the column's dry upper air, HITRAN's newer
+/// N₂–N₂ far wing, or the N₂–O₂ roto-translational band HITRAN does not
+/// give): issue #718. The bound is that excess rounded up, so that the
+/// test fails if it grows; #718 brings it to zero, or records the
+/// departure. What was searched and not found: a third line-by-line
+/// value, or a published error of either source on these pairs.
+const PAIRS_EXCESS_W_M2: f64 = 0.15;
+
+/// Source: what N₂ and O₂ take from the outgoing radiation of an air in
+/// which they alone absorb, W/m²: 2.8 each, against the 365.7 W/m² of
+/// the same air without absorbers (Höpfner et al. 2012, §3, paragraph 15,
+/// KOPRA on a mid-latitude standard atmosphere), 5.6 for the two ("would
+/// exceed the OLR reduction due to CH4", 4.3 W/m², "by a factor of
+/// around 1.3").
+const PAIRS_ALONE_W_M2: f64 = 2.8 + 2.8;
+
+/// Calibration: the width of the plausibility band of
+/// [`PAIRS_ALONE_W_M2`], a share, 0.26: the spread of two line-by-line
+/// codes on N₂'s pairs over the same 42 profiles, ARTS's 6.0 % of
+/// methane's effect against KOPRA's 8.1 % (Höpfner et al. 2012, §5,
+/// paragraph 20), `1 − 6.0 / 8.1`. Taken as the band's width, a choice:
+/// the test's column (a dry adiabat from a 288 K surface, 390.1 W/m²
+/// without absorbers) is not Höpfner et al.'s standard atmosphere (a
+/// 283 K black body's 365.7 W/m²), and no source gives the removal on it.
+const PAIRS_ALONE_SHARE: f64 = 1.0 - 6.0 / 8.1;
 
 /// Source: what ozone takes from Earth's outgoing radiation, W/m², from
 /// 2.7 % of the 155 W/m² greenhouse under all skies (Schmidt et al. 2010,
@@ -435,7 +478,7 @@ fn the_plateaus_grid_is_converged() {
 }
 
 #[test]
-fn a_column_without_co2_or_water_radiates_from_its_methane_or_ground() {
+fn a_column_without_co2_or_water_radiates_through_its_pairs() {
     // Titan: 1.45 bar of N₂ and 5 % methane over 93.7 K, under the skin
     // of its 82 K equilibrium, at its gravity.
     let cache = &mut ColumnCache::default();
@@ -449,12 +492,29 @@ fn a_column_without_co2_or_water_radiates_from_its_methane_or_ground() {
     let titan = olr(&air, surface, skin(t_eq), TITAN, Profile::CLIMATE, cache);
     println!("Titan-like column: {titan:.3} W/m² against σT⁴ {black:.3}");
     assert!(titan.is_finite() && titan > 0.0 && titan < black, "{titan}");
-    // Nitrogen alone is transparent: the ground radiates through it.
+    // Nitrogen alone absorbs only through its own pairs (N₂–N₂): the
+    // ground sends out more through it than through the air with methane's
+    // pairs, less than its black body.
     let n2 = PartialPressures {
         n2,
         ..PartialPressures::default()
     };
-    let bare = olr(&n2, surface, skin(t_eq), TITAN, Profile::CLIMATE, cache);
+    let nitrogen = olr(&n2, surface, skin(t_eq), TITAN, Profile::CLIMATE, cache);
+    assert!(
+        titan < nitrogen && nitrogen < black,
+        "{titan} {nitrogen} {black}"
+    );
+    // Without its pairs it is transparent: the ground radiates through it.
+    let bare = without_pairs(ALL_PAIRS, || {
+        olr(
+            &n2,
+            surface,
+            skin(t_eq),
+            TITAN,
+            Profile::CLIMATE,
+            &mut ColumnCache::default(),
+        )
+    });
     assert!(
         (bare / black - 1.0).abs() < TRANSPARENT_TOLERANCE,
         "{bare} vs {black}"
@@ -820,6 +880,92 @@ fn earths_clear_sky_column_is_ceres_like_for_like() {
     );
     println!("Earth's clear sky {olr:.2} W/m², like for like {low:.2} to {high:.2}");
     assert!((low..=high).contains(&olr), "{olr} against {low} to {high}");
+}
+
+/// Definition: every pair of [`spectrum::PAIRS`], as the bits of
+/// [`spectrum::PAIRS_LEFT_OUT`].
+const ALL_PAIRS: u8 = (1 << spectrum::PAIR_COUNT) - 1;
+
+/// The bits of [`spectrum::PAIRS_LEFT_OUT`] of the pairs made only of
+/// `gases`.
+fn pairs_of(gases: &[spectrum::Partner]) -> u8 {
+    spectrum::PAIRS
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| gases.contains(&p.gases.0) && gases.contains(&p.gases.1))
+        .fold(0, |bits, (i, _)| bits | (1 << i))
+}
+
+/// Restores [`spectrum::PAIRS_LEFT_OUT`] to none when dropped, so that a
+/// panic inside [`without_pairs`] leaves no pair out for the next test on
+/// the thread.
+struct PairsBack;
+
+impl Drop for PairsBack {
+    fn drop(&mut self) {
+        spectrum::PAIRS_LEFT_OUT.with(|left| left.set(0));
+    }
+}
+
+/// `f`, with the pairs of `bits` left out of the spectrum on this thread
+/// ([`spectrum::PAIRS_LEFT_OUT`]); `f` takes a fresh cache.
+fn without_pairs<R>(bits: u8, f: impl FnOnce() -> R) -> R {
+    spectrum::PAIRS_LEFT_OUT.with(|left| left.set(bits));
+    let _back = PairsBack;
+    f()
+}
+
+/// What the pairs of `bits` take from the clear-sky outgoing radiation,
+/// W/m², of `gases` over a surface at `surface_k` under Earth's skin, on
+/// Earth's gravity: the radiation with them left out less with them in.
+fn pairs_take(bits: u8, gases: &PartialPressures, surface_k: f64) -> f64 {
+    let clear = || {
+        olr(
+            gases,
+            surface_k,
+            earth_skin(),
+            EARTH,
+            Profile::CLEAR,
+            &mut ColumnCache::default(),
+        )
+    };
+    without_pairs(bits, clear) - clear()
+}
+
+#[test]
+fn earths_nitrogen_and_oxygen_pairs_take_what_line_by_line_codes_find() {
+    // Study 36: N₂'s and O₂'s pairs (N₂–N₂, O₂–O₂, O₂–N₂) on Earth's
+    // measured air at 288 K and 280 ppm, clear, against the two
+    // line-by-line sources, with the excess of issue #718 named: the
+    // column takes about 0.4 W/m² where the sources give 0.25 to 0.28.
+    use spectrum::Partner::{N2, O2};
+    let taken = pairs_take(
+        pairs_of(&[N2, O2]),
+        &earth_at(PREINDUSTRIAL_PPM, EARTH_SURFACE_K),
+        EARTH_SURFACE_K,
+    );
+    let (low, high) = PAIRS_LINE_BY_LINE_W_M2;
+    println!(
+        "Earth's N₂ and O₂ pairs take {taken:.3} W/m², line by line {low:.3} to {high:.3} \
+         (+{PAIRS_EXCESS_W_M2} of issue #718)"
+    );
+    assert!(
+        (low..=high + PAIRS_EXCESS_W_M2).contains(&taken),
+        "{taken} W/m² against {low} to {high} + {PAIRS_EXCESS_W_M2}"
+    );
+}
+
+#[test]
+fn an_air_of_nitrogen_and_oxygen_alone_loses_what_hopfner_finds() {
+    // Plausibility (Höpfner et al. 2012, §3): Earth's N₂ and O₂ alone,
+    // no water, no CO₂, over 288 K, clear; their pairs' removal.
+    use spectrum::Partner::{N2, O2};
+    let taken = pairs_take(pairs_of(&[N2, O2]), &EARTH_MEASURED_AIR, EARTH_SURFACE_K);
+    println!("N₂ and O₂ alone: their pairs take {taken:.3} W/m², Höpfner {PAIRS_ALONE_W_M2}");
+    assert!(
+        (taken / PAIRS_ALONE_W_M2 - 1.0).abs() <= PAIRS_ALONE_SHARE,
+        "{taken} W/m² against {PAIRS_ALONE_W_M2} ± {PAIRS_ALONE_SHARE:.2}"
+    );
 }
 
 /// The rises of the outgoing radiation `olr_at(surface_k)`, W/m², over

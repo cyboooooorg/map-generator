@@ -246,7 +246,8 @@ is fitted on its own measurement, decided by the user on 2026-11-25:
   a single cloud reflectance for a one-column model (see
   [radiative-transfer.md](radiative-transfer.md), "The cloud's water,
   the deck and the haze").
-- `SNOWBALL_WARM_BAR`, 10.2 bar (`snowball.rs`; 10.1 bar since #705):
+- `SNOWBALL_WARM_BAR`, 10.2 bar (`snowball.rs`; 10.1 bar since #705,
+  9.80 bar since the pairs of #703):
   refitted on Earth's
   dated snowball share under the new cloud albedo and Earth's argon
   (`d⊕` 0.1468 bar, `W` 10.22) (see [Planet

@@ -16,7 +16,9 @@ own spectral bands from 0.7 to 5 µm, with MT_CKD's water and CO₂
 continua (see [Shortwave table](#shortwave-table)).
 
 Both are built by `tools/opacity-table` (see its README) and never by the
-generator.
+generator, as are the text tables of the continua and the
+collision-induced pairs (`mt-ckd-water.tsv`, `co2-cia.tsv`,
+`pairs-cia.tsv`, see [Continua](#continua)) and of ozone (`ozone.tsv`).
 
 ## Provenance
 
@@ -39,8 +41,8 @@ The line lists cannot be fetched again identically: HITRAN serves its
 current data, so a new download may differ from the one the tables were
 built from. Neither the tool nor `fetch.sh` checks the line lists' or
 partition sums' hashes (those recorded under [Sources](#sources) are of
-the downloads of that day); `fetch.sh` checks only the three inputs of
-the continua (see [Continua](#continua)). Rebuilding
+the downloads of that day); `fetch.sh` checks only the inputs of
+the continua and the pairs (see [Continua](#continua)) and the ozone file. Rebuilding
 gives a table close to these, not equal to them; keep these files as the
 reference and compare their hashes before replacing them.
 
@@ -69,7 +71,13 @@ cmp <scratch>/out/mt-ckd-water.tsv crates/science/data/mt-ckd-water.tsv
 cmp <scratch>/out/co2-cia.tsv crates/science/data/co2-cia.tsv
 ```
 
-gave both committed files byte for byte.
+gave both committed files byte for byte. `pairs-cia.tsv` was written on
+2026-11-26 by the same command from the five pair files downloaded that
+day with the URLs of `fetch.sh` (their SHA-256 equal to those of study
+36's downloads of 2026-11-25, recorded below), which also gave
+`mt-ckd-water.tsv` and `co2-cia.tsv` byte for byte again; its values
+equal, to the last printed digit, those of the scratch binning study 36
+measured with.
 
 The raw downloads (about 80 MB) stay in `tools/opacity-table/raw/`, which
 is git-ignored.
@@ -120,6 +128,24 @@ and `cat raw/lines/co2_*.par`
   functions", *J. Quant. Spectrosc. Radiat. Transf.* 27, 437 (1982).
 - A. A. Lacis and V. Oinas, "A description of the correlated k
   distribution method", *J. Geophys. Res.* 96, 9027 (1991).
+- T. Karman et al., "Update of the HITRAN collision-induced absorption
+  section", *Icarus* 328, 160 (2019), doi:10.1016/j.icarus.2019.02.034:
+  the CIA files' format and definitions.
+- The sources of `pairs-cia.tsv`'s blocks, as HITRAN's
+  `CIA_References_2024.pdf` gives them: D. N. Chistikov et al., *J. Chem.
+  Phys.* 151 (19) (2019), doi:10.1063/1.5125756 (N₂–N₂
+  roto-translational); W. J. Lafferty et al., *Appl. Opt.* 35, 5911
+  (1996), doi:10.1364/AO.35.005911, and Y. Baranov, W. Lafferty and
+  G. Fraser, *J. Mol. Spectrosc.* 233, 160 (2005),
+  doi:10.1016/j.jms.2005.06.008 (the N₂ and O₂ fundamentals);
+  J.-M. Hartmann, C. Boulet and G. C. Toon, *J. Geophys. Res. Atmos.*
+  122, 2419 (2017), doi:10.1002/2016JD025677 (N₂ near 2.16 µm);
+  F. Thibault et al., *Appl. Opt.* 36, 563 (1997),
+  doi:10.1364/ao.36.000563, and J. J. Orlando et al., *J. Geophys. Res.*
+  96, 20755 (1991), doi:10.1029/91JD02042 (O₂–N₂); A. A. Finenko et al.,
+  *Astrophys. J. Suppl.* 258, 33 (2022), doi:10.3847/1538-4365/ac36d3
+  (N₂–CH₄); A. Borysow and L. Frommhold, *Astrophys. J.* 318, 940
+  (1987), doi:10.1086/165426 (CH₄–CH₄).
 
 ## How the coefficients are made
 
@@ -202,9 +228,10 @@ layout and the shortwave one below.
 
 ## Continua
 
-Two text files hold the continua the spectrum reads beside the tables.
-`tools/opacity-table -- --continua` regenerates both from the raw
-downloads of `fetch.sh`, into this directory, and writes nothing else:
+Three text files hold the continua and the collision-induced pairs the
+spectrum reads beside the tables. `tools/opacity-table -- --continua`
+regenerates them from the raw downloads of `fetch.sh`, into this
+directory, and writes nothing else:
 
 - `mt-ckd-water.tsv`: MT_CKD 4.3's water continuum at every 50 cm⁻¹ from
   0 to 5000 cm⁻¹ (101 rows): the file's own points at those wavenumbers,
@@ -237,7 +264,41 @@ is taken as zero at 0 cm⁻¹; elsewhere the coefficient is zero outside
 the block, a cell a block only partly covers counts the rest as zero,
 and a negative mean (the file's noise) counts as zero.
 
-`fetch.sh` checks the SHA-256 of these three inputs (the two above and
+- `pairs-cia.tsv`: HITRAN's nitrogen, oxygen and methane pairs (study
+  36, issue #703, `docs/science/longwave-absorbers.md`), downloaded on
+  2026-11-25 and again on 2026-11-26 (same bytes):
+
+  | File | Where | SHA-256 | Bands below 5000 cm⁻¹ (K) | Sources of the blocks (`CIA_References_2024.pdf`) |
+  | --- | --- | --- | --- | --- |
+  | `N2-N2_2021.cia` | `https://hitran.org/data/CIA/main/` | `f0525f75c667802e8dbbfd7054a0a7e07863d8a4ffdb449fe80666bc658c849d` | 0-450, 0-550, 0-650 (70-400); 2000-2698 (228-272) and 1850-3000 (301-363); 4300-5000 (200-330) | Chistikov et al. 2019; Lafferty et al. 1996 and Baranov et al. 2005; Hartmann, Boulet & Toon 2017 |
+  | `O2-O2_2024.cia` | same | `0146acfe5c1414b8deaa56be9a63159154479d5804d1615855888a2e1efd4961` | 1150-1950 (193-353) | Baranov et al. 2005 |
+  | `O2-N2_2024.cia` | same | `90851fbfae226d7ecda93efc0de16105f72966a532adc7f1bc234cb13833799f` | 1300-1850 (193-356); 1850-3000 and 2000-2698 (228-363) | Thibault et al. 1997, Orlando et al. 1991; N₂'s band estimated from N₂–N₂ (Lafferty et al. 1996, eq. 7) |
+  | `N2-CH4_2024.cia` | same | `7056ee0bc4a38a4a4d2b215b40312ba5be6029dd6098bf1b1c76d5522eb12523` | 0-800 (70-400) | Finenko et al. 2022 |
+  | `CH4-CH4_2011.cia` | `https://hitran.org/data/CIA/alternate/` (the only CH₄–CH₄ file HITRAN serves) | `12de769200685d2bb7faff7550b6276ee20c9e3d3af4f318d2dc46935d39403a` | 0-990 (40-400) | Borysow & Frommhold 1987 |
+
+  One row per pair and 20 cm⁻¹ cell up to 5000 cm⁻¹ (`pair
+  cell_start_cm k_70K … k_400K`, cm⁵/molecule², five significant
+  digits): the coefficient at every 10 K from 70 to 400 K, the grid of
+  the N₂–N₂ roto-translational and N₂–CH₄ blocks. The generator
+  (`cia::Cia::interpolated`) groups each file's blocks into bands (a
+  block joins the first band one of whose blocks shares wavenumbers
+  with it), takes each block's trapezoid mean over the cell (a negative
+  point, the file's noise, counted as zero; zero outside the block),
+  averages a band's blocks at the same temperature, interpolates the
+  band linearly in temperature between its blocks, held at its coldest
+  and warmest, and adds the bands that reach the cell. Cells under
+  1e-50 cm⁵/molecule² at every temperature are left out: 127 cells of
+  N₂–N₂, 41 of O₂–O₂, 86 of O₂–N₂, 40 of N₂–CH₄ and 50 of CH₄–CH₄,
+  130 767 bytes. Bands past 5000 cm⁻¹ (O₂'s visible and near-infrared
+  ones) are outside the longwave spectrum and not written.
+- **Terms of the CIA files:** HITRAN's pages state a citation policy
+  (cite the edition, HITRAN2024, Gordon et al. 2026, and the original
+  sources of the data used), no licence; the CIA readme and the files
+  state none. `co2-cia.tsv` and `pairs-cia.tsv` hold derived numbers
+  only (cell means), cited above and in `spectrum.rs`; the raw files are
+  not committed (`tools/opacity-table/raw/` is ignored by git).
+
+`fetch.sh` checks the SHA-256 of these inputs (the files above and
 `contnm.f90`) and fails on a mismatch; it checks no line list.
 
 ## Shortwave table
@@ -260,7 +321,9 @@ line lists, partition sums and line shapes as `opacity.bin`:
   coefficient-weighted mean of `self_texp` (read from
   `absco-ref_wv-mt-ckd.nc`, NetCDF classic).
 - **Not in it:** CO₂–CO₂ collision-induced absorption, which the science
-  crate takes from `co2-cia.tsv` (see Continua); ozone and O₂.
+  crate takes from `co2-cia.tsv` (see Continua); ozone and O₂. The
+  shortwave takes the CO₂–CO₂ pairs only, not those of `pairs-cia.tsv`
+  (N₂'s fundamental at 4.3 µm and first overtone at 2.2 µm).
 
 Layout, little-endian, as `opacity.bin` but for these fields:
 

@@ -5,12 +5,12 @@
 
 use super::body::ClimateBody;
 use super::fixture::{earth, mars, moved, titan};
-use super::settle::{Bracket, End, Next, Settle, settle, warm_start};
+use super::settle::{Bracket, End, Next, Settle, albedo_for, attracting, settle, warm_start};
 use super::{
     ALBEDO_BRACKET, ALBEDO_ITERATIONS, ALBEDO_TOLERANCE_K, CONDENSE_ITERATIONS, ClimateInputs,
     Light, Numerics,
 };
-use science::balance::{BRACKET_TOLERANCE, TOLERANCE};
+use science::balance::{BRACKET_TOLERANCE, Point, TOLERANCE};
 use science::radiation::gases::PartialPressures;
 use science::radiation::ozone::ozone_column;
 use science::surface::Liquid;
@@ -508,4 +508,57 @@ fn a_bracket_whose_ends_push_apart_is_not_kept() {
     bracket.take(synthetic_end(0.279, &push, &|_| 280.0));
     bracket.take(synthetic_end(0.296, &push, &|_| 280.0));
     assert!(bracket.closed_in() && !bracket.attracts());
+}
+
+/// Definition: a synthetic S curve, the push of a bistable body against
+/// the radiative equilibrium it is solved under (K): stable roots at 50
+/// and 70 K (the push falls through them), an unstable one at 60 K (it
+/// rises through it), the shape study 38 measured on a nitrogen world
+/// (`docs/science/nitrogen-phases.md`).
+fn s_curve(x: f64) -> f64 {
+    -(x - 50.0) * (x - 60.0) * (x - 70.0) / 100.0
+}
+
+#[test]
+fn only_the_branches_of_an_s_curve_attract() {
+    let d = ALBEDO_TOLERANCE_K.0;
+    let at = |x: f64| Point { x, f: s_curve(x) };
+    // `probe_root`'s verdict: the push one tolerance colder against the
+    // push at the root.
+    let verdict = |root: f64| attracting(at(root - d), at(root));
+    assert!(verdict(50.0) && verdict(70.0));
+    assert!(!verdict(60.0));
+    // Off the root by less than the tolerance, the verdict holds: the
+    // probe reads the slope, not the sign of the push.
+    assert!(verdict(50.0 + 0.5 * d) && !verdict(60.0 + 0.5 * d));
+    assert!(verdict(70.0 - 0.5 * d) && !verdict(60.0 - 0.5 * d));
+    // A bracket over the whole curve attracts, so the Illinois rule may
+    // stop on any of its three roots, the unstable one included: the
+    // ends' condition does not see what lies between them.
+    let mut bracket = Bracket::default();
+    for x in [45.0, 75.0] {
+        bracket.take(End {
+            albedo: 0.0,
+            emissivity: 1.0,
+            used: x,
+            push: s_curve(x),
+            temperature: x,
+            climate: (),
+        });
+    }
+    assert!(bracket.attracts());
+    // The colder probe of the unstable root pushes colder, towards the
+    // stable branch on the cold side.
+    assert!(s_curve(60.0 - d) < 0.0);
+}
+
+#[test]
+fn the_probe_albedo_puts_the_radiative_equilibrium_where_asked() {
+    // T ∝ (1 − A)^¼ at one emissivity.
+    let (albedo, used) = (0.75, 55.0);
+    for target in [54.9, 55.1] {
+        let moved = albedo_for(albedo, used, target);
+        let ratio = ((1.0 - moved) / (1.0 - albedo)).powf(0.25);
+        assert!((used * ratio - target).abs() < 1e-12, "{moved}");
+    }
 }

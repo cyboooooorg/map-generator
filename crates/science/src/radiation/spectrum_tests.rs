@@ -574,3 +574,130 @@ fn a_level_weighs_its_argon() {
     });
     assert!((argon.molar_mass_kg() - crate::radiation::gases::AR_MOLAR_MASS).abs() < 1e-15);
 }
+
+/// Source: points of HITRAN's collision-induced absorption files
+/// (`OPACITY.md`, SHA-256 there): the pair, the file's block temperature
+/// (K), a wavenumber (cm⁻¹) and the file's coefficient there
+/// (cm⁵/molecule²), as the file's rows give them, with the column of
+/// [`PAIRS_CIA_K`] nearest the block's temperature. `N2-N2_2021.cia`,
+/// 70.0 K and 290.0 K at 110 cm⁻¹ (Chistikov et al. 2019);
+/// `O2-O2_2024.cia`, 297.8 K at 1550.1 cm⁻¹; `O2-N2_2024.cia`, 293.0 K at
+/// 1550.4882 cm⁻¹; `N2-CH4_2024.cia`, 90.0 K at 110 and 310 cm⁻¹
+/// (Finenko et al. 2022); `CH4-CH4_2011.cia`, 400.0 K at 110 and 310 cm⁻¹
+/// (Borysow & Frommhold 1987).
+const PAIR_FILE_POINTS: [(&str, f64, f64, f64); 8] = [
+    ("N2-N2", 70.0, 110.0, 4.4969e-45),
+    ("N2-N2", 290.0, 110.0, 6.4148e-45),
+    ("O2-O2", 300.0, 1550.1, 6.340e-45),
+    ("O2-N2", 290.0, 1550.4882, 6.0856e-45),
+    ("N2-CH4", 90.0, 110.0, 2.9326e-44),
+    ("N2-CH4", 90.0, 310.0, 7.4544e-45),
+    ("CH4-CH4", 400.0, 110.0, 4.193e-45),
+    ("CH4-CH4", 400.0, 310.0, 1.388e-44),
+];
+
+/// Calibration: how far a 20 cm⁻¹ cell's mean may stray from the file's
+/// value at a point inside it, a share, 5 %, chosen above the largest
+/// stray measured on the points of [`PAIR_FILE_POINTS`]: N₂–N₂ at 70 K,
+/// 110 cm⁻¹, +3.46 % (the band's curvature over the cell at its peak),
+/// and O₂–O₂ at 300 K against the 297.8 K block, −3.50 % (the cell's mean
+/// and a 2.2 K step in temperature); the others stray by 0.06 to 2.3 %.
+/// Not a derivation: the band's change with temperature near its peak,
+/// 2 to 2.5 % per K at 70 to 80 K (study 38's probes), would give a bound
+/// per point, not one share for all.
+const CELL_AGAINST_POINT: f64 = 0.05;
+
+/// Definition: relative tolerance of the single-precision pairs against
+/// the double-precision ones, a few roundings of `f32`.
+const FAST_PAIRS_TOLERANCE: f64 = 1e-6;
+
+/// The pair of [`PAIRS`] made of `a` and `b`.
+fn pair(a: Partner, b: Partner) -> &'static Pair {
+    PAIRS
+        .iter()
+        .find(|p| p.gases == (a, b))
+        .expect("a pair of the list")
+}
+
+#[test]
+fn the_pairs_are_hitrans_files() {
+    use Partner::{Ch4, N2, O2};
+    let named = |name: &str| match name {
+        "N2-N2" => pair(N2, N2),
+        "O2-O2" => pair(O2, O2),
+        "O2-N2" => pair(O2, N2),
+        "N2-CH4" => pair(N2, Ch4),
+        "CH4-CH4" => pair(Ch4, Ch4),
+        other => panic!("{other}"),
+    };
+    for (name, t, nu, file) in PAIR_FILE_POINTS {
+        let p = named(name);
+        let row = p.rows[(nu / CIA_CELL_CM).floor() as usize].expect("a cell");
+        let k = p.coefficient(row, p.column(t));
+        assert!(
+            (k / file - 1.0).abs() < CELL_AGAINST_POINT,
+            "{name} at {t} K, {nu} cm⁻¹: {k:e} against the file's {file:e}"
+        );
+    }
+    // Each grows as the product of its two gases' densities: twice each
+    // gas, the same mixture, four times the depth per `ln p`.
+    let level = |n2: f64, ch4: f64| Level {
+        temperature_k: 90.0,
+        gases: PartialPressures {
+            n2,
+            ch4,
+            ..PartialPressures::default()
+        },
+        gravity_m_s2: TITAN_GRAVITY,
+    };
+    let one = pair(N2, Ch4).depth(110.0, &level(1.0, 0.05));
+    let more = pair(N2, Ch4).depth(110.0, &level(2.0, 0.1));
+    assert!((more / one - 4.0).abs() < SCALE_TOLERANCE, "{more} {one}");
+    assert_eq!(pair(N2, Ch4).depth(110.0, &level(1.0, 0.0)), 0.0);
+}
+
+#[test]
+fn the_fast_pairs_are_the_reference() {
+    // The fast path's smooth part against the reference's, on dry airs
+    // whose smooth part is all pairs: Earth's N₂ and O₂ at 288 K, and
+    // Titan's N₂ and methane at 93.7 K.
+    let [titan_k, titan_n2, titan_ch4] = TITAN_LEVEL;
+    let earth = Level {
+        temperature_k: EARTH_SURFACE_K,
+        gases: PartialPressures {
+            co2: 0.0,
+            ..earth_air(0.0)
+        },
+        gravity_m_s2: EARTH_GRAVITY,
+    };
+    let titan = Level {
+        temperature_k: titan_k,
+        gases: PartialPressures {
+            n2: titan_n2,
+            ch4: titan_ch4,
+            ..PartialPressures::default()
+        },
+        gravity_m_s2: TITAN_GRAVITY,
+    };
+    let mut fast = FastLevel::default();
+    let mut reference = Spectrum::default();
+    for level in [earth, titan] {
+        fast_level(&level, BINS, &mut fast);
+        absorption_spectrum(&level, &mut reference);
+        let mut absorbing = 0;
+        for i in 0..BINS {
+            let (f, r) = (f64::from(fast.smooth[i]), reference.smooth[i]);
+            assert!(
+                (f - r).abs() <= FAST_PAIRS_TOLERANCE * r,
+                "bin {i} at {} K: {f} vs {r}",
+                level.temperature_k
+            );
+            absorbing += usize::from(r > 0.0);
+        }
+        assert!(
+            absorbing > 0,
+            "no pair absorbs at {} K",
+            level.temperature_k
+        );
+    }
+}
