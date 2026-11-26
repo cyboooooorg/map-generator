@@ -1418,16 +1418,31 @@ const F0V: Kelvin = Kelvin(7220.0);
 /// 1.2963: a test input just under its runaway limit
 /// (`runaway_flux(F0V)`, 1.29636 S⊕), in the band where the model boils
 /// under that limit. The escaping boil's planet there (3e-4 of water, a
-/// hundredth of its N₂, [`HUNDREDTH_OF_N2`]) absorbs 291.03 W/m² (Bond
-/// albedo 0.340) against its saturated column's peak of 289.94 W/m², and
-/// boils (a margin of 1.1 W/m²), while its thermostat still balances at
-/// 288 K on the climate's column. The flux cannot rise (the runaway
+/// hundredth of its N₂, [`HUNDREDTH_OF_N2`], [`BOILING_MASS`]) absorbs
+/// 282.68 W/m² (Bond albedo 0.359) and boils, while its thermostat still
+/// balances at 288 K on the climate's column (at Earth's mass it absorbed
+/// 291.03 W/m², Bond albedo 0.340, against its saturated column's peak of
+/// 289.94 W/m², until #705). The flux cannot rise (the runaway
 /// limit caps it), so the band is held by the N₂; legacy's 1.28 S⊕ lies
 /// under the model's boil
 /// threshold (study 26, "The boil": the threshold sits about 15 % above
 /// Kopparapu et al. 2014's for the Sun, #680). The band widens when #680
 /// lowers the threshold.
 const F0V_BOILING_FLUX: f64 = 1.2963;
+
+/// Definition: the mass of the boil tests' planet, Earth masses, 0.5: a
+/// test input that keeps both first runs in the boil band. Until #705
+/// the planet had Earth's mass; the cloud albedo refitted with ozone over
+/// the climate's own ground (`CLOUD_ALBEDO` 0.296 to 0.322) raised its
+/// Bond albedo from 0.340 to 0.3515 (it holds no O₂, so no ozone darkens
+/// it), and it absorbed 286.02 W/m², under its saturated column's peak
+/// (289.94 W/m² before #705): no boil, and no N₂ cut can bring the peak
+/// under about 289.7 W/m². A lighter planet's lower gravity lowers the
+/// peak. Measured by a probe at this flux, with [`HUNDREDTH_OF_N2`] and
+/// 3e-4 of water (release build, 2026-11-26): 0.7 Earth masses absorbs
+/// 284.08 W/m² (Bond albedo 0.356) and does not boil; 0.5 absorbs
+/// 282.68 W/m² (0.359) and boils.
+const BOILING_MASS: f64 = 0.5;
 
 /// Definition: the water share of the boil that escapes all its water,
 /// 3e-4 of the mass (legacy `a_boil_that_escapes_all_its_water_ends_dry`).
@@ -1457,8 +1472,9 @@ const ESCAPING_WATER: f64 = 3.0e-4;
 /// | 10^−1.6 | 290.15 against 291.08: boils | 290.68 against 292.13: boils |
 /// | a hundredth (−2) | 289.94 against 291.03: boils | 290.32 against 292.12: boils |
 ///
-/// A hundredth gives margins of 1.1 and 1.8 W/m², near the most the cut
-/// can give (the column's peak with no N₂ but its argon tends to about
+/// The table was measured at Earth's mass, before #705 moved the tests to
+/// [`BOILING_MASS`]. A hundredth gave margins of 1.1 and 1.8 W/m², near
+/// the most the cut can give (the column's peak with no N₂ but its argon tends to about
 /// 289.7 W/m²). With the rule's N₂ the escaping boil's planet has a Bond
 /// albedo of 0.368 and absorbs 278.7 W/m² (measured before the argon,
 /// which only raises the peak), far under the moist limit, and does not
@@ -1473,11 +1489,13 @@ const LEFTOVER: Bar = Bar(0.03);
 /// test input about 73 times under the Sun's scaled to
 /// [`F0V_BOILING_FLUX`] (7.3e15). The water is sized so that the steam
 /// run's `9 H` (about 6.5e21 kg at this fluence) leaves [`LEFTOVER`]:
-/// 3.6e-4 of the mass. The planet's first run then lies in the boil band:
-/// Bond albedo 0.338, 292.12 W/m² absorbed against its saturated
-/// column's peak of 290.32 W/m² under [`HUNDREDTH_OF_N2`], and it boils;
-/// its recondensed run (Bond albedo 0.353, 285.4 W/m²) keeps too little
-/// water to boil. A larger fluence
+/// 7.9e-4 of the mass at [`BOILING_MASS`] (3.6e-4 at Earth's mass). The
+/// planet's first run then lies in the boil band: Bond albedo 0.349,
+/// 287.21 W/m² absorbed under [`HUNDREDTH_OF_N2`], and it boils; its
+/// recondensed run (Bond albedo 0.3645, 280.30 W/m²) keeps too little
+/// water to boil (at Earth's mass, until #705: 0.338 and 292.12 W/m²
+/// against a peak of 290.32 W/m², then 0.353 and 285.4 W/m²). The fluence
+/// was kept when #705 halved the mass. A larger fluence
 /// sizes more water, with more ice volatiles and a higher albedo, and
 /// takes the first run out of the band. It was 2e14 (7.2e-4 of water)
 /// until two changes each took that planet out of the band, and each
@@ -1502,12 +1520,12 @@ const RECONDENSED_SHARE: f64 = 1e-3;
 /// 1e-3 of the mass (legacy `a_cool_small_planet_does_not_boil`).
 const COOL_SMALL: (f64, f64) = (1.5, 1.0e-3);
 
-/// Earth's composition with a water share `water` and a volatile
-/// `scatter`, at [`F0V_BOILING_FLUX`] round an [`F0V`] star (its orbit
-/// `flux^-½` AU), not migrated.
+/// A planet of [`BOILING_MASS`] and Earth's composition with a water
+/// share `water` and a volatile `scatter`, at [`F0V_BOILING_FLUX`] round
+/// an [`F0V`] star (its orbit `flux^-½` AU), not migrated.
 fn f0v_earth(trace: &mut Trace, water: f64, scatter: Option<[f64; 5]>) -> (Trial, Drawn) {
     let au = F0V_BOILING_FLUX.powf(-0.5);
-    let t = trial(trace, 1, EARTH.mass, au, 0.0);
+    let t = trial(trace, 1, BOILING_MASS, au, 0.0);
     let t = with_star(trace, &t, F0V);
     let drawn = Drawn::fixed(
         &t,
@@ -1588,7 +1606,7 @@ fn recondensing_water() -> f64 {
         );
         let left = LEFTOVER.0 / per_kg.0;
         let surface = WATER_PER_HYDROGEN * hydrogen.0 + left / share;
-        water = surface / (SURFACE_WATER_SHARE * Kilogram::from(EarthMass(EARTH.mass)).0);
+        water = surface / (SURFACE_WATER_SHARE * Kilogram::from(EarthMass(BOILING_MASS)).0);
     }
     water
 }

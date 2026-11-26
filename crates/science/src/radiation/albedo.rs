@@ -12,57 +12,70 @@
 
 use super::column::{Profile, levels};
 use super::gases::PartialPressures;
+use super::ozone::molecules_per_cm2;
 use super::rayleigh::rayleigh_depth_550;
 use super::shortwave::{Air, Paths};
 use super::starlight::{StarBands, star_bands};
 use super::veils::{DECK_ALBEDO, HAZE_ABSORPTION, HAZE_ALBEDO, haze};
-use crate::units::{Dex, Fraction, Kelvin, MetrePerSecondSquared};
+use crate::units::{Dex, DobsonUnit, Fraction, Kelvin, MetrePerSecondSquared};
 
 #[cfg(test)]
 #[path = "albedo_tests.rs"]
 mod tests;
 
 /// Calibration: albedo of the tops of a water cloud layer, as the
-/// reflectance of the cloud cover's share of the disc, 0.296. Fitted on
+/// reflectance of the cloud cover's share of the disc, 0.322. Fitted on
 /// Earth's Bond albedo, 0.293 (CERES; Stephens et al. 2015,
 /// doi:10.1002/2014RG000449; Kato et al. 2018,
 /// doi:10.1175/JCLI-D-17-0523.1, give 0.2915), by bisection to three
-/// digits (0.29633 before rounding; 0.29285 with 0.296) over Earth's
-/// inputs: a ground of 0.122 (CERES EBAF Ed4.0 clear-sky surface, Kato et
-/// al. 2018, Table 5), its dry air with 400 ppm of CO₂ at 77 % relative
-/// humidity over 288 K (Manabe & Wetherald 1967), the cloud cover the law
-/// gives it, 0.682 ([`super::clouds::cloud_cover`]), standard gravity and
-/// the Sun at 5772 K and solar metallicity from the table of spectra
-/// ([`super::starlight::star_bands`]). The refit was forced: it was 0.276
-/// under the black-body Sun (issue #655, study 35), and with 0.276 the
-/// table's Sun gives Earth 0.2835, outside the 0.0015 of the Bond albedo
-/// test (`EARTH_BOND_TOLERANCE`). What was searched and not found: a
-/// single cloud reflectance for a one-column model, which no observation
-/// gives (a thick cloud reflects 0.5 to 0.7; Earth's cover counts thin
-/// clouds too). The legacy took 0.252, fitted on 0.30 over its own cover.
+/// digits (0.32233 before rounding; 0.29286 with 0.322) over Earth's
+/// inputs as the climate takes them: the ground its own cover gives it at
+/// 288 K, 0.1445 (one ocean, Earth's obliquity, the ice weighted by
+/// sunlight: `surface::cover`, `surface::ground_albedo`), its dry air with
+/// 400 ppm of CO₂ at 77 % relative humidity over 288 K (Manabe &
+/// Wetherald 1967) and the 300 DU of ozone its O₂ holds
+/// ([`super::ozone::ozone_column`]), the cloud cover the law gives it,
+/// 0.682 ([`super::clouds::cloud_cover`]), standard gravity and the Sun at
+/// 5772 K and solar metallicity from the table of spectra
+/// ([`super::starlight::star_bands`]).
 ///
-/// The fit absorbs what the port lacks. In the clear sky, the port is
-/// brighter than the observed aerosol-free sky by its missing ozone and
-/// O₂ (issue #653, about +0.016 together) and its model Sun (+0.0023
-/// against TSIS-1), and darker by the aerosols' reflection it does not
-/// carry (about 0.017); and Earth's column at 77 % holds 1.735 cm of
+/// Refitted with ozone's shortwave (issues #653 and #705, Wiki study 34),
+/// over the climate's own ground rather than CERES's clear-sky surface,
+/// 0.122 (Kato et al. 2018, Table 5), as decided by the user on
+/// 2026-11-25: fitted over 0.122, the climate's Earth came out at 0.304
+/// whatever absorbers the air held. It was 0.296 (fitted over 0.122
+/// without ozone, under the table's Sun, issue #655, study 35), and 0.276
+/// under the black-body Sun before; the legacy took 0.252, fitted on 0.30
+/// over its own cover. What was searched and not found: a single cloud
+/// reflectance for a one-column model, which no observation gives (a
+/// thick cloud reflects 0.5 to 0.7; Earth's cover counts thin clouds
+/// too).
+///
+/// The fit absorbs five errors of the port, in clear-sky albedo against
+/// the observed sky: its missing O₂ bands make it brighter (issue #653,
+/// about +0.002); the table's Sun against the measured one makes it
+/// brighter (about +0.0023, Wiki study 35); the two-stream layer's
+/// Rayleigh reflection makes it darker (about −0.0028 against an exact
+/// column, issue #727); the aerosols' reflection it does not carry makes
+/// it darker (about 0.017, a documented departure,
+/// `docs/science/ozone.md`); and Earth's column at 77 % holds 1.735 cm of
 /// water, what one column needs for the observed field's outgoing
-/// longwave, where its absorbed sunlight would need about 2.4 cm: about
-/// 0.0025 of Bond albedo (Wiki study 33, issue #654). The clouds'
-/// reflectance makes up the rest: refit it when any of these lands (#705
-/// refits it on the climate's own ground). See
+/// longwave, where its absorbed sunlight would need about 2.4 cm (about
+/// 0.0025 of Bond albedo, brighter; Wiki study 33, issue #654). The
+/// clouds' reflectance makes up the rest: refit it when any of these
+/// lands. See
 /// `docs/science/radiative-transfer.md`, "The cloud's water, the deck and
-/// the haze", and `docs/science/stellar-spectra.md`, "Calibrations".
-pub(crate) const CLOUD_ALBEDO: f64 = 0.296;
+/// the haze", and `docs/science/ozone.md`, "Calibrations".
+pub(crate) const CLOUD_ALBEDO: f64 = 0.322;
 
 /// Definition: airs a [`ShortwaveCache`] remembers, the legacy memo's size
 /// (a numerical choice with no source: audit, Wiki study 19).
 const REMEMBERED_AIRS: usize = 32;
 
 /// The inputs of an air's paths, as bits: the eight partial pressures,
-/// the surface temperature, the gravity, and the star's temperature and
-/// metallicity.
-type AirKey = [u64; 12];
+/// its ozone column, the surface temperature, the gravity, and the star's
+/// temperature and metallicity.
+type AirKey = [u64; 13];
 
 /// What lies under the air: the ground's albedo, the share of the sky
 /// under water clouds, and the share of the disc under a sulphuric deck
@@ -113,13 +126,15 @@ impl std::fmt::Debug for ShortwaveCache {
 }
 
 impl ShortwaveCache {
-    /// The light's paths through `gases` over a surface at `surface_k` on
-    /// a body of gravity `gravity_m_s2` under a star of `star_k` and
-    /// metallicity `star_dex`: its haze, its Rayleigh depth and its
-    /// column, whatever lies beneath.
+    /// The light's paths through `gases` and `ozone` Dobson units of
+    /// ozone over a surface at `surface_k` on a body of gravity
+    /// `gravity_m_s2` under a star of `star_k` and metallicity
+    /// `star_dex`: its ozone, its haze, its Rayleigh depth and its column,
+    /// whatever lies beneath.
     fn paths(
         &mut self,
         gases: &PartialPressures,
+        ozone: f64,
         surface_k: f64,
         gravity_m_s2: f64,
         star_k: f64,
@@ -134,6 +149,7 @@ impl ShortwaveCache {
             gases.so2,
             gases.o2,
             gases.ar,
+            ozone,
             surface_k,
             gravity_m_s2,
             star_k,
@@ -151,6 +167,7 @@ impl ShortwaveCache {
         let h = haze(gases);
         let column = levels(gases, surface_k, gravity_m_s2, Profile::SHORTWAVE);
         let air = Air {
+            ozone: molecules_per_cm2(DobsonUnit(ozone)),
             haze: (h * HAZE_ALBEDO, 1.0 - h * (HAZE_ALBEDO + HAZE_ABSORPTION)),
             rayleigh_550: rayleigh_depth_550(gases, gravity_m_s2),
             column: column.as_ref(),
@@ -173,27 +190,36 @@ impl ShortwaveCache {
 /// Where the light of a star at `star` of metallicity `metallicity`
 /// ([M/H]; its spectrum, [`super::starlight::star_bands`]) goes on a body
 /// of surface gravity
-/// `gravity` whose air `gases` lies over a surface at `surface` with
-/// `underneath` below it: the share reflected (its Bond albedo) and the
-/// share its air absorbs.
+/// `gravity` whose air `gases`, with `ozone` of ozone above it
+/// ([`super::ozone::ozone_column`] under that star), lies over a surface
+/// at `surface` with `underneath` below it: the share reflected (its Bond
+/// albedo) and the share its air absorbs.
 ///
 /// A whole deck reflects [`DECK_ALBEDO`] and lets nothing through.
-/// Otherwise the light crosses the air's haze, its Rayleigh scattering
-/// and the near-infrared absorption of its column (built as
+/// Otherwise the light crosses the ozone (a pure absorber above the air,
+/// [`super::ozone`]), the air's haze, its Rayleigh scattering and the
+/// near-infrared absorption of its column (built as
 /// [`Profile::SHORTWAVE`] says), the water clouds (their cover times
 /// [`CLOUD_ALBEDO`]) at their tops inside it, down to the ground; the
 /// deck's share of the disc then reflects [`DECK_ALBEDO`] over the rest.
 /// A star whose temperature is not positive or not finite (NaN, infinite)
 /// is at the Sun's temperature, a metallicity that is not finite the
-/// Sun's. A negative or NaN partial pressure counts as none; without
-/// air the ground's albedo comes back. A gravity that is not finite or not
-/// positive is no air: the budget is that of a body without air, the
-/// ground under the clouds and the deck.
+/// Sun's. A negative or NaN partial pressure counts as none, and so does
+/// an ozone column that is negative or not finite; without air (no column
+/// to lie above) the ozone counts for nothing and the ground's albedo
+/// comes back. A gravity that is
+/// not finite or not positive is no air, and no ozone: the budget is that
+/// of a body without air, the ground under the clouds and the deck.
 ///
 /// `cache` keeps the last airs' paths, keyed on the exact bits of their
 /// inputs: a hit returns the bits a fresh air gives.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one argument per input of the budget, as the climate holds them"
+)]
 pub fn shortwave_budget(
     gases: &PartialPressures,
+    ozone: DobsonUnit,
     surface: Kelvin,
     gravity: MetrePerSecondSquared,
     star: Kelvin,
@@ -213,13 +239,19 @@ pub fn shortwave_budget(
         // No air: its gravity would only make the Rayleigh depth infinite.
         cache.paths(
             &PartialPressures::default(),
+            0.0,
             surface.0,
             1.0,
             star.0,
             metallicity.0,
         )
     } else {
-        cache.paths(gases, surface.0, gravity.0, star.0, metallicity.0)
+        let ozone = if ozone.0.is_finite() && ozone.0 > 0.0 {
+            ozone.0
+        } else {
+            0.0
+        };
+        cache.paths(gases, ozone, surface.0, gravity.0, star.0, metallicity.0)
     };
     let below = paths.budget(
         underneath.ground.get(),

@@ -132,6 +132,11 @@ unit!(/// Logarithmic ratio, decimal exponent (dex).
     Dex, "dex");
 unit!(/// Amount of substance, mole.
     Mole, "mol");
+unit!(
+    /// Column of a gas, Dobson unit: the gas brought to 273.15 K and
+    /// 101.325 kPa would make a layer 10 µm thick
+    /// (`radiation::ozone::molecules_per_cm2`).
+    DobsonUnit, "DU");
 
 convert!(AstronomicalUnit, Metre, ASTRONOMICAL_UNIT.0);
 convert!(SolarMass, Kilogram, SOLAR_MASS.0);

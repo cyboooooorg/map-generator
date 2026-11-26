@@ -4,8 +4,8 @@
 //! the air, the water, the heat and the body that set it. The values are
 //! the solver's, never recomputed here: one code path for each.
 
-use super::Rotation;
 use super::branches::Solved;
+use super::{ClimateInputs, Rotation};
 use crate::planet::bare::Bare;
 use crate::planet::codes;
 use crate::planet::interior::InteriorError;
@@ -83,13 +83,18 @@ fn partial(air: &PartialPressures, gas: Gas) -> f64 {
     }
 }
 
-/// Records the climate `solved` of `bare` under `rotation`, with the
-/// snowball draw `draw` (uniform in (0, 1), a drawn leaf recorded only for
-/// a bistable body). `I`, the inputs every node derives from, are:
+/// Records the climate `solved` of `bare` under `rotation`, solved from
+/// `inputs`, with the snowball draw `draw` (uniform in (0, 1), a drawn
+/// leaf recorded only for a bistable body). First, for each source whose
+/// light crosses some ozone, the column ([`super::Light::ozone`], the
+/// value the solve took), as `planet.climate.ozone-column` from the bare
+/// air's O2 and the source's effective temperature. `I`, the inputs every
+/// node derives from, are:
 ///
 /// - each source's flux, effective temperature and equilibrium
 ///   temperature (the warm start of the fixed point reads it,
-///   `settle::warm_start`);
+///   `settle::warm_start`), and its ozone column when it has one (the
+///   shortwave budget reads it);
 /// - the trial's metallicity (the stars' spectra, `Light::metallicity`);
 /// - the bare air's partial pressures;
 /// - the water inventory and whether it ran away;
@@ -124,9 +129,11 @@ fn partial(air: &PartialPressures, gas: Gas) -> f64 {
 ///
 /// # Panics
 ///
-/// When `bare` has no surface or `draw` is not a fraction.
+/// When `bare` has no surface, `inputs` has not one light per source or
+/// `draw` is not a fraction.
 pub(crate) fn record(
     solved: &Solved,
+    inputs: &ClimateInputs,
     bare: &Bare,
     rotation: &Rotation,
     draw: f64,
@@ -139,13 +146,26 @@ pub(crate) fn record(
     let settle = &solved.settle;
     let bulk = bare.body.bulk();
     let fluxes: Vec<NodeId> = bare.trial.sources.iter().map(|s| s.flux.node()).collect();
+    assert_eq!(
+        inputs.sources.len(),
+        bare.trial.sources.len(),
+        "one light per source"
+    );
+    let o2 = surface.atmosphere.partial.get(&Gas::O2).map(Traced::node);
+    let lights = inputs.sources.iter();
     let mut inputs = Vec::new();
-    for s in bare.trial.sources.iter() {
+    for (s, light) in bare.trial.sources.iter().zip(lights) {
         inputs.extend([
             s.flux.node(),
             s.effective_temperature.node(),
             s.equilibrium.node(),
         ]);
+        if light.ozone.0 > 0.0 {
+            let mut from: Vec<NodeId> = o2.into_iter().collect();
+            from.push(s.effective_temperature.node());
+            let ozone = trace.record(Code::of(codes::CLIMATE_OZONE_COLUMN), light.ozone, &from)?;
+            inputs.push(ozone.node());
+        }
     }
     // The stars' spectra take the trial's metallicity (the shortwave).
     inputs.push(bare.trial.metallicity.node());

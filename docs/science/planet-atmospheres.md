@@ -2925,15 +2925,15 @@ its maximum greenhouse where none thaws it, less what its cold surface
 frosts out (issue #522).
 Where both exist the planet is a snowball (`Climate::snowball`) when its
 formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
-`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (10.2 bar in the
+`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (10.1 bar in the
 rewrite, 0.8 bar in legacy): the share of its history it spends frozen,
 with `d` the CO₂ that thaws it and `v / v⊕` its volcanism against Earth's
 (legacy's 0.8 bar gave Earth, which it remembered frozen about a tenth
 of its history, a chance of 0.1: on the spectral column Earth at 1 AU
 needed 0.091 bar more CO₂ to thaw, a chance of 0.102; 0.031 bar on the
 grey column. Study 25 found the dated snowballs are 1.4 % of Earth's
-history, not a tenth; the rewrite refits `W` to 10.2 bar and Earth's
-chance is 0.0140, see "Calibration of `SNOWBALL_WARM_BAR`" below). Where no
+history, not a tenth; the rewrite refits `W` to 10.1 bar and Earth's
+chance is 0.0141, see "Calibration of `SNOWBALL_WARM_BAR`" below). Where no
 CO₂ up to its maximum greenhouse thaws it (the chance is then 1, from
 about 1.4 AU for an Earth-like planet round the Sun: an icy body's cold column condenses and scatters its CO₂ before it
 warms the ice to a thaw), the frozen state is for good: the planet is
@@ -3153,7 +3153,7 @@ their measured air (see "Test air and Solar System bounds" below):
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
-| Earth | 288 K, water, regulated, thermostat CO₂ 2.114e-3 bar, Bond albedo 0.2965; 287.20 K at 280 ppm on the measured air | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
+| Earth | 288 K, water, regulated, thermostat CO₂ 4.206e-3 bar, Bond albedo 0.3070 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone, Bond albedo 0.2913 and 288.02 K at 280 ppm (on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
 | Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the 577 K pin, the model's output (#594), moves to the tier-2 net in 2d-4 | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
 | Titan | 93.86 K on the measured air, hydrocarbons; the reference Titan settles at 94.24 K on the chain's own air (104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
@@ -3168,7 +3168,11 @@ moves the test onto the chain's own air.
 Earth's O₂ comes from life, which the chain adds later: its reference air
 has none, and the climate is solved again after oxygenation in 2d-4
 (#659), so the 280 ppm check runs on Earth's measured air (N₂ 78.08 %,
-O₂ 20.95 % of 1.014 bar). Dry bodies are never a runaway: Mercury and a
+O₂ 20.95 % of 1.014 bar), under that air's own Bond albedo with the
+ozone its O₂ holds (`ozone_column`, [ozone.md](ozone.md)), taken at
+the reference Earth's temperature. Since #705 the cloud albedo is
+fitted with that ozone in (0.322), so the reference Earth without O₂
+is brighter (0.3070) and its thermostat holds 288 K with twice the CO₂. Dry bodies are never a runaway: Mercury and a
 dry Venus are `Temperate`.
 
 The wet column against CERES (#680, study 32): on Earth's measured air
@@ -3420,17 +3424,22 @@ kept to three figures as 12.4 bar, which gave Earth a chance of
 6.4 bar expected from legacy's `d⊕`, inside the 3 to 13 bar the plan
 allowed. Refitted again with the stellar spectra of issue #655 (study
 35), with the cloud albedo refitted on the table's Sun (0.296) and
-Earth's argon (#694): the reference Earth then freezes with 0.002058 bar
-and thaws at 0.148885 bar, so `d⊕` = 0.1468 bar (0.146828) and `W` =
-10.22, kept as **10.2 bar**, which gives Earth a chance of 0.0140 (it
-fell to 0.01168 under 12.4 bar). #705's refit of the cloud albedo will move it again. The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
+Earth's argon (#694): the reference Earth then froze with 0.002058 bar
+and thawed at 0.148885 bar, so `d⊕` = 0.1468 bar (0.146828) and `W` =
+10.22, kept as 10.2 bar, which gave Earth a chance of 0.0140 (it
+fell to 0.01168 under 12.4 bar). Refitted again with #705's cloud
+albedo (0.322, fitted with ozone over the climate's own ground; the
+reference Earth holds no O₂, so no ozone): it freezes with 0.004206 bar
+and thaws at 0.149970 bar, so `d⊕` = 0.1458 bar (0.145764) and `W` =
+10.14, kept as **10.1 bar**, which gives Earth a chance of 0.0141 (it
+would be 0.01392 under 10.2 bar, inside the window too). The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
 holds Earth's chance in 0.013 to 0.016 on the full solve (65 s at the
 tier-1 opt-level); a tier-1 test of `science::snowball` holds the
 arithmetic of the fit on the measured `d⊕` and `rate⊕`.
 Hoffman et al. quote Walker et al. 1981: "Even the present rate of
 release would yield 1 bar of carbon dioxide in only 20 million years",
 so 6.4 bar would be about 130 My of today's outgassing per temperate
-phase, and 10.2 bar is about 200 My.
+phase, and 10.1 bar is about 200 My.
 Searched and not found: a snowball frequency for another planet, and
 the length of the Paleoproterozoic snowballs. Where no CO₂ thaws the
 body, `thaw_bar` is infinite and the trace takes no non-finite value:
@@ -4031,8 +4040,8 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; 1.61 R⊕ and 1679 K are the old code's output (tier-2 net only) |
 | A wet Venus under an XUV fluence of 1e14 J/m², `thin_steam_over_rock_stays_a_runaway` | a runaway under 220.64 bar of steam, no envelope | Pierrehumbert 2023 § 1 (no surface hides under the critical pressure); legacy `thin_steam_over_rock_stays_a_runaway_greenhouse` |
 | A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
-| F0V (7220 K) at 1.2963 S⊕, a hundredth of the N₂, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light (291.0 W/m²) over the saturated column's peak (289.9 W/m²; at a tenth of the N₂, Earth's argon raises it to 292.3, #694), Kasting 1988, Goldblatt et al. 2013; legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
-| Same, under an XUV fluence of 1e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band (2e14 until the air's argon, #694, took the first run out of it; the N₂ cut to a hundredth keeps it there with the stellar spectra of #655) |
+| F0V (7220 K) at 1.2963 S⊕, a hundredth of the N₂, half Earth's mass, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light over the saturated column's peak (at Earth's mass 291.0 over 289.9 W/m²; at a tenth of the N₂, Earth's argon raises the peak to 292.3, #694), Kasting 1988, Goldblatt et al. 2013. Since the cloud albedo's refit (#705, 0.322) an Earth-mass planet there has a Bond albedo of 0.3515 and absorbs 286.0 W/m², under any peak the N₂ cut gives; half Earth's mass, whose lower gravity lowers the peak, boils at 282.7 W/m² (0.7 Earth masses does not); legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
+| Same, under an XUV fluence of 1e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band (2e14 until the air's argon, #694, took the first run out of it; the N₂ cut to a hundredth keeps it there with the stellar spectra of #655, half Earth's mass since #705) |
 
 The 1500 to 2500 K window extrapolates Boukrouche et al. 2021, who stop
 at 295 bar and find the plateau's end constant past it, to columns of

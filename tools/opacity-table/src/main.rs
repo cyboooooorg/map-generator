@@ -4,7 +4,7 @@
 //! reduced to g-points.
 //!
 //! ```text
-//! opacity-table [--shortwave | --continua] [--raw DIR] [--out FILE] [--bin-width CM]
+//! opacity-table [--shortwave | --continua | --ozone] [--raw DIR] [--out FILE] [--bin-width CM]
 //!               [--top CM] [--temperatures K,K,…]
 //!               [--pressure-step DECADES] [--threads N]
 //! ```
@@ -18,6 +18,11 @@
 //! 50 cm⁻¹) and `co2-cia.tsv` (HITRAN's CO₂–CO₂ collision-induced
 //! absorption on 20 cm⁻¹ cells), into `crates/science/data/` (or the
 //! directory of `--out`).
+//!
+//! `--ozone` writes, instead of a table, `ozone.tsv`: ozone's
+//! cross-sections of Serdyuchenko et al. (2014) at 223 and 233 K reduced
+//! to g-points on every band of the albedo's spectrum that they cover
+//! ([`ozone`]).
 
 mod cia;
 mod continuum;
@@ -25,6 +30,7 @@ mod hitran;
 mod kdist;
 mod lbl;
 mod netcdf;
+mod ozone;
 mod table;
 mod voigt;
 
@@ -138,6 +144,8 @@ struct Options {
     shortwave: bool,
     /// Whether to write the continuum text files instead of a table.
     continua: bool,
+    /// Whether to write the ozone cross-sections instead of a table.
+    ozone: bool,
     raw: PathBuf,
     out: PathBuf,
     /// Whether `--out` was given.
@@ -152,12 +160,16 @@ struct Options {
 fn options() -> Result<Options, String> {
     let shortwave = std::env::args().any(|a| a == "--shortwave");
     let continua = std::env::args().any(|a| a == "--continua");
+    let ozone = std::env::args().any(|a| a == "--ozone");
     let mut o = Options {
         shortwave,
         continua,
+        ozone,
         raw: PathBuf::from("tools/opacity-table/raw"),
         out: PathBuf::from(if shortwave {
             "crates/science/data/shortwave.bin"
+        } else if ozone {
+            "crates/science/data/ozone.tsv"
         } else {
             "crates/science/data/opacity.bin"
         }),
@@ -178,7 +190,7 @@ fn options() -> Result<Options, String> {
     };
     let mut args = std::env::args()
         .skip(1)
-        .filter(|a| a != "--shortwave" && a != "--continua");
+        .filter(|a| a != "--shortwave" && a != "--continua" && a != "--ozone");
     while let Some(flag) = args.next() {
         let value = args.next().ok_or(format!("{flag} needs a value"))?;
         let number = |v: &str| v.parse::<f64>().map_err(|e| format!("{v}: {e}"));
@@ -443,6 +455,18 @@ fn write_continua(o: &Options) -> Result<(), String> {
     Ok(())
 }
 
+/// Writes `ozone.tsv` (`--ozone`) from `serdyuchenkogorshelev5digits.dat`.
+fn write_ozone(o: &Options) -> Result<(), String> {
+    let path = o.raw.join("serdyuchenkogorshelev5digits.dat");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let rows = ozone::parse(&text).ok_or(format!("{}: unreadable", path.display()))?;
+    let tsv = ozone::table(&rows, SPECTRUM_UM).ok_or("no ozone band")?;
+    if let Some(dir) = o.out.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    write_file(&o.out, &tsv)
+}
+
 fn write_file(path: &Path, text: &str) -> Result<(), String> {
     std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     eprintln!("wrote {} ({} bytes)", path.display(), text.len());
@@ -453,6 +477,9 @@ fn run() -> Result<(), String> {
     let o = options()?;
     if o.continua {
         return write_continua(&o);
+    }
+    if o.ozone {
+        return write_ozone(&o);
     }
     let path = o.raw.join("contnm.f90");
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;

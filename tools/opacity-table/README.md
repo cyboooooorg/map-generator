@@ -4,7 +4,9 @@ Builds `crates/science/data/opacity.bin`, and with `--shortwave`
 `crates/science/data/shortwave.bin`. The second table covers the star's
 near infrared on the Bond albedo's bands from 0.7 to 5 µm, with MT_CKD's
 water continuum binned in. With `--continua` it writes instead the two
-text files of the continua, `mt-ckd-water.tsv` and `co2-cia.tsv`.
+text files of the continua, `mt-ckd-water.tsv` and `co2-cia.tsv`, and
+with `--ozone` ozone's shortwave cross-sections on the same bands,
+`ozone.tsv`.
 
 `opacity.bin` is the correlated-k table of CO₂ and water line
 absorption, with MT_CKD's CO₂ continuum, that the climate column of the
@@ -65,9 +67,13 @@ It fetches:
 - HITRAN2024's CO₂–CO₂ collision-induced absorption,
   `https://hitran.org/data/CIA/main/CO2-CO2_2024.cia` (read by
   `--continua`).
+- Serdyuchenko et al. 2014's ozone cross-sections (IUP Bremen),
+  `https://www.iup.uni-bremen.de/gruppen/molspec/downloads/serdyuchenkogorshelev5digits.dat`
+  (read by `--ozone`).
 
 The script ends by checking the SHA-256 of `absco-ref_wv-mt-ckd.nc`,
-`contnm.f90` and `CO2-CO2_2024.cia` against the values it records
+`contnm.f90`, `CO2-CO2_2024.cia` and
+`serdyuchenkogorshelev5digits.dat` against the values it records
 (`shasum -a 256 -c`) and fails on a mismatch. HITRAN serves its current
 edition, so a changed CIA file means a new edition to review.
 
@@ -113,6 +119,18 @@ file takes the set nearest each temperature, and cells under
 1e-50 cm⁵ at every temperature are left out. `--out FILE` redirects both
 files to the directory of `FILE`.
 
+To write ozone's cross-sections:
+
+```bash
+cargo run --release -j 4 -p opacity-table -- --ozone
+```
+
+It needs only `serdyuchenkogorshelev5digits.dat` and takes under a
+second. `crates/science/data/ozone.tsv` holds, at 223 and 233 K, each
+albedo band's cross-sections sorted and averaged over the eight
+g-intervals, cm² per molecule (provenance and layout in
+`crates/science/data/OPACITY.md`, "Ozone cross-sections").
+
 Then run the spectrum and column tests of `science` (`mise run test:tier1`).
 
 ## Configuration
@@ -121,8 +139,9 @@ Then run the spectrum and column tests of `science` (`mise run test:tier1`).
 | --- | --- | --- |
 | `--continua` | off | Write `mt-ckd-water.tsv` and `co2-cia.tsv` instead of a table |
 | `--shortwave` | off | Build `shortwave.bin`: the albedo's bands over 0.7-5 µm, 13 temperatures, MT_CKD's water continuum |
+| `--ozone` | off | Write `ozone.tsv`: ozone's cross-sections as g-points on the albedo's bands, 223 and 233 K |
 | `--raw DIR` | `tools/opacity-table/raw` | Where `fetch.sh` put the downloads |
-| `--out FILE` | `crates/science/data/opacity.bin` (`shortwave.bin` with `--shortwave`) | The table to write |
+| `--out FILE` | `crates/science/data/opacity.bin` (`shortwave.bin` with `--shortwave`, `ozone.tsv` with `--ozone`) | The table to write |
 | `--bin-width CM` | `20` | Width of a spectral bin, cm⁻¹ |
 | `--top CM` | `5000` | Upper end of the spectrum, cm⁻¹ |
 | `--temperatures K,…` | 16 values from 100 to 900 K (13 from 150 K with `--shortwave`) | Temperatures of the grid |
