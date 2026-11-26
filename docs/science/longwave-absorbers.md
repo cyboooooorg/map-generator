@@ -27,7 +27,8 @@ matter more than the numbers:
   +0.2 K.
 - The **nitrogen and methane pairs** of HITRAN's collision-induced files
   put a spectral Titan at 92.30 K without any fitted constant (measured:
-  93.65 K), and replaced the calibrated grey opacity the column needed
+  93.65 K; 91.81 K since N₂ condenses in its upper troposphere, issue
+  #741), and replaced the calibrated grey opacity the column needed
   before. On
   thick nitrogen airs the pairs grow with the pressure squared: −3.3 W/m²
   at 5 bar.
@@ -189,10 +190,12 @@ do now.
   measured 93.65 ± 0.25 K (it was 93.60 K with the stand-in). The
   tier-1 test allows 1.4 K under the measurement, a calibration on the
   measured gap: its floor is 93.65 − 0.25 − 1.4 = 92.00 K, 0.3 K under
-  the column's 92.30 K. It is for what the column lacks: N₂–H₂ pairs
-  (issue #720), methane's own lines, the haze's infrared, and the
-  methane of the lower troposphere: the column applies the cold trap's
-  mixing ratio (`radiating_methane_bar`) at every level, so it holds
+  the column's 92.30 K (and 0.19 K over its 91.81 K since N₂ condenses
+  in its upper troposphere, issue #741). It is for what the column
+  lacks: N₂–H₂ pairs (issue #720), methane's own lines, the haze's
+  infrared, and the methane of the lower troposphere: the column
+  applies the cold trap's mixing ratio (`radiating_methane_bar`) at
+  every level, so it holds
   about 40 % of the sourced surface CH₄ there (a review's estimate,
   derived, issue #744), likely a large share of the gap since N₂–CH₄ is
   linear in CH₄. Each of them can only warm it.

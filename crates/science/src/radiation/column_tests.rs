@@ -1129,3 +1129,222 @@ fn a_co2_step_across_its_triple_point_takes_each_phase_on_its_part() {
         );
     }
 }
+
+/// Definition: the surface temperatures, K, of the nitrogen world's three
+/// states that study 38 checked its column on (`docs/science/nitrogen-phases.md`):
+/// its frost at 59.25 K, its melting frost at 62.75 K and its liquid at
+/// 64.4 K, each under the N₂ its ground leaves in the air.
+const NITROGEN_STATES_K: [f64; 3] = [59.25, 62.75, 64.4];
+
+/// Calibration: how far, K, the column over a saturated N₂ frost may
+/// stray from N₂'s saturation temperature at each level's pressure,
+/// 0.002 K. It bounds the model's own numerics (a midpoint step every
+/// twentieth of a decade, [`LEVELS_PER_DECADE`]): measured 4.5e-4 to
+/// 5.5e-4 K on [`NITROGEN_STATES_K`]'s frost grounds, against 10.7 to
+/// 11.1 K one e-fold of pressure up on the dry adiabat the column drew
+/// before (issue #741). Over a liquid ground the column crosses the
+/// triple point, and the frost's curve sits 0.27 % over the liquid's
+/// there: the test adds that join, carried up as a temperature.
+const NITROGEN_PROFILE_TOLERANCE_K: f64 = 0.002;
+
+/// Source: study 38's line-by-line sum (HITRAN's N₂–N₂ pairs, diffusivity
+/// 1.66) of the outgoing radiation of a pure N₂ air along its saturation
+/// curve over [`NITROGEN_STATES_K`], as a share of `σ T⁴`: 0.9818, 0.9503
+/// and 0.9290 (`docs/science/nitrogen-phases.md`, "The profile is not";
+/// Wiki study 38, finding 5). An integration independent of the column's.
+const NITROGEN_SATURATED_OLR_SHARES: [f64; 3] = [0.9818, 0.9503, 0.9290];
+
+/// Calibration: how far, as a share, the column's outgoing radiation may
+/// fall from [`NITROGEN_SATURATED_OLR_SHARES`], 1.5 %. Fitted against the
+/// same study's check of its sum on the dry adiabat the column drew
+/// before (0.9424, 0.8607 and 0.8407 against the model's 0.9432, 0.8705
+/// and 0.8417): the two integrations agreed within 0.08 to 1.1 % there,
+/// and 1.5 % sits over that spread while the dry adiabat's own shares lie
+/// 3.9 to 9.4 % under the saturated ones. No published tolerance found.
+const NITROGEN_OLR_TOLERANCE: f64 = 0.015;
+
+/// The temperature, K, at which N₂'s saturation pressure is `p_bar`
+/// ([`nitrogen_saturation_bar`]), by bisection between 20 K and N₂'s
+/// critical point.
+fn nitrogen_saturation_k(p_bar: f64) -> f64 {
+    let (mut cold, mut warm) = (20.0, NITROGEN_CRITICAL_TEMPERATURE.0);
+    while warm - cold > 1e-9 {
+        let mid = 0.5 * (cold + warm);
+        if nitrogen_saturation_bar(mid) < p_bar {
+            cold = mid;
+        } else {
+            warm = mid;
+        }
+    }
+    0.5 * (cold + warm)
+}
+
+/// A pure N₂ air at its saturation over a ground at `surface_k`, as the
+/// climate's `condense` leaves it.
+fn saturated_nitrogen(surface_k: f64) -> PartialPressures {
+    PartialPressures {
+        n2: nitrogen_saturation_bar(surface_k),
+        ..PartialPressures::default()
+    }
+}
+
+#[test]
+fn a_saturated_nitrogen_column_follows_its_saturation_curve() {
+    // An air of pure N₂ in equilibrium with its frost or its liquid
+    // condenses as it rises, and its latent heat holds it on its
+    // saturation curve, `d T / d ln p = R T² / L` (Pierrehumbert 2010,
+    // §2.7): every level sits at N₂'s saturation temperature at its
+    // pressure (study 38's implementation outline). The column drew the
+    // dry adiabat before (issue #741), 11 K colder one e-fold up. Its
+    // outgoing radiation meets study 38's line-by-line sum along the
+    // saturation curve.
+    let cache = &mut ColumnCache::default();
+    for (surface_k, expected) in NITROGEN_STATES_K
+        .into_iter()
+        .zip(NITROGEN_SATURATED_OLR_SHARES)
+    {
+        let gases = saturated_nitrogen(surface_k);
+        let surface_bar = gases.n2;
+        let (temperatures, step) =
+            with_column(&gases, surface_k, 0.0, TITAN.0, Profile::CLEAR, |c| {
+                (c.temperature.to_vec(), c.step)
+            })
+            .expect("an air");
+        // Over a liquid ground, the join of the two curves at the triple
+        // point, carried up as a temperature (`R T² / L` over the frost).
+        let triple = NITROGEN_TRIPLE_TEMPERATURE.0;
+        let join = if surface_k > triple {
+            let ln_join = (nitrogen_saturation_bar_over(triple, Condensate::Ice)
+                / nitrogen_saturation_bar_over(triple, Condensate::Liquid))
+            .ln();
+            ln_join * MOLAR_GAS_CONSTANT * triple * triple
+                / nitrogen_latent_j_mol_over(triple, Condensate::Ice)
+        } else {
+            0.0
+        };
+        let bound = NITROGEN_PROFILE_TOLERANCE_K + join;
+        // The levels under the top, whose step is the grid's.
+        let mut worst: f64 = 0.0;
+        for (i, &t) in temperatures[..temperatures.len() - 1].iter().enumerate() {
+            let p = surface_bar * (-(i as f64) * step).exp();
+            worst = worst.max((t - nitrogen_saturation_k(p)).abs());
+        }
+        let olr = olr(
+            &gases,
+            surface_k,
+            Kelvin(0.0),
+            TITAN,
+            Profile::CLIMATE,
+            cache,
+        );
+        let measured = olr / (STEFAN_BOLTZMANN * surface_k.powi(4));
+        let up = nitrogen_saturation_k(surface_bar / std::f64::consts::E);
+        let dry = surface_k * (-MOLAR_GAS_CONSTANT / N2_HEAT_CAPACITY).exp();
+        println!(
+            "{surface_k} K, {surface_bar:.5} bar: off its curve by {worst:.5} K (bound {bound:.5}); \
+             one e-fold up {up:.3} K (dry adiabat {dry:.3} K); OLR {measured:.4} of σT⁴ \
+             against {expected}"
+        );
+        assert!(worst <= bound, "{surface_k} K: {worst} K off its curve");
+        assert!(
+            (measured / expected - 1.0).abs() <= NITROGEN_OLR_TOLERANCE,
+            "{surface_k} K: OLR {measured} of σT⁴ against {expected}"
+        );
+    }
+}
+
+/// Definition: the surface temperatures, K, over which the smoothness test
+/// sweeps a saturated N₂ air ([`saturated_nitrogen`]), 63.5 to 66 K. The
+/// ground stays over N₂'s liquid, above its triple point (63.14 K), and
+/// the column, cooling as it rises, crosses 63.14 K going up: in its
+/// first layer at 63.5 K, in its fourth at 66 K. The range starts above
+/// the triple point because a ground under it reads the frost's curve,
+/// and the air's own pressure would step by the 0.27 % join of the two
+/// curves.
+const NITROGEN_SMOOTH_RANGE_K: (f64, f64) = (63.5, 66.0);
+
+/// Calibration: the most a rise of a saturated N₂ column's outgoing
+/// radiation over [`NITROGEN_SMOOTH_RANGE_K`] may change over the next, as
+/// a share of the larger, 1 %. The water column's bound
+/// ([`SMOOTH_RISE_CHANGE`], 10 %) does not see N₂'s jump: its fusion
+/// heat is 8 % of its sublimation heat and its column sends out about
+/// 1 W/m², so a step taken over the phase of each point it reads changes a
+/// rise by 6.3 % (measured, the rises 0.0102 to 0.0109 W/m² per 0.25 K),
+/// and the split step by 0.26 %. No source gives a number; 1 % sits a
+/// factor 3.8 above the second and 6.3 under the first.
+const NITROGEN_SMOOTH_RISE_CHANGE: f64 = 0.01;
+
+#[test]
+fn a_nitrogen_column_is_smooth_across_its_triple_point() {
+    // N₂'s latent heat jumps by fusion's at its triple point, 0.54 kJ/mol
+    // between its two curves: a step of its pseudo-adiabat that takes the
+    // phase of a point it reads for its whole span shifts the column above
+    // where the surface moves that point across 63.14 K, as CO₂'s did.
+    // Without water, the climate's sky and the clear one agree.
+    let cache = &mut ColumnCache::default();
+    for profile in [Profile::CLEAR, Profile::CLIMATE] {
+        let rises = rises_over(NITROGEN_SMOOTH_RANGE_K, |t| {
+            olr(
+                &saturated_nitrogen(t),
+                t,
+                Kelvin(0.0),
+                TITAN,
+                profile,
+                cache,
+            )
+        });
+        let worst = most_change(&rises);
+        println!("{profile:?}: rises {rises:.4?}, most change {worst:.4}");
+        assert!(
+            rises.iter().all(|&r| r > 0.0),
+            "{profile:?} falls: {rises:?}"
+        );
+        assert!(
+            worst <= NITROGEN_SMOOTH_RISE_CHANGE,
+            "{profile:?}: a rise changes by {worst:.4}"
+        );
+    }
+}
+
+/// Definition: the substeps of the reference integration of one step of
+/// N₂'s pseudo-adiabat, 2000, as CO₂'s ([`CO2_STEP_SUBSTEPS`]).
+const N2_STEP_SUBSTEPS: usize = 2000;
+
+/// Calibration: how far, K, one step of N₂'s pseudo-adiabat across its
+/// triple point may land from the same step cut into
+/// [`N2_STEP_SUBSTEPS`], 0.001 K, placed between two measured ends as
+/// CO₂'s ([`CO2_STEP_TOLERANCE_K`], no published tolerance found): split
+/// at the triple point, a step of a twentieth of a decade from 63.3 to
+/// 63.6 K on a pure N₂ air misses by 8.8e-5 to 1.3e-4 K (5e-5 K for a
+/// step that does not cross it, at 65 and 66 K); taken over the phase of
+/// each point it reads, by 0.013 to 0.022 K. 0.001 K sits a factor 8
+/// above the first and 13 under the second.
+const N2_STEP_TOLERANCE_K: f64 = 0.001;
+
+#[test]
+fn a_nitrogen_step_across_its_triple_point_takes_each_phase_on_its_part() {
+    // One step of N₂'s pseudo-adiabat that crosses its triple point
+    // agrees with the same step cut into many, each over the condensate
+    // stable where it starts: liquid down to 63.14 K, frost below.
+    let air = DryAir::of(&saturated_nitrogen(64.0), 0.0);
+    let h = std::f64::consts::LN_10 / LEVELS_PER_DECADE;
+    for start in [63.3, 63.4, 63.5, 63.6] {
+        let p = nitrogen_saturation_bar(start);
+        let one = n2_step(&air, start, p, h);
+        let (mut t, mut from) = (start, p);
+        let small = h / N2_STEP_SUBSTEPS as f64;
+        for _ in 0..N2_STEP_SUBSTEPS {
+            t = n2_step(&air, t, from, small);
+            from *= (-small).exp();
+        }
+        println!("{start} K: one step {one:.6} K, {N2_STEP_SUBSTEPS} steps {t:.6} K");
+        assert!(
+            one < NITROGEN_TRIPLE_TEMPERATURE.0,
+            "{start} K: the step ends at {one} K"
+        );
+        assert!(
+            (one - t).abs() < N2_STEP_TOLERANCE_K,
+            "{start} K: {one} against {t}"
+        );
+    }
+}

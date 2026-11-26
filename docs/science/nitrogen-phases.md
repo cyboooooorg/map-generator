@@ -145,7 +145,7 @@ state; it is a limitation of the model, not a third branch.
 | Liquid N₂ albedo | none of its own: the ground under it shows (Titan's water ice, 0.6) | "not radiatively active at visible wavelengths" (Charnay et al. 2014) | matches |
 | Liquid N₂ emissivity | 1 (no frost) | Charnay et al. take 1 for every surface; no measurement found | assumption |
 | N₂–N₂ pairs at 60 K | HITRAN `N2-N2_2021.cia`, its coldest block (70 K) used below 70 K | HITRAN's main roto-translational set starts at 70 K (Chistikov et al. 2019); Borysow & Frommhold 1986 model 50 to 300 K (abstract read) | right order; somewhat too weak at 60 K (below) |
-| Temperature of the air | dry adiabat from the surface to the skin temperature | an air saturated at the ground follows its saturation curve (pure condensable: Clausius–Clapeyron, Pierrehumbert 2010, §2.7, as the column applies it to CO₂ and water) | **missing law: too much greenhouse** (below) |
+| Temperature of the air | dry adiabat from the surface to the skin temperature (N₂'s pseudo-adiabat since #741, [below](#what-the-code-does-since)) | an air saturated at the ground follows its saturation curve (pure condensable: Clausius–Clapeyron, Pierrehumbert 2010, §2.7, as the column applies it to CO₂ and water) | **missing law: too much greenhouse** (below); added by #741 |
 
 **The pairs are about right for the air the model draws.** Read from
 HITRAN's file, the N₂–N₂ absorption at 70 K peaks at 2.741e-44 cm⁵
@@ -174,7 +174,9 @@ heat of 6.7 to 7.0 kJ/mol (derived; the slope of the β fit). Charnay et
 al. condense nitrogen in the air wherever it falls under the saturation
 temperature (§2). The column does this for water and for CO₂, not for
 N₂: one scale height up its N₂ air is at 44.6 to 48.4 K where the
-saturation curve keeps it at 55.3 to 59.5 K. The same line-by-line sum
+saturation curve keeps it at 55.3 to 59.5 K (the column does since
+issue #741, [What the code does since](#what-the-code-does-since)). The
+same line-by-line sum
 along the saturation curve gives 0.9818, 0.9503 and 0.9290 of `σ T⁴`:
 the pairs' greenhouse is a third to a half of what the model draws
 (from 5.8 % to 1.8 %, from 14 % to 5.0 %, from 16 % to 7.1 % of the
@@ -333,7 +335,96 @@ Item 2 landed with the N₂ pairs, in #703's first pull request:
 - Earth, Mars, Titan and the Triton-like body settle where they did, to
   the printed digit: their roots attract and their pairs were derived.
 
-Items 3 and 4 wait in #741 and #742.
+Item 3 landed with issue #741, in its own pull request:
+
+- **The law.** Where the air reaches N₂'s saturation
+  (`volatiles::nitrogen_saturation_pressure`: the β-N₂ fit of Fray &
+  Schmitt below 63.14 K, Span et al. 2000 above), the column condenses
+  N₂ and follows its pseudo-adiabat (`column::n2_lapse`): the
+  construction it applies to CO₂ (Pierrehumbert 2010, §2.7, per mole),
+  with N₂ the condensable, the gases other than N₂ and CO₂ the air it
+  condenses out of, and N₂'s share thinning to what saturation leaves.
+  For a pure N₂ air it is the saturation curve itself,
+  `d T / d ln p = R T² / L`.
+- **The latent heat** is the slope of the curve it condenses on, by
+  Clausius–Clapeyron for an ideal vapour (`nitrogen_latent_j_mol_over`,
+  as CO₂'s): 6.70 kJ/mol at 59.25 K and 6.64 kJ/mol at the triple
+  point over the frost, 6.10 kJ/mol at the triple point over the
+  liquid. So the column cools 4.8 K per e-fold of pressure at 62 K,
+  against 17.7 K on the dry adiabat (the 4.6 K above took 7.0 kJ/mol,
+  the top of the β fit's range). Against Span et al.'s saturation table
+  (p. 1403 of the NIST reprint: the enthalpies and densities of the
+  saturated liquid and vapour), the liquid curve's slope meets
+  Clapeyron's `Δh / (T Δv)` within 0.024 % at 63.151, 70 and 77 K; the
+  ideal-vapour heat is 1.0 % over the real `Δh` at the triple point
+  (6099.7 against 6037.3 J/mol), 2.4 % at 70 K and 4.9 % at 77 K, a
+  declared simplification that the pseudo-adiabat of a pure N₂ air does
+  not feel (it follows the curve whatever `L`). The heat capacity is
+  `N2_HEAT_CAPACITY`, 29.12 J/(mol·K) at 298 K; Span et al.'s ideal-gas
+  table gives `c_p/R` = 3.5003 from 25 to 75 K (29.10 J/(mol·K), p. 1402),
+  so it holds at 60 K within 0.06 %.
+- **The triple point.** The heat jumps there from the liquid's 6.10 to
+  the frost's 6.64 kJ/mol, so the step that crosses 63.14 K is split
+  there from the start (`column::n2_step`, through the `split_step`
+  that water's and CO₂'s steps share): the cold N₂ body sits on that
+  point. The jump, 0.54 kJ/mol, is the fusion the two fits imply; a
+  measured enthalpy of fusion was not read (Giauque & Clayton 1933, the
+  usual source, is closed). The frost's curve sits 0.27 % over the
+  liquid's there (*The nitrogen vapour curves* in
+  [Planet atmospheres](planet-atmospheres.md)), so a column that starts
+  over the liquid runs 0.013 K over the frost's curve above it.
+- **Tests** (tier 1, `column_tests.rs`, `volatiles_tests.rs`). A pure N₂
+  column over its frost at 59.25 and 62.75 K stays within 5.5e-4 K of
+  N₂'s saturation temperature at every level, and over its liquid at
+  64.4 K within that plus the join (0.0135 K); one e-fold of pressure
+  up it is at 55.21, 58.21 and 59.51 K, where the dry adiabat put it at
+  44.53, 47.16 and 48.40 K. Its outgoing radiation is 0.9817, 0.9490 and
+  0.9278 of `σ T⁴`, against the 0.9818, 0.9503 and 0.9290 of the
+  line-by-line sum above (within 0.14 %; printed, not asserted). A
+  saturated N₂ air swept from 63.5 to 66 K, its column crossing the
+  triple point from its first layer to its fourth, sends out a rise that
+  changes by 0.26 % from one step to the next (6.3 % with a step taken
+  over the phase of each point it reads); one step across the triple
+  point lands within 1.3e-4 K of the same step cut into 2000 (0.013 to
+  0.022 K over each point's phase). The bounds are calibrations of the
+  model's numerics (below).
+- **The S curve.** The warm-start sweep still jumps once, now from
+  59.470 K (frost) at 0.006565 to 63.526 K (liquid) at 0.006581 Earth
+  fluxes, the absorbed light and `ε OLR` both ×1.5614 across it.
+  Followed along the light, the frost holds up to 0.0076953 and the
+  liquid down to 0.0064470, against the 0.007688 and 0.006449 estimated
+  above: within 0.1 %. The bistability stays, about 9 % higher in
+  light.
+- **It reaches Titan too.** Study 38 expected the law to touch only
+  bodies whose N₂ condenses at the ground; it did not probe Titan's
+  column. The sourced Titan's dry adiabat runs from 92.3 K to its
+  68.95 K skin, and on the way its N₂ passes saturation at about
+  0.65 bar and 73.5 K (20 % over it at 0.58 bar). The column now
+  condenses N₂ from there to the skin, up to 2.7 K warmer than the dry
+  adiabat, and sends out more: the tier-1 column settles at 91.81 K
+  against its 92.30 K, the settled Titan at 92.33 K against 92.64 K on
+  its measured air and 92.61 K against 92.97 K on the chain's own. The
+  tier-1 test's floor, 92.00 K (`TITAN_MISSING_WARMING_K`, a calibration
+  the user accepted on 2026-11-25), is 0.19 K over the new column. A
+  thin methane world swept across its sea's freezing point starts at
+  61.49 K instead of 61.77 K, and a methane Earth frozen at 9.57 AU
+  settles at 80.402 K instead of 80.520 K. Earth, Mars, the methane
+  Earth's outer edge (1.2534 AU) and its cycling orbit (1.264 AU) do not
+  move: their columns stay over N₂'s critical point, 126.192 K. The
+  Triton-like body moves by 0.009 K, inside the solver's tolerance.
+- **Calibrations** (tests only, numerics, no source gives a number):
+  `NITROGEN_PROFILE_TOLERANCE_K` (0.002 K, a factor 3.6 over the
+  5.5e-4 K measured, against the dry adiabat's 11 K),
+  `NITROGEN_SMOOTH_RISE_CHANGE` (1 %, between the 0.26 % split and the
+  6.3 % unsplit) and `N2_STEP_TOLERANCE_K` (0.001 K, between 1.3e-4 K
+  and 0.013 K).
+- **Limitations.** Argon and methane do not condense in the column (a
+  Titan's methane is cold-trapped at its tropopause instead, and argon
+  is a trace); the frost's albedo and grain size at 60 K and the pairs
+  below 70 K (#742) are as above; a body is one temperature, with no
+  cold traps at its poles.
+
+Item 4 waits in #742.
 
 ## Decisions (user, 2026-11-26)
 
@@ -419,7 +510,10 @@ The user took every recommendation of the study:
     2000, "A reference equation of state for the thermodynamic properties
     of nitrogen for temperatures from 63.151 to 1000 K and pressures to
     2200 MPa", *J. Phys. Chem. Ref. Data* 29, 1361, doi:10.1063/1.1349047
-    (the liquid's vapour-pressure curve, as the code takes it).
+    (the liquid's vapour-pressure curve, as the code takes it; read in the
+    NIST reprint, <https://srd.nist.gov/JPCRD/jpcrd593.pdf>, for #741: the
+    ideal-gas heat capacity table, p. 1402, and the saturation table,
+    p. 1403).
 16. Lellouch, E., Stansberry, J., Emery, J., Grundy, W., Cruikshank, D. P.
     2011, "Thermal properties of Pluto's and Charon's surfaces from Spitzer
     observations", *Icarus* 214, 701 (the N₂ ice emissivity 0.8; not read,
@@ -428,6 +522,11 @@ The user took every recommendation of the study:
     from ground-based stellar occultations, 1988-2016", *A&A* 625, A42,
     doi:10.1051/0004-6361/201834281, arXiv:1903.02315 (§ 4 read for
     [Planet atmospheres](planet-atmospheres.md)).
+18. Giauque, W. F., Clayton, J. O. 1933, "The heat capacity and entropy
+    of nitrogen. Heat of vaporization. Vapor pressures of solid and
+    liquid", *J. Am. Chem. Soc.* 55, 4875, doi:10.1021/ja01339a024
+    (closed, not read: the calorimetric enthalpy of fusion, which #741
+    could not compare with the 0.54 kJ/mol the two fits imply).
 
 ## See also
 
