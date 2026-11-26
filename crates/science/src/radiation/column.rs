@@ -447,7 +447,7 @@ fn co2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: Co
 ///
 /// The latent heat jumps by fusion's at CO₂'s triple point (216.592 K,
 /// [`CO2_TRIPLE_TEMPERATURE`], Span & Wagner 1996), so a step that
-/// crosses it is split there, as water's is ([`saturated_step`]): liquid
+/// crosses it is split there, as water's is ([`split_step`]): liquid
 /// down to where the step over liquid alone reaches the triple point
 /// (`T` taken linear across the step), frost below. Without the split
 /// the phase of the midpoint decides the whole step, and the column
@@ -456,27 +456,13 @@ fn co2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: Co
 /// 1.3 W/m² over 0.005 K of its surface, and a methane Earth's collapse
 /// past its outer edge stopped on the jump (#703, 1.272 AU).
 fn co2_step(air: &DryAir, temperature_k: f64, pressure_bar: f64, h: f64) -> f64 {
-    let step = |t: f64, from: f64, h: f64, condensate: Condensate| {
-        let half = t - 0.5 * h * co2_lapse(air, t, from, condensate);
-        t - h * co2_lapse(air, half, from * (-0.5 * h).exp(), condensate)
-    };
-    let t = temperature_k;
-    let triple = CO2_TRIPLE_TEMPERATURE;
-    let condensate = co2_condensate(t);
-    if condensate == Condensate::Ice {
-        return step(t, pressure_bar, h, condensate);
-    }
-    let liquid = step(t, pressure_bar, h, condensate);
-    if liquid >= triple {
-        return liquid;
-    }
-    let f = (t - triple) / (t - liquid);
-    let frozen = step(t, pressure_bar, f * h, Condensate::Liquid);
-    step(
-        frozen,
-        pressure_bar * (-f * h).exp(),
-        (1.0 - f) * h,
-        Condensate::Ice,
+    let lapse = |t: f64, p: f64, condensate: Condensate| co2_lapse(air, t, p, condensate);
+    split_step(
+        temperature_k,
+        pressure_bar,
+        h,
+        (CO2_TRIPLE_TEMPERATURE, co2_condensate(temperature_k)),
+        lapse,
     )
 }
 
@@ -515,8 +501,8 @@ fn water_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: 
 /// where it starts ([`water_lapse`]).
 ///
 /// The latent heat jumps by fusion's at the triple point (273.16 K), so a
-/// step that crosses it is split there, as the step where the vapour
-/// first saturates is: liquid up to where the step over liquid alone
+/// step that crosses it is split there ([`split_step`]), as the step
+/// where the vapour first saturates is: liquid up to where the step over liquid alone
 /// reaches 273.16 K (`T` taken linear across the step), ice above.
 /// Without the split, the phase of the midpoint decides the whole step,
 /// and the column above jumps colder when the surface moves the midpoint
@@ -524,24 +510,53 @@ fn water_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: 
 /// outgoing radiation). The triple point is a `Source:`
 /// ([`TRIPLE_POINT_TEMPERATURE`], IAPWS R10-06(2009), Table 1).
 fn saturated_step(air: &DryAir, temperature_k: f64, pressure_bar: f64, h: f64) -> f64 {
+    let lapse = |t: f64, p: f64, condensate: Condensate| water_lapse(air, t, p, condensate);
+    split_step(
+        temperature_k,
+        pressure_bar,
+        h,
+        (TRIPLE_POINT_TEMPERATURE.0, Condensate::at(temperature_k)),
+        lapse,
+    )
+}
+
+/// The temperature, K, a step of `h` in `ln p` up a condensable's
+/// pseudo-adiabat reaches from `temperature_k` at `pressure_bar`: a
+/// midpoint (second-order Runge–Kutta) step of `lapse` (`d T / d ln p` at
+/// a temperature and a pressure over a condensate) over `stable`, the
+/// condensate stable where it starts, with `triple` the condensable's
+/// triple-point temperature, K.
+///
+/// The latent heat jumps by fusion's at the triple point, so a step that
+/// crosses it is split there: liquid down to where the step over liquid
+/// alone reaches the triple point (`T` taken linear across the step),
+/// frost below. Without the split, the phase of the midpoint decides the
+/// whole step, and the column above jumps when the surface moves the
+/// midpoint across the triple point (water's [`saturated_step`], CO₂'s
+/// [`co2_step`]).
+fn split_step(
+    temperature_k: f64,
+    pressure_bar: f64,
+    h: f64,
+    (triple, stable): (f64, Condensate),
+    lapse: impl Fn(f64, f64, Condensate) -> f64,
+) -> f64 {
     let step = |t: f64, from: f64, h: f64, condensate: Condensate| {
-        let half = t - 0.5 * h * water_lapse(air, t, from, condensate);
-        t - h * water_lapse(air, half, from * (-0.5 * h).exp(), condensate)
+        let half = t - 0.5 * h * lapse(t, from, condensate);
+        t - h * lapse(half, from * (-0.5 * h).exp(), condensate)
     };
     let t = temperature_k;
-    let triple = TRIPLE_POINT_TEMPERATURE.0;
-    let condensate = Condensate::at(t);
-    if condensate == Condensate::Ice {
-        return step(t, pressure_bar, h, condensate);
+    if stable == Condensate::Ice {
+        return step(t, pressure_bar, h, stable);
     }
-    let liquid = step(t, pressure_bar, h, condensate);
+    let liquid = step(t, pressure_bar, h, stable);
     if liquid >= triple {
         return liquid;
     }
     let f = (t - triple) / (t - liquid);
-    let melted = step(t, pressure_bar, f * h, Condensate::Liquid);
+    let frozen = step(t, pressure_bar, f * h, Condensate::Liquid);
     step(
-        melted,
+        frozen,
         pressure_bar * (-f * h).exp(),
         (1.0 - f) * h,
         Condensate::Ice,
