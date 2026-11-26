@@ -33,6 +33,10 @@ pub(crate) struct ClimateBody<'a> {
     pub greenhouse: Option<Bar>,
     /// The moist plateau, once found ([`ClimateBody::plateau`]).
     pub plateau: Option<WattPerSquareMetre>,
+    /// Whether a collapse stopped at the numerics' `collapse_iterations`
+    /// before settling, since the pass solving it (`under_light`) cleared
+    /// it: the pass it belongs to is then not converged.
+    pub collapse_capped: bool,
     pub columns: ColumnCache,
     pub shortwave: ShortwaveCache,
 }
@@ -46,6 +50,7 @@ impl<'a> ClimateBody<'a> {
             co2: None,
             greenhouse: None,
             plateau: None,
+            collapse_capped: false,
             columns: ColumnCache::default(),
             shortwave: ShortwaveCache::default(),
         }
