@@ -79,6 +79,24 @@ const TRACE_TOLERANCE: f64 = 1e-8;
 /// doi:10.1038/nature04314).
 const TITAN_SURFACE_TOLERANCE_K: f64 = 0.25;
 
+/// Calibration: how far under Titan's measured surface (less its
+/// uncertainty) the column may settle, K, for the warming it does not
+/// hold: 1.4. Its greenhouse is HITRAN's N₂–N₂, N₂–CH₄ and CH₄–CH₄ pairs
+/// (study 36, `docs/science/longwave-absorbers.md`), which settle the
+/// sourced column at 92.30 K, 1.35 K under the measured 93.65 K, with no
+/// fitted constant; the user accepted that on 2026-11-25, retiring the
+/// grey stand-in fitted on Titan (`CH4_OPACITY`, `CH4_SATURATION_BAR`).
+/// The column misses N₂–H₂ pairs (Titan's H₂ is not a gas of the model,
+/// issue #720), methane's own lines (its rotational lines at 70 to
+/// 160 cm⁻¹, Bézard & Vinatier 2019), and the haze's infrared opacity.
+/// Each adds absorption, which can only warm a column whose temperature
+/// falls with height, so the test is one-sided: no warmer than the
+/// measurement, no colder than this under it. The bound is the measured
+/// gap rounded up. What was searched and not found: a split of Titan's
+/// greenhouse that gives each missing term in kelvin (study 36, "What we
+/// do not know").
+const TITAN_MISSING_WARMING_K: f64 = 1.4;
+
 /// Definition: the tolerance of `steam_share(1 bar)` against `1 − e⁻¹`,
 /// the rounding of an exponential.
 const SHARE_TOLERANCE: f64 = 1e-12;
@@ -241,11 +259,14 @@ fn iterations_is_converged() {
 }
 
 #[test]
-fn titans_column_sits_at_its_measured_surface() {
-    // Issue #646: the sourced column of `test_points` (1.467 bar, 5.65 %
-    // of methane, an effective temperature of 82 K, Titan's gravity, no
-    // heat, a black surface) under the anti-greenhouse of its
-    // stratosphere sits at Titan's measured surface.
+fn titans_pairs_hold_its_column_just_under_its_measured_surface() {
+    // Issue #646, study 36: the sourced column of `test_points` (1.467
+    // bar, 5.65 % of methane, an effective temperature of 82 K, Titan's
+    // gravity, no heat, a black surface) under the anti-greenhouse of its
+    // stratosphere, warmed by its nitrogen and methane pairs alone, sits
+    // at most `TITAN_MISSING_WARMING_K` under Titan's measured surface:
+    // what it lacks (N₂–H₂ pairs, #720; methane's lines; the haze's
+    // infrared) would warm it.
     let t = surface_temperature(
         starlight_of(Kelvin(TITAN_EFFECTIVE_K)),
         &TITAN_SURFACE_AIR,
@@ -257,9 +278,11 @@ fn titans_column_sits_at_its_measured_surface() {
     )
     .0;
     println!("Titan's column: {t:.3} K against {TITAN_SURFACE_K} K");
+    let coldest = TITAN_SURFACE_K - TITAN_SURFACE_TOLERANCE_K - TITAN_MISSING_WARMING_K;
+    let warmest = TITAN_SURFACE_K + TITAN_SURFACE_TOLERANCE_K;
     assert!(
-        (t - TITAN_SURFACE_K).abs() <= TITAN_SURFACE_TOLERANCE_K,
-        "{t} K against {TITAN_SURFACE_K} +- {TITAN_SURFACE_TOLERANCE_K} K"
+        (coldest..=warmest).contains(&t),
+        "{t} K against {coldest} to {warmest} K"
     );
 }
 

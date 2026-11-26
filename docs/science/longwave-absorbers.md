@@ -10,10 +10,11 @@ albedo?](radiative-transfer.md).
 ## Short answer
 
 The app's infrared column holds the lines of water vapour and carbon
-dioxide, their continua, the CO₂ pairs and a grey stand-in for Titan's
-methane. Earth's real air also traps heat with ozone, methane, nitrous
-oxide (N₂O), halocarbons, and the brief pairs that colliding nitrogen and
-oxygen molecules form. Line-by-line codes put the last five at about
+dioxide, their continua, and the brief pairs that colliding molecules form
+(CO₂–CO₂, and since study 36 N₂–N₂, O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄);
+the pairs replaced a grey stand-in for Titan's methane. Earth's real air
+also traps heat with ozone, methane's and nitrous oxide's (N₂O) lines and
+halocarbons. Line-by-line codes put the last five at about
 3.6 W/m² of Earth's clear-sky outgoing infrared at present-day amounts,
 and methane and N₂O at 2 to 3 W/m² at pre-industrial ones. Two findings
 matter more than the numbers:
@@ -162,10 +163,30 @@ do now.
 
 - **Absorbers.** The infrared column holds water and CO₂ lines,
   MT_CKD 4.3's water continuum (self, and foreign with every other gas of
-  the air, `spectrum.rs`), MT_CKD's CO₂ continuum, CO₂-CO₂ pairs and the
-  grey methane stand-in (`methane.rs`, `CH4_OPACITY` 15.1 and
-  `CH4_SATURATION_BAR` 0.01 bar, both calibrations). NH₃ and SO₂ are in
-  the air but have no infrared absorption.
+  the air, `spectrum.rs`), MT_CKD's CO₂ continuum, and HITRAN's
+  collision-induced pairs (`spectrum::PAIRS`): CO₂–CO₂ (`co2-cia.tsv`),
+  and N₂–N₂, O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄ (`pairs-cia.tsv`, study 36's
+  first pull request, issue #703). NH₃ and SO₂ are in the air but have no
+  infrared absorption, and methane none but its pairs.
+- **The pairs.** `tools/opacity-table --continua` bins each HITRAN file
+  (SHA-256 in `crates/science/data/OPACITY.md`) on the column's 20 cm⁻¹
+  bins up to 5000 cm⁻¹, at every 10 K from 70 to 400 K: each band's
+  blocks are averaged over the cell and interpolated linearly in
+  temperature, held at their ends. A pair's optical depth per `ln p` is
+  `k(ν, T) n_a n_b dz/d ln p` (`k` in cm⁵/molecule², `n` the two gases'
+  number densities, eq. 3 of HITRAN's `CIA_Readme_2024.pdf`), one depth per bin
+  added to every g-point, in the fast path and the double-precision
+  reference alike. It grows as the pressure squared, so the air above
+  the column's top takes half the top level's rate, as the lines and the
+  continua do. The shortwave table takes the CO₂–CO₂ pairs only.
+- **Titan's greenhouse is the pairs.** The grey stand-in (`CH4_OPACITY`
+  15.1, `CH4_SATURATION_BAR` 0.01 bar, both calibrations on Titan) is
+  gone. The sourced Titan column settles at 92.296 K against the
+  measured 93.65 ± 0.25 K (it was 93.60 K with the stand-in). The
+  tier-1 test allows 1.4 K under the measurement, a calibration on the
+  measured gap, for what the column lacks: N₂–H₂ pairs (issue #720),
+  methane's own lines and the haze's infrared, each of which can only
+  warm it.
 - **Which airs hold methane.** Methane is outgassed and survives only
   under an equilibrium temperature of 150 K (`METHANE_SURVIVES`), capped
   by its saturation: Titan's chain air keeps 0.091 bar. No law makes
@@ -173,7 +194,8 @@ do now.
   removed methane from an oxygenated air and added only O₂).
 - **What the study measured** on the column of `main` (1e122416), with
   HITRAN's pair files binned like `co2-cia.tsv` in a scratch probe
-  (removed before the commit):
+  (removed before the commit); the committed table is the probe's to the
+  last digit:
 
 | Case | Without | With the pairs | Change |
 | --- | --- | --- | --- |
@@ -184,11 +206,25 @@ do now.
 | 2, 5, 10 bar of N₂, Earth's water, 288 K | 263.03, 249.97, 240.95 | | −1.12, −3.30, −6.44 W/m² |
 | Titan's sourced column (1.467 bar, 5.65 % CH₄), settled | grey stand-in: 93.60 K; nothing: 74.88 K | N₂-N₂: 83.95 K; + N₂-CH₄: 92.23 K; + CH₄-CH₄: 92.30 K | measured 93.65 ± 0.25 K |
 
+- **What the code gives** (tier-1 tests, on the merged column): Earth's
+  measured air at 288 K and 280 ppm, clear, loses 0.408 W/m² to its N₂
+  and O₂ pairs (`earths_nitrogen_and_oxygen_pairs_take_what_line_by_line_codes_find`,
+  against 0.246 to 0.28 from the line-by-line sources plus the 0.15 W/m²
+  of issue #718's excess, a calibration); its clear sky falls from
+  274.63 to 274.22 W/m² in the CERES test, whose window, without the N₂
+  and O₂ terms of `MINOR_GASES_W_M2` now that the column holds them,
+  runs from 271.83 to 286.08 W/m². N₂ and O₂ alone lose 6.375 W/m²
+  (`an_air_of_nitrogen_and_oxygen_alone_loses_what_hopfner_finds`,
+  Höpfner et al.'s 5.6 within the 26 % two of their line-by-line codes
+  differ by on N₂, a calibration of the band's width). Titan:
+  `titans_pairs_hold_its_column_just_under_its_measured_surface`.
+
 The column's N₂ pairs take 0.27 W/m² on Earth where the line-by-line
 sources give 0.15 to 0.17; the excess sits in the roto-translational
 band below 650 cm⁻¹, which water hides. The cause is not isolated: the
 column's dry upper air (study 32), HITRAN's newer N₂-N₂ far wing, or the
-missing N₂-O₂ roto-translational band, which HITRAN does not give.
+missing N₂-O₂ roto-translational band, which HITRAN does not give
+(issue #718).
 
 ## Where it departs, and what is next
 
@@ -197,11 +233,15 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give.
   pre-industrial amounts are measured (ice cores, through the scenarios
   above); a law that makes them for any inhabited planet is not, and is
   not written here.
-- **Titan's grey stand-in can go.** Spectral N₂-N₂ and N₂-CH₄ pairs
+- **Titan's grey stand-in is gone.** Spectral N₂-N₂ and N₂-CH₄ pairs
   reach 92.3 K without a fit. What is still missing is N₂-H₂ (the model's
-  air has no H₂), methane's own lines, and the haze's infrared.
+  air has no H₂, issue #720), methane's own lines, and the haze's
+  infrared.
 - **The temperature grid** of `opacity.bin` starts at 100 K; Titan's
-  column runs from 69 to 94 K and takes 100 K lines.
+  column runs from 69 to 94 K and takes 100 K lines. The pairs' table
+  starts at 70 K and ends at 400 K: Titan's 69 K skin takes the 70 K
+  column, and a Venus at 735 K the 400 K one (each band held at its
+  warmest block, 330 to 400 K).
 
 ## Decisions (user, 2026-11-25)
 
@@ -267,8 +307,9 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give.
    (SHA-256 `f0525f75…849d`), `O2-O2_2024.cia` (`0146acfe…1efd4961`),
    `O2-N2_2024.cia` (`90851fbf…3799f`), `N2-CH4_2024.cia`
    (`7056ee0b…12523`), alternate `CH4-CH4_2011.cia` (`12de7692…403a`),
-   <https://hitran.org/cia/>, downloaded 2026-11-25, with
-   `CIA_References_2024.pdf` (read).
+   <https://hitran.org/cia/>, downloaded 2026-11-25 (and 2026-11-26,
+   the same bytes), with `CIA_References_2024.pdf` (read) and
+   `CIA_Readme_2024.pdf` (its eq. 3, the absorption of a mixture, read).
 7. HITRAN isotopologue metadata, <https://hitran.org/docs/iso-meta/>
    (read 2026-11-25).
 8. Hogan, R. J., Matricardi, M. 2020, "Evaluating and improving the

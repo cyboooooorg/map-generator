@@ -159,7 +159,7 @@ fn centre_cm(table: &Table, b: usize) -> f64 {
 /// ([`spectrum::co2_pairs`], binned from HITRAN's `CO2-CO2_2024.cia`,
 /// Karman et al. 2019, *Icarus* 328, 160,
 /// doi:10.1016/j.icarus.2019.02.034), taken every
-/// [`spectrum::CO2_CIA_CELL_CM`] across it. It grows as the CO2 density
+/// [`spectrum::CIA_CELL_CM`] across it. It grows as the CO2 density
 /// squared and is not broadened. Inside the shortwave table's range
 /// the file lists CO2-CO2 bands at 2510-3250 cm-1 (3.1-4.0 um) and
 /// 3995-4500 cm-1 (the 2.3 um band); it holds none at 1.73 um (5800
@@ -172,7 +172,7 @@ fn co2_pairs(table: &Table, b: usize, level: &Level) -> f64 {
     if lo >= spectrum::CO2_CIA_TOP_CM {
         return 0.0;
     }
-    let cell = spectrum::CO2_CIA_CELL_CM;
+    let cell = spectrum::CIA_CELL_CM;
     let n = ((hi - lo) / cell).ceil().max(1.0) as usize;
     let step = (hi - lo) / n as f64;
     (0..n)

@@ -1,5 +1,5 @@
 //! The double-precision spectrum the tests hold the column's fast one to
-//! (ported from `legacy-final`'s `planet/spectrum/reference.rs`): the same table, continua, pairs and methane
+//! (ported from `legacy-final`'s `planet/spectrum/reference.rs`): the same table, continua and pairs
 //! as [`super::fast_level`], bin by bin and band by band in `f64`, the
 //! black body of each bin by its exact integral, and the uniform air
 //! above a column's top. The column's own reference sum
@@ -46,7 +46,7 @@ pub(crate) struct BinAbsorption {
     pub(crate) co2: [f64; G],
     /// Water's lines at each g-point.
     pub(crate) water: [f64; G],
-    /// The continua of water and CO₂, CO₂–CO₂ pairs and methane.
+    /// The continua of water and CO₂ and the collision-induced pairs.
     pub(crate) smooth: f64,
 }
 
@@ -70,15 +70,15 @@ impl BinAbsorption {
 
 /// Absorption per unit `ln p` (vertical optical depths) in bin `i` of
 /// every absorber at `level`: CO₂'s and water's lines at their g-points,
-/// and water's continuum, CO₂–CO₂ collision-induced absorption and
-/// methane's grey stand-in (see the module documentation).
+/// and the continua of water and CO₂ and the collision-induced pairs (see
+/// the module documentation).
 pub(crate) fn absorption_per_ln_p(i: usize, level: &Level) -> BinAbsorption {
     OPACITY.bin_absorption(i, level)
 }
 
 /// Optical depth per `ln p` between `lo` and `hi` cm⁻¹ of what is smooth
-/// across a bin: the continua of water and CO₂ and the CO₂–CO₂ pairs at the bin's centre,
-/// and methane on the share of the bin it covers.
+/// across a bin: the continua of water and CO₂ and the collision-induced
+/// pairs at the bin's centre.
 fn smooth_between(lo: f64, hi: f64, level: &Level) -> f64 {
     let p = level.pressure_bar();
     let t = level.temperature_k;
@@ -88,8 +88,18 @@ fn smooth_between(lo: f64, hi: f64, level: &Level) -> f64 {
     let nu = 0.5 * (lo + hi);
     water_continuum(nu, level)
         + co2_continuum((lo / BIN_WIDTH_CM).round() as usize, level)
-        + co2_pairs(nu, level)
-        + methane(lo, hi, level)
+        + pairs_depth(nu, level)
+}
+
+/// Optical depth per `ln p` of every collision-induced pair at `nu`
+/// cm⁻¹ at `level` ([`Pair::depth`] summed over [`PAIRS`]).
+pub(crate) fn pairs_depth(nu: f64, level: &Level) -> f64 {
+    PAIRS
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| absorbs(*i))
+        .map(|(_, pair)| pair.depth(nu, level))
+        .sum()
 }
 
 /// Optical depth per `ln p` of the water continuum at `nu` cm⁻¹:
@@ -118,17 +128,6 @@ fn co2_continuum(i: usize, level: &Level) -> f64 {
     )
 }
 
-/// Optical depth per `ln p` of methane between `lo` and `hi` cm⁻¹: the
-/// rate of the grey methane law ([`methane::depth`]) at this level, on the
-/// share of the bin under [`METHANE_TOP_CM`].
-fn methane(lo: f64, hi: f64, level: &Level) -> f64 {
-    let share = ((METHANE_TOP_CM.min(hi) - lo) / (hi - lo)).clamp(0.0, 1.0);
-    if share <= 0.0 || level.gases.ch4 <= 0.0 {
-        return 0.0;
-    }
-    share * methane::depth(&level.gases).1
-}
-
 /// The absorption of every band at one level, per unit `ln p` (see
 /// [`BinAbsorption`]; the tail's is the last bin's, see [`TAIL`]).
 #[derive(Clone, Debug)]
@@ -137,7 +136,8 @@ pub(crate) struct Spectrum {
     pub(crate) co2: [[f64; G]; BANDS],
     /// Water's lines, per band and g-point.
     pub(crate) water: [[f64; G]; BANDS],
-    /// The continua of water and CO₂, CO₂–CO₂ pairs and methane, per band.
+    /// The continua of water and CO₂ and the collision-induced pairs, per
+    /// band.
     pub(crate) smooth: [f64; BANDS],
 }
 
@@ -223,17 +223,13 @@ fn smooth_spectrum(level: &Level, out: &mut [f64; BANDS]) {
 /// Vertical optical depth of each band above `level`, the top of a
 /// column, through a uniform air at its temperature and composition
 /// above it: half its rate per `ln p` ([`absorption_spectrum`], in
-/// `rate`) for every absorber that grows as `p²` (lines broadened by the
-/// pressure, the continuum, the CO₂ pairs), and methane's column total
-/// (the methane law, [`methane::depth`], saturates).
-pub(crate) fn depth_above(level: &Level, rate: &Spectrum, out: &mut Spectrum) {
-    let (total, methane_rate) = methane::depth(&level.gases);
-    let table = &*BIN_TABLE;
+/// `rate`), since every absorber grows as `p²` there (lines broadened by
+/// the pressure, the continua, the pairs).
+pub(crate) fn depth_above(rate: &Spectrum, out: &mut Spectrum) {
     for i in 0..BANDS {
         out.co2[i] = rate.co2[i].map(|k| 0.5 * k);
         out.water[i] = rate.water[i].map(|k| 0.5 * k);
-        let share = table.methane_share[i.min(BINS - 1)];
-        out.smooth[i] = 0.5 * rate.smooth[i] + share * (total - 0.5 * methane_rate);
+        out.smooth[i] = smooth_above(rate.smooth[i]);
     }
 }
 
@@ -317,14 +313,12 @@ impl super::SmoothRates {
                 * scale
                 * radiation;
         }
-        if let Some((j, f, scale)) = self.pairs
-            && let Some(row) = table.cia_row[i]
-        {
-            let v = CO2_CIA[row].1;
-            o += (v[j] * (1.0 - f) + v[j + 1] * f) * scale;
-        }
-        if let Some(rate) = self.methane {
-            o += table.methane_share[i] * rate;
+        for (pair, rates) in PAIRS.iter().zip(&self.pairs) {
+            if let Some((column, scale)) = *rates
+                && let Some(row) = pair.rows.get(i).copied().flatten()
+            {
+                o += pair.coefficient(row, column) * scale;
+            }
         }
         if let Some((ln_t, scale)) = self.co2_continuum {
             let coefficient = OPACITY.co2_continuum[i];

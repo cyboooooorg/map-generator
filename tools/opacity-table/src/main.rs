@@ -13,11 +13,12 @@
 //! the bands of the albedo's stellar spectrum from 0.7 to 5 µm
 //! ([`shortwave_edges`]), with MT_CKD's water continuum binned in.
 //!
-//! `--continua` writes, instead of a table, the two text files the
+//! `--continua` writes, instead of a table, the three text files the
 //! spectrum reads: `mt-ckd-water.tsv` (MT_CKD's water continuum at every
-//! 50 cm⁻¹) and `co2-cia.tsv` (HITRAN's CO₂–CO₂ collision-induced
-//! absorption on 20 cm⁻¹ cells), into `crates/science/data/` (or the
-//! directory of `--out`).
+//! 50 cm⁻¹), `co2-cia.tsv` (HITRAN's CO₂–CO₂ collision-induced
+//! absorption on 20 cm⁻¹ cells) and `pairs-cia.tsv` (HITRAN's N₂–N₂,
+//! O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄ pairs on the same cells), into
+//! `crates/science/data/` (or the directory of `--out`).
 //!
 //! `--ozone` writes, instead of a table, `ozone.tsv`: ozone's
 //! cross-sections of Serdyuchenko et al. (2014) at 223 and 233 K reduced
@@ -404,11 +405,49 @@ fn cia_header() -> String {
         })
 }
 
+/// Temperatures, K, of the columns of `pairs-cia.tsv`: every 10 K from
+/// 70 to 400 K, the grid of HITRAN's N₂–N₂ roto-translational blocks
+/// (Chistikov et al. 2019) and of its N₂–CH₄ file (Finenko et al. 2022),
+/// onto which the other files' blocks are interpolated
+/// ([`cia::Cia::interpolated`]). The science crate holds the same list
+/// (`spectrum::PAIRS_CIA_K`); both check it against the file's header,
+/// which [`pairs_header`] writes from this one.
+const PAIR_TEMPERATURES_K: [f64; 34] = {
+    let mut out = [0.0; 34];
+    let mut i = 0;
+    while i < 34 {
+        out[i] = 70.0 + 10.0 * i as f64;
+        i += 1;
+    }
+    out
+};
+
+/// The pairs of `pairs-cia.tsv`, in its order: the name its rows carry
+/// and HITRAN's file (`fetch.sh`; sources in `crates/science/data/OPACITY.md`).
+const PAIR_FILES: [(&str, &str); 5] = [
+    ("N2-N2", "N2-N2_2021.cia"),
+    ("O2-O2", "O2-O2_2024.cia"),
+    ("O2-N2", "O2-N2_2024.cia"),
+    ("N2-CH4", "N2-CH4_2024.cia"),
+    ("CH4-CH4", "CH4-CH4_2011.cia"),
+];
+
+/// The first line of `pairs-cia.tsv`: its columns, the temperatures
+/// named.
+fn pairs_header() -> String {
+    PAIR_TEMPERATURES_K
+        .iter()
+        .fold(String::from("# pair cell_start_cm"), |h, t| {
+            h + &format!(" k_{t}K")
+        })
+}
+
 /// Spacing, cm⁻¹, of the water continuum's nodes in `mt-ckd-water.tsv`,
 /// and the last of them.
 const WATER_NODES_CM: (f64, f64) = (50.0, 5000.0);
 
-/// Writes `mt-ckd-water.tsv` and `co2-cia.tsv` (`--continua`).
+/// Writes `mt-ckd-water.tsv`, `co2-cia.tsv` and `pairs-cia.tsv`
+/// (`--continua`).
 fn write_continua(o: &Options) -> Result<(), String> {
     let dir = if o.out_given {
         o.out.parent().map(Path::to_path_buf).unwrap_or_default()
@@ -452,6 +491,26 @@ fn write_continua(o: &Options) -> Result<(), String> {
     }
     write_file(&dir.join("co2-cia.tsv"), &tsv)?;
     eprintln!("{} water nodes, {} CIA cells", nodes.len(), cells.len());
+
+    let mut tsv = pairs_header() + "\n";
+    tsv += "# HITRAN N2-N2_2021, O2-O2_2024, O2-N2_2024, N2-CH4_2024 and CH4-CH4_2011 (alternate) .cia\n\
+         # binned on 20 cm-1 cells to 5000 cm-1 (trapezoid mean; blocks interpolated linearly in temperature\n\
+         # within each band, held at its ends): pair; cell start in cm-1; binary absorption coefficient\n\
+         # in cm5 per molecule2 at every 10 K from 70 to 400 K. Written by tools/opacity-table --continua.\n";
+    for (name, file) in PAIR_FILES {
+        let text = String::from_utf8(read(file)?).map_err(|e| e.to_string())?;
+        let cia = cia::Cia::parse(&text).ok_or(format!("{file}: unreadable"))?;
+        let cells = cia.interpolated(20.0, 5000.0, &PAIR_TEMPERATURES_K);
+        for (start, k) in &cells {
+            tsv += &format!("{name}\t{start:.1}");
+            for v in k {
+                tsv += &format!("\t{v:.4e}");
+            }
+            tsv += "\n";
+        }
+        eprintln!("{name}: {} cells", cells.len());
+    }
+    write_file(&dir.join("pairs-cia.tsv"), &tsv)?;
     Ok(())
 }
 
@@ -590,6 +649,11 @@ mod tests {
     fn the_committed_cia_table_is_at_the_tools_temperatures() {
         let committed = include_str!("../../../crates/science/data/co2-cia.tsv");
         assert_eq!(committed.lines().next(), Some(super::cia_header().as_str()));
+        let committed = include_str!("../../../crates/science/data/pairs-cia.tsv");
+        assert_eq!(
+            committed.lines().next(),
+            Some(super::pairs_header().as_str())
+        );
     }
 
     use super::*;

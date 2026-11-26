@@ -34,14 +34,15 @@
 //!   et al. 2012), the self part growing as the vapour pressure squared
 //!   and the foreign part as the vapour times the other gases
 //!   ([`MT_CKD`]); it assumes the 25 cm⁻¹ line cutoff the table uses.
-//! - **CO₂–CO₂ collision-induced absorption:** HITRAN2024's CIA file,
-//!   documented by Terragni et al. (HITRAN2024 CIA), binned
-//!   ([`CO2_CIA`]), growing as the CO₂ density squared, not broadened.
-//! - **Methane:** its grey stand-in for Titan's collision-induced
-//!   absorption ([`super::methane::depth`]), over
-//!   0-[`METHANE_TOP_CM`] cm⁻¹ only.
+//! - **Collision-induced absorption:** HITRAN's CIA files, binned
+//!   ([`PAIRS`]): CO₂–CO₂ (HITRAN2024, documented by Terragni et al.,
+//!   [`CO2_CIA`]), and the N₂–N₂, O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄ pairs
+//!   ([`PAIRS_CIA`], study 36, `docs/science/longwave-absorbers.md`),
+//!   each growing as the product of its two gases' densities, not
+//!   broadened. Titan's greenhouse is these pairs; methane has no other
+//!   infrared absorption here (no lines yet).
 //!
-//! The continua, the pairs and methane are smooth across a bin: each is
+//! The continua and the pairs are smooth across a bin: each is
 //! one optical depth per bin, added to every g-point ([`FastLevel`]). The
 //! double-precision sums the tests hold the fast ones to are in
 //! `reference`.
@@ -61,7 +62,6 @@ use super::gases::{
 };
 pub(crate) use super::ktable::G;
 use super::ktable::{CO2_SELF_SET, CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
-use super::methane;
 use crate::constants::{
     AVOGADRO, BOLTZMANN, PASCALS_PER_BAR, SECOND_RADIATION_CONSTANT_CM_K, STEFAN_BOLTZMANN,
 };
@@ -317,11 +317,12 @@ static MT_CKD: LazyLock<Vec<[f64; 4]>> = LazyLock::new(|| {
 /// table's temperature grid. An author's choice with no source: for each
 /// band the file's set nearest each of them is binned (see [`CO2_CIA`]),
 /// and the coefficient is interpolated linearly between them, held at the
-/// ends ([`co2_cia_column`]).
+/// ends ([`Pair::coefficient`]).
 const CO2_CIA_K: [f64; 4] = [200.0, 300.0, 450.0, 800.0];
 
-/// Definition: width of the cells of [`CO2_CIA`], cm⁻¹.
-pub(crate) const CO2_CIA_CELL_CM: f64 = 20.0;
+/// Definition: width of the cells of the pair tables ([`CO2_CIA`],
+/// [`PAIRS_CIA`]), cm⁻¹, the model's bin width.
+pub(crate) const CIA_CELL_CM: f64 = 20.0;
 
 /// Source: upper end, cm⁻¹, of the last band of [`CO2_CIA`], the end of
 /// HITRAN's `CO2-CO2_2024.cia` (1-4500 cm⁻¹).
@@ -333,7 +334,7 @@ pub(crate) const CO2_CIA_TOP_CM: f64 = 4500.0;
 /// Absorption in HITRAN2024", and `CIA_Readme_2024.pdf`; SHA-256 in
 /// `OPACITY.md`) by `tools/opacity-table --continua` into
 /// `crates/science/data/co2-cia.tsv`: the start of each
-/// [`CO2_CIA_CELL_CM`] cm⁻¹ cell and the trapezoid mean of the binary
+/// [`CIA_CELL_CM`] cm⁻¹ cell and the trapezoid mean of the binary
 /// absorption coefficient over it, cm⁵/molecule², at each of
 /// [`CO2_CIA_K`]. Each band takes the file's set nearest that
 /// temperature, held at its warmest past it. The bands and their sources
@@ -355,35 +356,118 @@ pub(crate) const CO2_CIA_TOP_CM: f64 = 4500.0;
 ///
 /// Cells under 1e-50 cm⁵ at every temperature are left out (at Venus's
 /// 92 bar and 735 K they would add under 0.013 to the depth per `ln p`).
-static CO2_CIA: LazyLock<Vec<(f64, [f64; 4])>> = LazyLock::new(|| {
+static CO2_CIA: LazyLock<Vec<(f64, Vec<f64>)>> = LazyLock::new(|| {
     let text = include_str!("../../data/co2-cia.tsv");
     // The header names the columns' temperatures: a table written at other
     // temperatures than [`CO2_CIA_K`] must not be read as these.
-    let header = CO2_CIA_K
-        .iter()
-        .fold(String::from("# cell_start_cm"), |h, t| {
-            h + &format!(" k_{t}K")
-        });
     assert_eq!(
         text.lines().next(),
-        Some(header.as_str()),
+        Some(cia_header("# cell_start_cm", &CO2_CIA_K).as_str()),
         "co2-cia.tsv's columns are not at {CO2_CIA_K:?} K"
     );
-    let rows: Vec<(f64, [f64; 4])> = parse_rows::<5>(text, "co2-cia.tsv")
+    let rows: Vec<(f64, Vec<f64>)> = parse_rows::<5>(text, "co2-cia.tsv")
         .into_iter()
-        .map(|r| (r[0], [r[1], r[2], r[3], r[4]]))
+        .map(|r| (r[0], r[1..].to_vec()))
         .collect();
+    check_cells(&rows, CO2_CIA_TOP_CM, "co2-cia.tsv");
+    rows
+});
+
+/// Definition: the temperatures, K, of the columns of [`PAIRS_CIA`],
+/// every 10 K from 70 to 400 K: the grid of HITRAN's N₂–N₂
+/// roto-translational blocks (Chistikov et al. 2019) and of its N₂–CH₄
+/// file (Finenko et al. 2022), onto which the other files' blocks are
+/// interpolated. The coefficient is interpolated linearly between them,
+/// held at the ends ([`Pair::coefficient`]): Titan's 69 K skin takes the
+/// 70 K column, a Venus at 735 K the 400 K one.
+pub(crate) const PAIRS_CIA_K: [f64; 34] = {
+    let mut out = [0.0; 34];
+    let mut i = 0;
+    while i < 34 {
+        out[i] = 70.0 + 10.0 * i as f64;
+        i += 1;
+    }
+    out
+};
+
+/// Source: the nitrogen, oxygen and methane pairs, binned from HITRAN's
+/// collision-induced absorption files by `tools/opacity-table
+/// --continua` into `crates/science/data/pairs-cia.tsv` (study 36,
+/// `docs/science/longwave-absorbers.md`; SHA-256 of each file in
+/// `OPACITY.md`): per pair, the start of each [`CIA_CELL_CM`] cm⁻¹ cell
+/// and the trapezoid mean of the binary absorption coefficient over it,
+/// cm⁵/molecule², at each of [`PAIRS_CIA_K`], each band's blocks
+/// interpolated linearly in temperature and held at their ends. The files
+/// and the sources of their blocks (`CIA_References_2024.pdf`, Karman et
+/// al. 2019, *Icarus* 328, 160, doi:10.1016/j.icarus.2019.02.034):
+///
+/// - `N2-N2_2021.cia`: roto-translational, 0-650 cm⁻¹ at 70 to 400 K,
+///   Chistikov et al. 2019 (*J. Chem. Phys.* 151 (19),
+///   doi:10.1063/1.5125756, classical trajectories); fundamental,
+///   2000-2698 cm⁻¹ at 228 to 272 K, Lafferty et al. 1996 (*Appl. Opt.*
+///   35, 5911, doi:10.1364/AO.35.005911), and 1850-3000 cm⁻¹ at 301 to
+///   363 K, Baranov, Lafferty & Fraser 2005 (*J. Mol. Spectrosc.* 233,
+///   160, doi:10.1016/j.jms.2005.06.008); first overtone, 4300-5000 cm⁻¹
+///   at 200 to 330 K, Hartmann, Boulet & Toon 2017 (*J. Geophys. Res.
+///   Atmos.* 122, 2419, doi:10.1002/2016JD025677);
+/// - `O2-O2_2024.cia`: fundamental, 1150-1950 cm⁻¹ at 193 to 353 K,
+///   Baranov, Lafferty & Fraser 2005 (its bands past 5000 cm⁻¹ are
+///   outside the spectrum);
+/// - `O2-N2_2024.cia`: O₂'s fundamental induced by N₂, 1300-1850 cm⁻¹ at
+///   193 to 356 K, Thibault et al. 1997 (*Appl. Opt.* 36, 563,
+///   doi:10.1364/ao.36.000563) and Orlando et al. 1991 (*J. Geophys.
+///   Res.* 96, 20755, doi:10.1029/91JD02042); N₂'s fundamental induced
+///   by O₂, 1850-3000 cm⁻¹ at 228 to 363 K, estimated from N₂–N₂ with
+///   Lafferty et al. 1996's eq. 7;
+/// - `N2-CH4_2024.cia`: 0-800 cm⁻¹ at 70 to 400 K, Finenko et al. 2022
+///   (*Astrophys. J. Suppl.* 258, 33, doi:10.3847/1538-4365/ac36d3),
+///   built for Titan;
+/// - `CH4-CH4_2011.cia` (HITRAN's alternate set, the only CH₄–CH₄ file it
+///   serves): 0-990 cm⁻¹ at 40 to 400 K, Borysow & Frommhold 1987
+///   (*Astrophys. J.* 318, 940, doi:10.1086/165426).
+///
+/// Cells under 1e-50 cm⁵ at every temperature are left out.
+static PAIRS_CIA: LazyLock<Vec<(String, f64, Vec<f64>)>> = LazyLock::new(|| {
+    let text = include_str!("../../data/pairs-cia.tsv");
+    assert_eq!(
+        text.lines().next(),
+        Some(cia_header("# pair cell_start_cm", &PAIRS_CIA_K).as_str()),
+        "pairs-cia.tsv's columns are not at {PAIRS_CIA_K:?} K"
+    );
+    text.lines()
+        .enumerate()
+        .filter(|(_, line)| !line.starts_with('#') && !line.trim().is_empty())
+        .map(|(index, line)| {
+            let (name, numbers) = line
+                .split_once('\t')
+                .unwrap_or_else(|| panic!("pairs-cia.tsv line {}: no pair", index + 1));
+            let row = parse_rows::<35>(numbers, "pairs-cia.tsv")
+                .pop()
+                .unwrap_or_else(|| panic!("pairs-cia.tsv line {}: no numbers", index + 1));
+            (name.to_string(), row[0], row[1..].to_vec())
+        })
+        .collect()
+});
+
+/// The header line of a pair table: `first`, then a `k_<T>K` per
+/// column.
+fn cia_header(first: &str, temperatures: &[f64]) -> String {
+    temperatures
+        .iter()
+        .fold(String::from(first), |h, t| h + &format!(" k_{t}K"))
+}
+
+/// Panics, naming `file`, unless `rows` are on ascending cells of
+/// [`CIA_CELL_CM`] under `top_cm`, with coefficients of zero or more.
+fn check_cells(rows: &[(f64, Vec<f64>)], top_cm: f64, file: &str) {
     assert!(
         rows.windows(2).all(|w| w[0].0 < w[1].0)
             && rows.iter().all(|(start, k)| {
-                *start % CO2_CIA_CELL_CM == 0.0
-                    && *start < CO2_CIA_TOP_CM
-                    && k.iter().all(|k| *k >= 0.0)
+                *start % CIA_CELL_CM == 0.0 && *start < top_cm && k.iter().all(|k| *k >= 0.0)
             }),
-        "co2-cia.tsv is not on ascending cells of {CO2_CIA_CELL_CM} cm⁻¹"
+        "{file} is not on ascending cells of {CIA_CELL_CM} cm⁻¹"
     );
-    rows
-});
+}
 
 /// The rows of a tab-separated table of `N` numbers per line, its lines
 /// starting with `#` skipped; a malformed line panics, naming `file`.
@@ -407,47 +491,188 @@ fn parse_rows<const N: usize>(text: &str, file: &str) -> Vec<[f64; N]> {
         .collect()
 }
 
-/// Optical depth per `ln p` of CO₂–CO₂ pairs at `nu` cm⁻¹:
-/// `k(ν, T) n²` per metre of air (`n` the CO₂ number density), times the
-/// air's thickness per `ln p`, `k_B T / (m̄ g)`. Not broadened.
-pub(crate) fn co2_pairs(nu: f64, level: &Level) -> f64 {
-    let co2 = level.gases.co2;
-    if co2 <= 0.0 {
-        return 0.0;
+/// A gas of a collision-induced pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Partner {
+    N2,
+    O2,
+    Co2,
+    Ch4,
+}
+
+impl Partner {
+    /// Partial pressure of this gas in `gases`, bar.
+    fn bar(self, gases: &PartialPressures) -> f64 {
+        match self {
+            Self::N2 => gases.n2,
+            Self::O2 => gases.o2,
+            Self::Co2 => gases.co2,
+            Self::Ch4 => gases.ch4,
+        }
     }
-    let Some(row) = co2_cia_row(nu) else {
-        return 0.0;
-    };
-    let values = CO2_CIA[row].1;
-    let (j, f) = co2_cia_column(level.temperature_k);
-    let k_cm5 = values[j] * (1.0 - f) + values[j + 1] * f;
-    let density_m3 = level.density_m3(co2);
-    k_cm5 * 1e-10 * density_m3 * density_m3 * level.thickness_per_ln_p_m()
 }
 
-/// Row of [`CO2_CIA`] whose cell holds `nu` cm⁻¹, if any.
-fn co2_cia_row(nu: f64) -> Option<usize> {
-    let cell = (nu / CO2_CIA_CELL_CM).floor() * CO2_CIA_CELL_CM;
-    CO2_CIA
-        .binary_search_by(|(start, _)| start.total_cmp(&cell))
-        .ok()
+/// A collision-induced pair: its two gases and its binned coefficients.
+pub(crate) struct Pair {
+    /// The two gases whose densities multiply.
+    pub(crate) gases: (Partner, Partner),
+    /// Temperatures, K, of the columns of `cells`, ascending.
+    temperatures_k: &'static [f64],
+    /// The cells that hold absorption: the index of the cell
+    /// ([`CIA_CELL_CM`] cm⁻¹ from 0, the model's bin) and its
+    /// coefficient at each temperature, cm⁵/molecule².
+    cells: Vec<(usize, Vec<f64>)>,
+    /// For each cell from 0, its row of `cells`, if any.
+    rows: Vec<Option<usize>>,
 }
 
-/// Where `t_k` falls among [`CO2_CIA_K`]: the column below it and the
-/// share of the next, held at the ends.
-fn co2_cia_column(t_k: f64) -> (usize, f64) {
-    if t_k <= CO2_CIA_K[0] {
-        (0, 0.0)
-    } else if t_k >= CO2_CIA_K[3] {
-        (2, 1.0)
-    } else {
-        let j = CO2_CIA_K
+impl Pair {
+    /// The pair `name` of `gases`, from the rows `(cell start, k at each
+    /// of temperatures_k)` of its table.
+    fn new(
+        name: &'static str,
+        gases: (Partner, Partner),
+        temperatures_k: &'static [f64],
+        rows: impl IntoIterator<Item = (f64, Vec<f64>)>,
+    ) -> Self {
+        let cells: Vec<(usize, Vec<f64>)> = rows
+            .into_iter()
+            .map(|(start, k)| {
+                assert_eq!(k.len(), temperatures_k.len(), "{name}: a row's columns");
+                ((start / CIA_CELL_CM).round() as usize, k)
+            })
+            .collect();
+        let mut index = vec![None; cells.last().map_or(0, |c| c.0 + 1)];
+        for (row, (cell, _)) in cells.iter().enumerate() {
+            index[*cell] = Some(row);
+        }
+        Self {
+            gases,
+            temperatures_k,
+            cells,
+            rows: index,
+        }
+    }
+
+    /// Where `t_k` falls among the pair's temperatures: the column below
+    /// it and the share of the next, held at the ends.
+    fn column(&self, t_k: f64) -> (usize, f64) {
+        let ts = self.temperatures_k;
+        let last = ts.len() - 1;
+        if t_k <= ts[0] {
+            (0, 0.0)
+        } else if t_k >= ts[last] {
+            (last - 1, 1.0)
+        } else {
+            let j = ts
+                .iter()
+                .rposition(|&k| k <= t_k)
+                .unwrap_or(0)
+                .min(last - 1);
+            (j, (t_k - ts[j]) / (ts[j + 1] - ts[j]))
+        }
+    }
+
+    /// The pair's coefficient, cm⁵/molecule², in the cell of `row` at the
+    /// column `j` and share `f` of the next ([`Pair::column`]).
+    fn coefficient(&self, row: usize, (j, f): (usize, f64)) -> f64 {
+        let k = &self.cells[row].1;
+        k[j] * (1.0 - f) + k[j + 1] * f
+    }
+
+    /// The factor of the pair's coefficient at `level`, per `ln p`:
+    /// `1e-10 n_a n_b dz/d ln p` (cm⁵ to m⁵, the two gases' number
+    /// densities, the air's thickness per `ln p`); none when either gas
+    /// is absent.
+    fn factor(&self, level: &Level) -> Option<f64> {
+        let (a, b) = (
+            self.gases.0.bar(&level.gases),
+            self.gases.1.bar(&level.gases),
+        );
+        (a > 0.0 && b > 0.0).then(|| {
+            1e-10 * level.density_m3(a) * level.density_m3(b) * level.thickness_per_ln_p_m()
+        })
+    }
+
+    /// Optical depth per `ln p` of the pair at `nu` cm⁻¹ at `level`:
+    /// `k(ν, T) n_a n_b` per metre of air (the binary absorption
+    /// coefficient `k` of HITRAN's `CIA_Readme_2024.pdf`, its eq. 3, the
+    /// same for a like and an unlike pair), times the air's thickness per `ln p`,
+    /// `k_B T / (m̄ g)`. Not broadened.
+    pub(crate) fn depth(&self, nu: f64, level: &Level) -> f64 {
+        let Some(factor) = self.factor(level) else {
+            return 0.0;
+        };
+        let cell = (nu / CIA_CELL_CM).floor();
+        if cell < 0.0 {
+            return 0.0;
+        }
+        match self.rows.get(cell as usize).copied().flatten() {
+            Some(row) => self.coefficient(row, self.column(level.temperature_k)) * factor,
+            None => 0.0,
+        }
+    }
+}
+
+/// Definition: index of CO₂–CO₂ in [`PAIRS`].
+pub(crate) const CO2_PAIR: usize = 0;
+
+/// Definition: the number of pairs in [`PAIRS`].
+pub(crate) const PAIR_COUNT: usize = 6;
+
+/// The collision-induced pairs of the column, each with its source
+/// ([`CO2_CIA`], [`PAIRS_CIA`]): CO₂–CO₂, N₂–N₂, O₂–O₂, O₂–N₂, N₂–CH₄
+/// and CH₄–CH₄.
+pub(crate) static PAIRS: LazyLock<[Pair; PAIR_COUNT]> = LazyLock::new(|| {
+    let of = |name: &'static str, gases| {
+        let rows = PAIRS_CIA
             .iter()
-            .rposition(|&k| k <= t_k)
-            .unwrap_or(0)
-            .min(2);
-        (j, (t_k - CO2_CIA_K[j]) / (CO2_CIA_K[j + 1] - CO2_CIA_K[j]))
+            .filter(|(n, _, _)| n == name)
+            .map(|(_, start, k)| (*start, k.clone()))
+            .collect::<Vec<_>>();
+        assert!(!rows.is_empty(), "pairs-cia.tsv holds no {name}");
+        check_cells(&rows, SPECTRUM_TOP_CM, "pairs-cia.tsv");
+        Pair::new(name, gases, &PAIRS_CIA_K, rows)
+    };
+    use Partner::{Ch4, Co2, N2, O2};
+    [
+        Pair::new("CO2-CO2", (Co2, Co2), &CO2_CIA_K, CO2_CIA.iter().cloned()),
+        of("N2-N2", (N2, N2)),
+        of("O2-O2", (O2, O2)),
+        of("O2-N2", (O2, N2)),
+        of("N2-CH4", (N2, Ch4)),
+        of("CH4-CH4", (Ch4, Ch4)),
+    ]
+});
+
+#[cfg(test)]
+thread_local! {
+    /// Test builds only: the pairs of [`PAIRS`] (a bit per index) the
+    /// spectrum leaves out on this thread while it is set, so that a test
+    /// can take a pair's share of the outgoing radiation as the line-by-line
+    /// sources do (the gas kept in the air, its absorption removed). A test
+    /// that sets it uses a fresh `ColumnCache` and clears it after.
+    pub(crate) static PAIRS_LEFT_OUT: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+/// Whether pair `i` of [`PAIRS`] absorbs: always, but in a test that
+/// leaves it out ([`PAIRS_LEFT_OUT`]).
+fn absorbs(i: usize) -> bool {
+    #[cfg(test)]
+    {
+        PAIRS_LEFT_OUT.with(|left| left.get() & (1 << i) == 0)
     }
+    #[cfg(not(test))]
+    {
+        let _ = i;
+        true
+    }
+}
+
+/// Optical depth per `ln p` of CO₂–CO₂ pairs at `nu` cm⁻¹ at `level`
+/// ([`Pair::depth`]), the only pair the shortwave table takes.
+pub(crate) fn co2_pairs(nu: f64, level: &Level) -> f64 {
+    PAIRS[CO2_PAIR].depth(nu, level)
 }
 
 /// The radiation term `R(ν, T) = ν tanh(c₂ν / 2T)` of MT_CKD's continua,
@@ -535,16 +760,6 @@ pub(crate) fn co2_continuum_depth(
         * level.molecules_per_ln_p(co2)
 }
 
-/// Calibration: upper end, cm⁻¹, of methane's grey stand-in
-/// ([`super::methane`]), the far infrared where Titan's N₂–N₂ and CH₄–N₂
-/// collision-induced absorption lies. Part of the stand-in's calibration
-/// with [`super::methane`]'s opacity, fitted on Titan's surface
-/// temperature; the legacy names Courtin, Gautier & McKay 1995 (*Icarus*
-/// 114, 144) as "the design's call", a paper not read for this value
-/// (audit, Wiki study 19). A spectral N₂–CH₄ CIA from HITRAN would
-/// source it (future work).
-const METHANE_TOP_CM: f64 = 650.0;
-
 /// Definition: bands of the column's sum: the [`BINS`] bins, and the tail past
 /// [`SPECTRUM_TOP_CM`] as one more band ([`TAIL`]).
 pub(crate) const BANDS: usize = BINS + 1;
@@ -565,10 +780,6 @@ struct BinTable {
     /// [`MT_CKD`]'s self coefficient, its temperature exponent and its
     /// foreign coefficient at the centre ([`mt_ckd_at`]).
     continuum: [(f64, f64, f64); BINS],
-    /// Row of [`CO2_CIA`], if the bin has one.
-    cia_row: [Option<usize>; BINS],
-    /// Share of the bin under [`METHANE_TOP_CM`].
-    methane_share: [f64; BINS],
 }
 
 /// Definition: [`BinTable::continuum`] in single precision. The self and foreign
@@ -590,16 +801,12 @@ static BIN_TABLE: LazyLock<BinTable> = LazyLock::new(|| {
     let mut table = BinTable {
         centre_cm: [0.0; BINS],
         continuum: [(0.0, 0.0, 0.0); BINS],
-        cia_row: [None; BINS],
-        methane_share: [0.0; BINS],
     };
     for i in 0..BINS {
         let (lo, hi) = bin_edges(i);
         let nu = 0.5 * (lo + hi);
         table.centre_cm[i] = nu;
         table.continuum[i] = mt_ckd_at(nu);
-        table.cia_row[i] = co2_cia_row(nu);
-        table.methane_share[i] = ((METHANE_TOP_CM.min(hi) - lo) / (hi - lo)).clamp(0.0, 1.0);
     }
     table
 });
@@ -622,7 +829,7 @@ fn mt_ckd_at(nu: f64) -> (f64, f64, f64) {
 }
 
 /// What the smooth absorption of a bin needs at one level, taken once for every bin:
-/// the continua of water and CO₂, the CO₂ pairs and methane, each when the level
+/// the continua of water and CO₂ and the collision-induced pairs, each when the level
 /// holds it.
 struct SmoothRates {
     /// The level's temperature, K.
@@ -630,11 +837,11 @@ struct SmoothRates {
     /// Water's continuum: the vapour, bar; `ln (296 K / T)`; the other
     /// gases, bar; and the factor of the absorption per molecule.
     continuum: Option<(f64, f64, f64, f64)>,
-    /// CO₂ pairs: the column of [`CO2_CIA_K`] below the temperature, the
-    /// share of the next, and the factor of the coefficient.
-    pairs: Option<(usize, f64, f64)>,
-    /// Methane's rate per `ln p` ([`super::methane::depth`]).
-    methane: Option<f64>,
+    /// Each pair of [`PAIRS`] the level holds: the column of its
+    /// temperatures below the level's, the share of the next
+    /// ([`Pair::column`]), and the factor of its coefficient
+    /// ([`Pair::factor`]).
+    pairs: [Option<((usize, f64), f64)>; PAIR_COUNT],
     /// CO₂'s continuum: `ln (T / T_eff)` and the factor of its
     /// coefficient.
     co2_continuum: Option<(f64, f64)>,
@@ -652,16 +859,13 @@ impl SmoothRates {
             let scale = ratio / MT_CKD_REFERENCE_BAR * 1e-4 * level.molecules_per_ln_p(e);
             (e, ratio.ln(), others, scale)
         });
-        let pairs = (g.co2 > 0.0).then(|| {
-            let (j, f) = co2_cia_column(t);
-            let density_m3 = level.density_m3(g.co2);
-            (
-                j,
-                f,
-                1e-10 * density_m3 * density_m3 * level.thickness_per_ln_p_m(),
-            )
+        let pairs = std::array::from_fn(|i| {
+            let pair = &PAIRS[i];
+            absorbs(i)
+                .then(|| pair.factor(level))
+                .flatten()
+                .map(|factor| (pair.column(t), factor))
         });
-        let methane = (g.ch4 > 0.0).then(|| methane::depth(g).1);
         let co2_continuum = (g.co2 > 0.0).then(|| {
             let density = p / MT_CKD_REFERENCE_BAR * MT_CKD_REFERENCE_K / t;
             (
@@ -673,7 +877,6 @@ impl SmoothRates {
             t,
             continuum,
             pairs,
-            methane,
             co2_continuum,
         }
     }
@@ -683,7 +886,6 @@ impl SmoothRates {
     /// with [`super::fast_math`]'s `exp` (`tanh y = 1 − 2 / (e^{2y} + 1)`).
     fn fast(&self, out: &mut [f32]) {
         use super::fast_math::exp;
-        let table = &*BIN_TABLE;
         out.fill(0.0);
         if let Some((e, ln_ratio, others, scale)) = self.continuum {
             let (e, ln_ratio, others, scale) = (
@@ -710,17 +912,13 @@ impl SmoothRates {
                     * radiation;
             }
         }
-        if let Some((j, f, scale)) = self.pairs {
-            for (o, row) in out.iter_mut().zip(&table.cia_row) {
-                if let Some(row) = row {
-                    let v = CO2_CIA[*row].1;
-                    *o += ((v[j] * (1.0 - f) + v[j + 1] * f) * scale) as f32;
+        for (pair, rates) in PAIRS.iter().zip(&self.pairs) {
+            if let Some((column, scale)) = *rates {
+                for (row, (bin, _)) in pair.cells.iter().enumerate() {
+                    if let Some(o) = out.get_mut(*bin) {
+                        *o += (pair.coefficient(row, column) * scale) as f32;
+                    }
                 }
-            }
-        }
-        if let Some(rate) = self.methane {
-            for (o, share) in out.iter_mut().zip(&table.methane_share) {
-                *o += (share * rate) as f32;
             }
         }
         if let Some((ln_t, scale)) = self.co2_continuum {
@@ -747,7 +945,7 @@ pub(crate) struct FastLevel {
     /// Water's lines and their logarithms.
     pub(crate) water: [f32; POINTS],
     pub(crate) water_ln: [f32; POINTS],
-    /// The continua of water and CO₂, CO₂–CO₂ pairs and methane, per bin, and their
+    /// The continua of water and CO₂ and the collision-induced pairs, per bin, and their
     /// logarithms.
     pub(crate) smooth: [f32; BINS],
     pub(crate) smooth_ln: [f32; BINS],
@@ -833,12 +1031,12 @@ fn ln_all(x: &[f32], out: &mut [f32]) {
     }
 }
 
-/// Vertical optical depth per bin above `level`, the top of a column, of
-/// what is smooth: `reference::depth_above`'s, from the level's smooth rate `smooth` in
-/// bin `bin`.
-pub(crate) fn smooth_above(level: &Level, smooth: f64, bin: usize) -> f64 {
-    let (total, methane_rate) = methane::depth(&level.gases);
-    0.5 * smooth + BIN_TABLE.methane_share[bin] * (total - 0.5 * methane_rate)
+/// Vertical optical depth per bin above the top of a column, of what is
+/// smooth: `reference::depth_above`'s, half the top level's smooth rate
+/// `smooth` (every smooth absorber grows as `p²` in a uniform air above
+/// it).
+pub(crate) fn smooth_above(smooth: f64) -> f64 {
+    0.5 * smooth
 }
 
 /// Black-body flux, W/m², of every band at `t_k` into `out`: the bins'
