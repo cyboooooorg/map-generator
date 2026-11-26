@@ -291,14 +291,14 @@ ratios carry over.
   equilibrium temperature of 150 K (`photochemistry::METHANE_SURVIVES`,
   a calibration) and is destroyed by Lyman α photolysis
   (`methane_left`).
-- **No lines yet, and a grey stand-in.** The infrared column has no
-  methane or N₂O lines (study 36 adds methane's first, N₂O's later).
-  On `main` it holds methane's grey stand-in for Titan's pairs
-  (`radiation::methane`, `CH4_OPACITY` 15.1, a calibration), which acts
-  on any air holding methane; study 36's first pull request (not merged)
-  replaces it by the N₂-CH₄ and CH₄-CH₄ pairs. Methane's lines pull
-  request, which this law joins, must not count methane twice: it lands
-  after the stand-in is gone, or removes it.
+- **No lines yet, only pairs.** The infrared column has no methane or
+  N₂O lines (study 36 adds methane's first, N₂O's later). Methane
+  absorbs only through its N₂-CH₄ and CH₄-CH₄ pairs
+  (`radiation::spectrum::PAIRS`): study 36's first pull request removed
+  the grey stand-in for Titan's pairs (`radiation::methane`,
+  `CH4_OPACITY` 15.1, a calibration) that acted on any air holding
+  methane. Methane's lines, which this law joins, add to the pairs
+  without counting methane twice.
 
 ### Where the code's docs disagree
 
