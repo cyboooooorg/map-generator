@@ -563,7 +563,7 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
     let mut previous: Option<End<Pass>> = None;
     let mut cycles = false;
     // Whether the root the push settled on was found stable (kept until
-    // the fixed point leaves an unstable one).
+    // the push leaves the tolerance).
     let mut stable = false;
     // The radiative equilibrium of the last root left as unstable.
     let mut rejected: Option<f64> = None;
@@ -579,11 +579,16 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
         let used = radiative(body, albedo, emissivity);
         let push = radiative(body, derived, derived_emissivity) - used;
         let root = (t.0 - last).abs() < tolerance && push.abs() < tolerance;
+        // A push out of the tolerance has left the root found stable: the
+        // next root is weighed again.
+        if push.abs() >= tolerance {
+            stable = false;
+        }
         if root && !stable {
             // Is the root stable? On an unstable one, go on from the
             // colder probe. A root the plain step came back to from there
             // attracts from its cold side after all: it is kept.
-            let back = rejected.is_some_and(|x: f64| (used - x).abs() < tolerance);
+            let back = !bracketed && rejected.is_some_and(|x: f64| (used - x).abs() < tolerance);
             // A plain step leaves an unstable root by itself: a root it
             // reached with the push falling from its last step is stable
             // without probes (the bracket's steps carry no such slope).
