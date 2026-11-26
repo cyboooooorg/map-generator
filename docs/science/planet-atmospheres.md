@@ -2907,38 +2907,50 @@ two steps between settled climates, from about 62 to 74 K and over about
 phase change.
 
 The rewrite's climate does not smooth that step away: across nitrogen's
-triple point its sweep jumps by 3.4 K, from 59.77 K (frost) at flux
-0.006861 to 63.15 K (liquid) at 0.006878, +0.24 % of flux. It is a
+triple point its sweep jumps from the frost to the liquid. It is a
 bistability, as the runaway edge's step is (#523): the nitrogen frost
-(Bond albedo 0.754, emissivity 0.80) and the melting frost or liquid
-under it (0.613 to 0.616, 1.00) are both stable at one flux, and the
-warm start picks the branch. The absorbed light rises by the factor the
-emissivity and the temperature raise `ε T⁴`, about 1.56, which is why a
-jump the sweep lets through must leave the frost (under the stellar
-spectra of #655 it lands on the melting frost at 63.13 K, just below the
-triple point; tier-3 test
-`the_fixed_point_converges_until_the_nitrogen_frost_melts`). Legacy's
-1 K band has no source (study 25). Since the N₂ pairs of #703 the thin
-air absorbs: its column sends out 6 % (frost, 0.055 bar of N₂ in the
-air) and 12 % (melting frost, 0.116 bar) less than `ε σ T⁴`, the jump
-lands at 62.78 K from 59.31 K (flux 0.006236 to 0.006252), and a
-second step of 1.73 K follows inside the melting band (to 64.50 K at
-0.006269, albedo 0.6385 to 0.6158). The absorbed light rises by 1.455
-where `ε T⁴` rises by 1.563, so the tier-3 test fails on both its
-`ε T⁴` check and its 1 K band; how it should hold a pair greenhouse is
-left open.
+(Bond albedo 0.752, emissivity 0.80) and the liquid over the darker
+ground under it (0.616, 1.00) are both stable over a range of light, and
+the warm start picks the branch. Study 38 ([Can a nitrogen world be
+frozen or melted under the same light?](nitrogen-phases.md)) checked it
+against the literature and the model's own balance: a bright N₂ frost
+and a liquid that shows the darker ground under it are both stable
+under the same light (Charnay et al. 2014,
+doi:10.1016/j.icarus.2014.07.009), over 0.005918 to 0.007041 Earth
+fluxes for this body with the N₂ pairs of #703 (0.006818 to 0.008028
+while its air was transparent). The melting band between them, where
+`PHASE_BAND` ramps the frost's cover, is the unstable middle branch of
+an S curve, not a third state. Legacy's 1 K band has no source (study
+25).
 
-Study 38 ([Can a nitrogen world be frozen or melted under the same
-light?](nitrogen-phases.md)) checked that step against the literature
-and the model's own balance. The two states are expected: a bright N₂
-frost and a liquid that shows the darker ground under it are both
-stable under the same light (Charnay et al. 2014, doi:10.1016/j.icarus.2014.07.009),
-over 0.006818 to 0.008028 Earth fluxes for this body while its air is
-transparent, as here (measured with the albedo and emissivity of #703's
-branch, which this part of the climate shares). The melting band between them is an unstable balance,
-which the solver can still stop on because its test does not check
-stability; and the column draws a dry adiabat where a saturated N₂ air
-follows its saturation curve.
+Before #741 the solver could stop on that unstable branch: the
+bracket's Illinois steps (#729) find a zero of the push, and its stop
+test did not ask whether the zero attracts; it also settled one
+residual, `(1 − A) / ε`, with two numbers, so the albedo and emissivity
+it stored were not the derived ones (0.6552 and 0.9582 against 0.6690
+and 0.9197 at 62.739 K, study 38). On #703's branch the warm-start
+sweep then jumped twice, 59.31 to 62.78 K and 62.78 to 64.50 K (flux
+0.006236 to 0.006252 to 0.006269). Since #741 `settle` keeps only a
+root that attracts (the push taken again at a radiative equilibrium
+`ALBEDO_TOLERANCE_K` colder must fall from there to the root, the
+condition the bracket asks of its ends; a root the plain step reached
+with its push falling needs no probe), leaves an unstable
+one from its colder side (the side #729 stores a jump on), and settles
+only once the albedo's and the emissivity's own residuals are within
+the tolerance too. The sweep jumps once, 59.361 K (frost) at 0.006252
+to 64.503 K (liquid) at 0.006269; Earth, Mars, Titan and the
+Triton-like body settle where they did, to the printed digit. The
+tier-3 test `the_fixed_point_converges_until_the_nitrogen_frost_melts`
+checks that the absorbed light rises across the jump as the column's
+own `ε OLR` does (×1.5520 against ×1.5518): `ε T⁴` (×1.7424) was the
+premise of a transparent air, which the pairs end (the column sends out
+6 % to 12 % less than `ε σ T⁴`). The tier-3 test
+`a_nitrogen_world_keeps_its_frost_and_its_liquid_over_a_range_of_light`
+follows both branches: the frost holds up to 0.0070506 Earth fluxes and
+the liquid down to 0.0059258, within three steps of the folds study 38
+measured, every climate converged, on its derived pair, and attracting.
+The column still draws a dry adiabat where a saturated N₂ air follows
+its saturation curve (study 38).
 
 **Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
 that keeps water has two climates when the ice-albedo feedback makes it
@@ -3556,7 +3568,12 @@ climate has a
 jump and no fixed point: it is stored on its colder side, the one a
 cooling planet reaches, with `converged: false` and the cause node
 `planet.climate.cycles` true (decided with the user, 2026-11-26, after
-study 25: the study does not cover it).
+study 25: the study does not cover it). A bracket that attracts can
+still hold three roots, the two stable branches of a bistable body and
+the unstable one between them, and its steps can stop on the middle
+one: since #741 a root is kept only where it attracts, and an unstable
+one is left from its cold side (see the nitrogen sweep above and
+[nitrogen-phases.md](nitrogen-phases.md)).
 
 **Departure.** Kadoya and Tajika 2014, Menou 2015 and Haqq-Misra et al.
 2016 find limit cycles in time near the outer edge: the carbonate-silicate

@@ -299,6 +299,33 @@ where the unstable branch meets the liquid one (not probed on `main`).
    at least as bright as the frost); over a darker ground it holds the
    unstable branch.
 
+### What the code does since
+
+Item 2 landed with the N₂ pairs (#703's first pull request, issue #741):
+
+- `settle` keeps a root only where it attracts: the push taken again at
+  a radiative equilibrium `ALBEDO_TOLERANCE_K` (0.1 K) colder must fall
+  from there to the root (`attracting`, the condition the bracket asks
+  of its ends; `probe_root`). Only a root the bracket's steps reached
+  needs that probe: the plain step leaves an unstable root by itself, so
+  a root it reached with its push falling is kept as it is. An unstable
+  root is left from its colder probe with the plain step, so the fixed
+  point reaches the cold branch, the side #729 stores a jump on. A root
+  the plain step comes back to from that probe is kept.
+- It settles only once the albedo's and the emissivity's own residuals
+  are under the tolerance too (`pair_residuals`), so the stored pair is
+  the derived one.
+- The warm-start sweep jumps once, 59.361 K (frost) at 0.006252 to
+  64.503 K (liquid) at 0.006269 Earth fluxes. Followed along the light,
+  the frost branch holds up to 0.0070506 and the liquid one down to
+  0.0059258, within three of the sweep's steps (about the 0.1 K
+  tolerance) of the folds above (tier-3 test
+  `a_nitrogen_world_keeps_its_frost_and_its_liquid_over_a_range_of_light`).
+- Earth, Mars, Titan and the Triton-like body settle where they did, to
+  the printed digit: their roots attract and their pairs were derived.
+
+Items 3 and 4 are open.
+
 ## Sources
 
 1. Bertrand, T., Lellouch, E., Holler, B. J. et al. 2022, "Volatile

@@ -183,6 +183,100 @@ impl<P: Copy> Bracket<P> {
     }
 }
 
+/// Whether the push of the albedo's fixed point falls as the radiative
+/// equilibrium it is solved under rises, between a `cold` and a `warm`
+/// point (`x` the radiative equilibrium used, `f` the push): the
+/// condition under which a root between them attracts the iteration, as
+/// [`Bracket::attracts`] asks of a bracket's ends (the end that pushes up
+/// is the colder). A root where the push rises instead is an unstable
+/// balance, the middle branch of a bistable body's S curve: a disturbed
+/// climate leaves it (Cahalan & North 1979: a balance is stable where the
+/// light it needs rises with its temperature). A `Definition:` of the
+/// solver.
+pub(crate) fn attracting(cold: Point, warm: Point) -> bool {
+    (warm.f - cold.f) * (warm.x - cold.x) < 0.0
+}
+
+/// The albedo that puts the radiative equilibrium at `target` under the
+/// same emissivity, from `albedo` at `used`: the radiative equilibrium
+/// grows as `(1 − A)^¼` ([`ClimateBody::starlight`], [`equilibrium`]), so
+/// `1 − A' = (1 − A) (target / used)⁴` (a `Definition:`).
+pub(crate) fn albedo_for(albedo: f64, used: f64, target: f64) -> f64 {
+    1.0 - (1.0 - albedo) * (target / used).powi(4)
+}
+
+/// The radiative equilibrium `T_eq ε^-¼` of `body` under `albedo` and
+/// `emissivity`, K: the coordinate the albedo's fixed point moves along.
+fn radiative(body: &mut ClimateBody, albedo: f64, emissivity: f64) -> f64 {
+    let light = body.starlight(fraction(albedo));
+    equilibrium(light).0 / emissivity.clamp(LEAST_EMISSIVITY, 1.0).powf(0.25)
+}
+
+/// The push of `body` solved under `albedo` and `emissivity`: the point
+/// (the radiative equilibrium used, and the derived one less it) and the
+/// climate.
+fn push_under(body: &mut ClimateBody, albedo: f64, emissivity: f64) -> (Point, Pass) {
+    let pass = under_albedo(body, fraction(albedo), fraction(emissivity));
+    let x = radiative(body, albedo, emissivity);
+    let derived = body.derived_albedo(pass.temperature, &pass.air).get();
+    let derived_emissivity = body.emissivity_at(pass.temperature, &pass.air).get();
+    let f = radiative(body, derived, derived_emissivity) - x;
+    (Point { x, f }, pass)
+}
+
+/// Whether the root of `body`'s albedo's fixed point at `albedo` and
+/// `emissivity`, where the push is `push`, attracts: `None` when it does,
+/// the colder probe's albedo and climate when it does not. The push is
+/// taken again at a radiative equilibrium [`Numerics::albedo_tolerance`]
+/// colder (the albedo moved by [`albedo_for`], the emissivity kept), and
+/// the root attracts when the push falls from there to the root
+/// ([`attracting`]): a climate disturbed colder is pushed back warmer.
+/// One probe, on the cold side, the side an unstable root is left by: a
+/// stable root within a probe of its branch's cold fold reads as
+/// unstable and the fixed point goes on to the colder branch, which moves
+/// that fold by under the tolerance. A body that takes no light (a
+/// radiative equilibrium under the tolerance) has no push to weigh: it
+/// attracts.
+///
+/// [`Numerics::albedo_tolerance`]: super::Numerics::albedo_tolerance
+pub(crate) fn probe_root(
+    body: &mut ClimateBody,
+    albedo: f64,
+    emissivity: f64,
+    push: f64,
+) -> Option<(f64, Pass)> {
+    let d = body.numerics.albedo_tolerance.0;
+    let used = radiative(body, albedo, emissivity);
+    if used <= d {
+        return None;
+    }
+    let cold_albedo = albedo_for(albedo, used, used - d).clamp(0.0, 1.0);
+    let (cold, cold_pass) = push_under(body, cold_albedo, emissivity);
+    let root = Point { x: used, f: push };
+    (!attracting(cold, root)).then_some((cold_albedo, cold_pass))
+}
+
+/// The albedo's and the emissivity's own residuals of `body` solved
+/// under `albedo` and `emissivity` at the temperature `t` with `air`, K:
+/// the radiative equilibrium of the derived albedo under the emissivity
+/// used, and of the derived emissivity under the albedo used, each less
+/// the one used.
+pub(crate) fn pair_residuals(
+    body: &mut ClimateBody,
+    albedo: f64,
+    emissivity: f64,
+    t: Kelvin,
+    air: &PartialPressures,
+) -> (f64, f64) {
+    let used = radiative(body, albedo, emissivity);
+    let derived = body.derived_albedo(t, air).get();
+    let derived_emissivity = body.emissivity_at(t, air).get();
+    (
+        radiative(body, derived, emissivity) - used,
+        radiative(body, albedo, derived_emissivity) - used,
+    )
+}
+
 /// The equilibrium temperature of a surface that takes `starlight`,
 /// `(starlight / σ)^¼` (a `Definition:`); a negative light reads as
 /// none.
@@ -420,19 +514,42 @@ pub(crate) fn warm_start(body: &mut ClimateBody) -> (Fraction, Fraction) {
 /// colder end's (the one a cooling planet reaches), not converged, and
 /// [`Settle::cycles`].
 ///
-/// The climate keeps the albedo and emissivity it was solved under, so
-/// that it reproduces; it is not a snowball (the frozen branch is drawn
-/// by the caller). It is converged when this fixed point and the last
-/// condensation in it settled. The liquid reads the substellar
+/// A root is kept only where it attracts (study 38, #741): where the
+/// temperature and the push have settled, [`probe_root`] takes the push
+/// a little colder. A regulated climate is stable
+/// whatever its albedo (the thermostat holds its temperature), and a root
+/// the plain step reached with the push falling from its last step to it
+/// is stable without probes (the plain step leaves an unstable root by
+/// itself, so only the bracket's steps need them). The
+/// bracket's Illinois steps can land on the unstable
+/// root of a bistable body's S curve, between its two stable branches
+/// (the frost and the liquid of a nitrogen world): that root is
+/// rejected, and the fixed point goes on from the colder probe with the
+/// plain step and no bracket, so that it reaches the stable branch on
+/// the cold side, the side #729 stores a jump on. A root the plain step
+/// comes back to from that colder probe (within the tolerance) attracts
+/// from its cold side and is kept. The plain step from
+/// the warm start leaves an unstable root by itself, so a stable root it
+/// reaches first is kept.
+///
+/// The push alone does not settle the pair: a step moves the albedo and
+/// the emissivity together, and the push, one residual, vanishes on a
+/// whole line of pairs whose `(1 − A) / ε` is the derived one. So it is
+/// settled only once the albedo's own residual (the radiative
+/// equilibrium of the derived albedo under the emissivity used, less the
+/// one used) and the emissivity's (the derived emissivity under the
+/// albedo used) are each under the tolerance too; while the push has
+/// settled and they have not, the plain step moves the pair towards the
+/// derived one ([`pair_residuals`]). The climate keeps the albedo and
+/// emissivity it was solved under, so that it reproduces, and they are the
+/// derived ones within that tolerance; it is not a snowball (the frozen
+/// branch is drawn by the caller). It is converged when this fixed point
+/// and the last condensation in it settled. The liquid reads the substellar
 /// temperature of the light it took ([`substellar_temperature`]) when the
 /// body is tidally locked.
 pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Settle {
     let numerics = body.numerics;
     let tolerance = numerics.albedo_tolerance.0;
-    let radiative = |body: &mut ClimateBody, albedo: f64, emissivity: f64| {
-        let light = body.starlight(fraction(albedo));
-        equilibrium(light).0 / emissivity.clamp(LEAST_EMISSIVITY, 1.0).powf(0.25)
-    };
     let (mut albedo, mut emissivity) = (start.0.get(), start.1.get());
     let mut last = f64::NAN;
     let mut pass = under_albedo(body, fraction(albedo), fraction(emissivity));
@@ -444,6 +561,13 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
     let mut bracket = Bracket::default();
     let mut previous: Option<End<Pass>> = None;
     let mut cycles = false;
+    // Whether the root the push settled on was found stable (kept until
+    // the fixed point leaves an unstable one).
+    let mut stable = false;
+    // The radiative equilibrium of the last root left as unstable.
+    let mut rejected: Option<f64> = None;
+    // Whether the last step was the bracket's.
+    let mut bracketed = false;
     while steps < numerics.albedo_iterations {
         let t = pass.temperature;
         let derived = body.derived_albedo(t, &pass.air).get();
@@ -453,9 +577,40 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
         // holds the temperature whatever the albedo).
         let used = radiative(body, albedo, emissivity);
         let push = radiative(body, derived, derived_emissivity) - used;
-        if (t.0 - last).abs() < tolerance && push.abs() < tolerance {
-            settled = true;
-            break;
+        let root = (t.0 - last).abs() < tolerance && push.abs() < tolerance;
+        if root && !stable {
+            // Is the root stable? On an unstable one, go on from the
+            // colder probe. A root the plain step came back to from there
+            // attracts from its cold side after all: it is kept.
+            let back = rejected.is_some_and(|x: f64| (used - x).abs() < tolerance);
+            // A plain step leaves an unstable root by itself: a root it
+            // reached with the push falling from its last step is stable
+            // without probes (the bracket's steps carry no such slope).
+            let plain = !bracketed
+                && before.is_some_and(|b| b.x != used && attracting(b, Point { x: used, f: push }));
+            stable = pass.regulated || back || plain || {
+                let probe = probe_root(body, albedo, emissivity, push);
+                if let Some((cold_albedo, cold_pass)) = probe {
+                    rejected = Some(used);
+                    albedo = cold_albedo;
+                    pass = cold_pass;
+                    bracket = Bracket::default();
+                    (before, previous) = (None, None);
+                    (moved, last, damping) = (0.0, f64::NAN, numerics.albedo_damping);
+                    bracketed = false;
+                    steps += 1;
+                    continue;
+                }
+                true
+            };
+        }
+        if root {
+            let (albedo_off, emissivity_off) =
+                pair_residuals(body, albedo, emissivity, t, &pass.air);
+            if albedo_off.abs() < tolerance && emissivity_off.abs() < tolerance {
+                settled = true;
+                break;
+            }
         }
         let end = End {
             albedo,
@@ -482,7 +637,14 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
         if bracket.closed_in() && !bracket.attracts() {
             bracket = Bracket::default();
         }
-        match bracket.next(numerics.albedo_bracket) {
+        // A settled push on a pair that is not the derived one: the plain
+        // step below moves the pair, not the bracket.
+        let next = if root {
+            None
+        } else {
+            bracket.next(numerics.albedo_bracket)
+        };
+        match next {
             Some(Next::Closed(cold)) => {
                 (albedo, emissivity, pass) = (cold.albedo, cold.emissivity, cold.climate);
                 cycles = true;
@@ -498,6 +660,7 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
                 (albedo, emissivity) = (a, e);
                 pass = under_albedo(body, fraction(albedo), fraction(emissivity));
                 steps += 1;
+                bracketed = true;
                 continue;
             }
             None => {}
@@ -526,6 +689,7 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
         emissivity += share * (derived_emissivity - emissivity);
         pass = under_albedo(body, fraction(albedo), fraction(emissivity));
         steps += 1;
+        bracketed = false;
     }
     let i = body.inputs;
     let t = pass.temperature;

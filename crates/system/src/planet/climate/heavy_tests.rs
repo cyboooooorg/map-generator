@@ -25,7 +25,7 @@
 use super::body::ClimateBody;
 use super::branches::{Solved, frozen_over, solve, solve_with};
 use super::fixture::{EARTH_OBLIQUITY, earth, moved, rotation, titan};
-use super::settle::Settle;
+use super::settle::{Settle, albedo_for, pair_residuals};
 use super::settle_tests::{cold_methane_world, settled, triton_like};
 use super::wet::{collapsed_climate, wet_balance, wet_climate};
 use super::wet_tests::{COLLAPSE_ORBIT, EARTH_SURFACE, TEST_ALBEDO, modern_air};
@@ -187,8 +187,8 @@ const NITROGEN_JUMP_K: f64 = 1.0;
 /// adjacent climates absorb with the ratio of what they send to space,
 /// `ε OLR(T)` of their own column, across the nitrogen triple point: each
 /// is a fixed point of that balance, so the two ratios differ by the
-/// balance's residuals only, far under 1 %. Measured: absorbed ×1.4555
-/// against `ε OLR` ×1.4553, 0.01 % apart (before the N₂ pairs of #703,
+/// balance's residuals only, far under 1 %. Measured: absorbed ×1.5520
+/// against `ε OLR` ×1.5518, 0.01 % apart (before the N₂ pairs of #703,
 /// when the thin air was transparent, against `ε T⁴`: ×1.5556 against
 /// ×1.5580).
 const PHASE_RATIO_TOLERANCE: f64 = 0.01;
@@ -826,30 +826,29 @@ fn the_fixed_point_converges_across_the_methane_freezing_point() {
 #[ignore = "heavy: 200 climates of a nitrogen world across its triple point"]
 fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
     // Every climate of the sweep converges, and away from the triple point
-    // adjacent climates stay within NITROGEN_JUMP_K. Across it there is a
-    // jump, and it is a bistability, as the runaway edge's step is
-    // (#523): nitrogen frost (Bond albedo 0.754, emissivity 0.80) and the
-    // melting frost or liquid nitrogen under it (albedo 0.616, emissivity
-    // 1.00) are both stable fixed points at one flux, and the branch the
-    // fixed point reaches depends on its warm start. Measured on the
-    // 200-point sweep: 59.769 K (frost) at flux 0.006861 against 63.153 K
-    // (liquid) at 0.006878, +0.24 % of flux, with the same flux settling
-    // at 63.094 K from the warm state and the warm flux at 59.804 K from
-    // the cold one; the absorbed light rises by a factor 1.55 and so does
-    // ε T⁴ ((0.9983 / 0.80) (63.094 / 59.769)⁴). So a jump the sweep
-    // lets through must leave the frost (to the melting frost or the
-    // liquid), and the absorbed flux must rise as what the body sends to
-    // space does, within PHASE_RATIO_TOLERANCE. Under the stellar spectra
-    // of #655 the jump lands on the melting frost below the triple point:
-    // 59.681 K at 0.006795 against 63.133 K at 0.006812 (albedo 0.7527 to
-    // 0.6130, emissivity 0.8000 to 0.9998, absorbed x1.5626 against ε T⁴
-    // x1.5650).
+    // adjacent climates stay within NITROGEN_JUMP_K. Across it there is one
+    // jump, from the frost to the liquid, and it is a bistability, as the
+    // runaway edge's step is (#523): nitrogen frost (Bond albedo 0.752,
+    // emissivity 0.80) and liquid nitrogen over the darker ground (albedo
+    // 0.616, emissivity 1.00) are both stable fixed points over a range of
+    // light (Charnay et al. 2014; study 38, `docs/science/nitrogen-phases.md`),
+    // and the branch the fixed point reaches depends on its warm start.
+    // The melting frost between them, inside `PHASE_BAND`, is the S curve's
+    // unstable branch, not a fixed point the solver may store: before
+    // #741 the bracket's Illinois steps stopped on it (59.31 -> 62.78 ->
+    // 64.50 K, two jumps, on #703's branch at e59e6a92), and since then
+    // `settle` keeps only a root that attracts. Measured since: one jump,
+    // 59.361 K (frost) at flux 0.006252 against 64.503 K (liquid) at
+    // 0.006269 (albedo 0.7524 to 0.6158, emissivity 0.8001 to 1.0000,
+    // absorbed x1.5520 against ε OLR x1.5518). So a jump the sweep lets
+    // through must leave the frost, and the absorbed flux must rise as what
+    // the body sends to space does, within PHASE_RATIO_TOLERANCE.
     //
     // What it sends to space was ε σ T⁴ while the thin air was
     // transparent, the premise of a grey column. Since the N₂ pairs of
     // #703 the air absorbs at the roto-translational peak where a 60 K
     // surface emits most: the column sends out 6 % (frost) to 12 %
-    // (melting frost) less than ε σ T⁴, so the check compares with the
+    // (liquid side) less than ε σ T⁴, so the check compares with the
     // column's own ε OLR(T) at each climate's flux, the balance each
     // fixed point solves, which tests the same physics without the grey
     // premise (ε T⁴ is still printed).
@@ -914,6 +913,149 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
         &explained,
     );
     assert!(jumps <= 1, "{jumps} explained jumps");
+}
+
+/// Definition: the light, against Titan's, over which the nitrogen
+/// world's two branches are followed, 0.5 to 0.75: it spans both folds
+/// study 38 measured on its S curve (0.542 and 0.645 of Titan's light,
+/// [`HYSTERESIS_FOLDS`]).
+const HYSTERESIS_SWEEP: (f64, f64) = (0.5, 0.75);
+
+/// Definition: a measured reference of the model, not a fact: the folds
+/// of the nitrogen world's S curve, in Earth fluxes, measured by study 38
+/// on the model's own balance (#703's branch at e59e6a92,
+/// `docs/science/nitrogen-phases.md`, "What the branch's climate does"):
+/// the frost branch's last point, 0.0070411, and the liquid branch's
+/// first, 0.0059183. No source claims them: a nitrogen world's hysteresis
+/// has no published value (study 38, "Searched and not found").
+const HYSTERESIS_FOLDS: (f64, f64) = (0.0070411, 0.0059183);
+
+/// Definition: how far, in steps of the followed light, a branch's last
+/// climate may sit from its fold, 3: the fixed point resolves a root to
+/// [`ALBEDO_TOLERANCE_K`] in radiative equilibrium, 0.1 K of about
+/// 57 K, so 0.7 % of the light (`4 ΔT / T`), 4.1e-5 to 4.9e-5 Earth fluxes
+/// at the two folds, three steps of the sweep's 1.37e-5. Measured: 0.7
+/// step past the frost's fold (0.0070506) and 0.5 step above the
+/// liquid's (0.0059258).
+const FOLD_STEPS: f64 = 3.0;
+
+/// The climates of the nitrogen world under each flux of `fluxes` in
+/// turn, each started from the albedo and emissivity the one before
+/// settled on (the first from `start`): a branch followed along the
+/// light.
+fn follow(base: &ClimateInputs, fluxes: &[f64], start: (Fraction, Fraction)) -> Vec<(f64, Settle)> {
+    let mut start = start;
+    fluxes
+        .iter()
+        .map(|&flux| {
+            let at = lit(base, flux);
+            let mut body = ClimateBody::new(&at, Numerics::DEFAULT);
+            let c = super::settle::settle(&mut body, start);
+            start = (c.bond_albedo, c.emissivity);
+            (flux, c)
+        })
+        .collect()
+}
+
+#[test]
+#[ignore = "heavy: 400 climates of a nitrogen world, its two branches followed up and down the light"]
+fn a_nitrogen_world_keeps_its_frost_and_its_liquid_over_a_range_of_light() {
+    // Study 38: the frost and the liquid are both stable over a range of
+    // light, and the melting frost between them is the unstable branch of
+    // an S curve. Followed up the light from its frost, the body stays
+    // frozen to the frost branch's fold; followed down from its liquid, it
+    // stays liquid to the liquid branch's fold. Every climate converges,
+    // keeps the albedo and emissivity it derives, and attracts.
+    let reference = titan();
+    let base = ClimateInputs {
+        air: PartialPressures {
+            n2: NITROGEN_WORLD_N2.0,
+            ch4: 0.0,
+            ..reference.air
+        },
+        ..reference.clone()
+    };
+    let titan_flux = base.sources[0].flux.0;
+    let (low, high) = HYSTERESIS_SWEEP;
+    let up: Vec<f64> = (0..SWEEP_COUNT)
+        .map(|i| titan_flux * (low + (high - low) * i as f64 / (SWEEP_COUNT - 1) as f64))
+        .collect();
+    let down: Vec<f64> = up.iter().rev().copied().collect();
+    let step = up[1] - up[0];
+    let start_at = |flux: f64| {
+        let at = lit(&base, flux);
+        let mut body = ClimateBody::new(&at, Numerics::DEFAULT);
+        super::settle::warm_start(&mut body)
+    };
+    // Frozen: N₂ frost on the ground and no liquid. Melted: liquid N₂,
+    // or (warmer still) the whole N₂ in the air.
+    let frozen = |c: &Settle| c.liquid.is_none() && c.condensate.n2 > 0.0;
+    // The coldest light freezes the body even from its warm start, the
+    // warmest melts it: each branch starts on itself.
+    let frost_branch = follow(&base, &up, start_at(up[0]));
+    let liquid_branch = follow(&base, &down, start_at(down[0]));
+    assert!(frozen(&frost_branch[0].1), "{:?}", frost_branch[0]);
+    assert!(!frozen(&liquid_branch[0].1), "{:?}", liquid_branch[0]);
+    let tolerance = Numerics::DEFAULT.albedo_tolerance.0;
+    for (flux, c) in frost_branch.iter().chain(&liquid_branch) {
+        assert!(c.converged && !c.cycles, "{flux}: {c:?}");
+        let at = lit(&base, *flux);
+        let mut body = ClimateBody::new(&at, Numerics::DEFAULT);
+        let (a, e) = (c.bond_albedo.get(), c.emissivity.get());
+        let (albedo_off, emissivity_off) = pair_residuals(&mut body, a, e, c.temperature, &c.air);
+        assert!(
+            albedo_off.abs() < tolerance && emissivity_off.abs() < tolerance,
+            "{flux}: the pair is not the derived one ({albedo_off}, {emissivity_off}) {c:?}"
+        );
+        // It attracts: disturbed by the solver's tolerance in radiative
+        // equilibrium, colder or else warmer, the fixed point comes back
+        // to it (an unstable root is left on both sides; a stable one
+        // within a probe of its fold is left on one).
+        let x = (body.starlight(c.bond_albedo).0 / STEFAN_BOLTZMANN).powf(0.25) / e.powf(0.25);
+        let back = |target: f64| {
+            let moved = albedo_for(a, x, target).clamp(0.0, 1.0);
+            let again = super::settle::settle(
+                &mut ClimateBody::new(&at, Numerics::DEFAULT),
+                (Fraction::new(moved).unwrap(), c.emissivity),
+            );
+            (again.temperature.0 - c.temperature.0).abs() < tolerance
+        };
+        assert!(
+            back(x - tolerance) || back(x + tolerance),
+            "{flux}: unstable {c:?}"
+        );
+    }
+    // The last frost going up, the last liquid going down.
+    let top = frost_branch
+        .iter()
+        .take_while(|(_, c)| frozen(c))
+        .last()
+        .expect("a frost")
+        .0;
+    let bottom = liquid_branch
+        .iter()
+        .take_while(|(_, c)| !frozen(c))
+        .last()
+        .expect("a liquid")
+        .0;
+    println!(
+        "frost up to {top:.7}, liquid down to {bottom:.7} (study 38: {:.7}, {:.7}), step {step:.2e}",
+        HYSTERESIS_FOLDS.0, HYSTERESIS_FOLDS.1
+    );
+    assert!(bottom < top, "no overlap: {bottom} {top}");
+    assert!(
+        top < up[SWEEP_COUNT - 1] && bottom > up[0],
+        "a fold outside the sweep"
+    );
+    let (frost_fold, liquid_fold) = HYSTERESIS_FOLDS;
+    assert!(
+        (top - frost_fold).abs() <= FOLD_STEPS * step,
+        "{top} against {frost_fold}"
+    );
+    assert!(
+        (bottom - liquid_fold).abs() <= FOLD_STEPS * step,
+        "{bottom} against {liquid_fold}"
+    );
 }
 
 #[test]
