@@ -94,10 +94,12 @@ pub(crate) const COLLAPSE_TOLERANCE: f64 = 1e-4;
 /// `collapse_iterations_is_converged`).
 pub(crate) const COLLAPSE_ITERATIONS: usize = 100;
 
-/// Definition: the longest step of a collapse, as a share of its CO₂,
+/// Calibration: the longest step of a collapse, as a share of its CO₂,
 /// 0.005 (#731): 0.085 bar at 17 bar. A warm balance whose pocket of CO₂
 /// is narrower than one step can be stepped over, where the plain
-/// iteration would stop in it ("A collapse from the fold (#731)" in
+/// iteration would stop in it; at half of it a methane Earth's climates
+/// around its outer edge do not move, a convergence test in tier 3
+/// (`collapse_step_is_converged`) ("A collapse from the fold (#731)" in
 /// `docs/science/planet-atmospheres.md`).
 /// Zero steps the collapse plainly, as legacy did.
 pub(crate) const COLLAPSE_STEP: f64 = 0.005;

@@ -3521,8 +3521,9 @@ and that test went from 833 s to 74 s (release).
 A climate past its maximum greenhouse collapses from the CO₂ of that
 maximum: the CO₂ frosts out, step by step, until the air keeps what its
 surface allows. Its gap `g(c) = c − φ(c)` (the CO₂ of the air less what
-its surface keeps) is about zero there by construction, since the
-maximum greenhouse is the fold that ends the warm branch. Below it `φ`
+its surface keeps) was about zero there on a methane Earth's edge
+search (measured): its maximum greenhouse sat at the fold that ends the
+warm branch. Below it `φ`
 grows with `c`, so the plain step `c ← φ(c)` falls onto the largest
 balance below the start without passing it. From the fold it crawls: on
 a methane Earth near its outer edge `g` starts at 0.002 to 0.006 bar
@@ -3536,7 +3537,9 @@ zero of the secant through the last two points. Where `g` falls below
 minus its noise, the step has passed a balance: the search brackets it
 and closes in by the Illinois rule. A warm balance narrower than one
 step can be stepped over; the plain step finds every one (tier 1,
-synthetic collapses in the measured shape).
+synthetic collapses in the measured shape). At half the step the
+methane Earth's climates at 1.42875, 1.4355 and 1.44 AU do not move
+(tier 3, `collapse_step_is_converged`).
 
 The gap's noise is how much `φ` moves within the temperature tolerance
 of the climate solve, `φ(T + TOLERANCE_K) − φ(T)`: 0.005 bar at 248 K
@@ -3552,8 +3555,11 @@ discontinuity, the cold side; decided with the user, 2026-11-26): on
 the methane Earth's edge search, 28 of 280 collapses that legacy
 stopped warm on noise now fall cold, and the outer edge stays at
 1.4355 AU. `one_greenhouse_search_on_a_condensing_air` went from 74 s
-to 65 s (release); the cold collapses cost 20 to 30 climates each,
-where the stops on noise cost 1 to 3.
+to 59 s (release); the cold collapses cost 18 to 27 climates each,
+where the stops on noise cost 1 to 3. Within the noise the steps stay
+at least the noise, and inside a bracket a point below the balance
+within its noise ends the search: the solve's 0.01 K tolerance lets the
+gap jump across a balance by up to that much.
 
 #### Solver constants (rule of #648)
 
@@ -3571,7 +3577,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `PLATEAU_SURFACES_K` | 500 to 640 K by 20 K | Calibration | every 10 K and to 700 K, the plateau moves under 0.5 W/m² | 3 |
 | `COLLAPSE_ITERATIONS` | 100 | Definition | a collapsing Earth at 1.6 AU settles under it | 1 |
 | `COLLAPSE_TOLERANCE` | 1e-4 | Calibration | at 1e-5 the temperature moves under 0.01 K | 3 |
-| `COLLAPSE_STEP` | 0.005 of the CO₂ | Definition | a warm balance wider than one step is found; a collapse from the fold takes a third of the plain steps (#731) | 1 |
+| `COLLAPSE_STEP` | 0.005 of the CO₂ | Calibration | at 0.0025 a methane Earth's climates at 1.42875, 1.4355 and 1.44 AU do not move (#731) | 3 |
 | `PHASE_BAND` | 1 K | Calibration | Titan-like and Triton-like sweeps settle across their points | 3 |
 | `THAW_STEPS` | 13 | Calibration | at 16 steps Earth's thaw CO₂ moves under 0.1 % (measured: +0.165 % at 12 steps, +0.063 % at 13, 0.180932, 0.180748 and 0.180634 bar at 12, 13 and 16) | 3 |
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |

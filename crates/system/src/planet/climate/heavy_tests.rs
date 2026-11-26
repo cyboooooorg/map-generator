@@ -1790,3 +1790,43 @@ fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
     // The colder side: frozen over, its thermostat lost.
     assert!(frozen_over(c) && !c.regulated, "{c:?}");
 }
+
+/// Definition: the orbits around a methane Earth's outer edge where the
+/// collapse's step is held, AU: inside it (the thaw search of #731
+/// crossing the cycle), at it and past it ([`CYCLING_AU`]).
+const STEP_ORBITS: [f64; 3] = [1.42875, 1.4355, CYCLING_AU];
+
+#[test]
+#[ignore = "heavy: a methane Earth at three orbits around its outer edge, twice"]
+fn collapse_step_is_converged() {
+    // The longest step of a collapse (`COLLAPSE_STEP`): at half of it the
+    // climates around the edge, where collapses start at the fold, keep
+    // their branch and move under `ALBEDO_TOLERANCE_K`.
+    let like = ClimateInputs {
+        air: PartialPressures {
+            ch4: titan().air.ch4,
+            ..earth().air
+        },
+        ..earth()
+    };
+    let half = Numerics {
+        collapse_step: super::COLLAPSE_STEP / 2.0,
+        ..Numerics::DEFAULT
+    };
+    for au in STEP_ORBITS {
+        let far = moved(&like, au);
+        let (a, b) = (
+            solve_with(&far, WARM_DRAW, &Numerics::DEFAULT).settle,
+            solve_with(&far, WARM_DRAW, &half).settle,
+        );
+        println!(
+            "{au} AU: {:.4} K against {:.4} K at half the step, CO2 {:.4} and {:.4} bar",
+            a.temperature.0, b.temperature.0, a.air.co2, b.air.co2
+        );
+        assert_eq!(frozen_over(&a), frozen_over(&b), "{au} AU: {a:?} {b:?}");
+        assert!(
+            (a.temperature.0 - b.temperature.0).abs() < super::ALBEDO_TOLERANCE_K.0,
+            "{au} AU: {a:?} {b:?}"
+        );
+    }
+}

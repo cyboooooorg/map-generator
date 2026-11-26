@@ -237,30 +237,32 @@ pub(crate) struct Kept<S> {
 /// The CO₂, bar, at which a collapse from `start` settles, with the climate
 /// solved there and the evaluations after the first one.
 ///
-/// `solve(c)` solves the climate with `c` bar of CO₂ ([`Kept`]). The
-/// collapse settles at a `c` that keeps what its air holds within
-/// `tolerance`, `g(c) = c − φ(c) ≤ tolerance φ(c)`, after at most `most`
-/// evaluations.
+/// `solve(c)` solves the climate with `c` bar of CO₂ ([`Kept`]). The collapse
+/// settles at a `c` that keeps what its air holds within `tolerance`, `g(c) =
+/// c − φ(c) ≤ tolerance φ(c)`, after at most `most` evaluations.
 ///
-/// With `widest` zero it steps plainly, `c ← φ(c)`, as legacy did: below
-/// the maximum greenhouse `φ` grows with `c`, so from above it falls onto
-/// the largest root of `g` below `start`, the warmest balance a cooling
-/// planet reaches, never past it. A collapse that starts at the maximum
-/// greenhouse starts at the fold of the warm branch, where `g` is about
-/// zero; there it crawls, `g` growing by about a tenth a step, for up to
-/// 58 steps at 17 bar (#731).
+/// With `widest` zero it steps plainly, `c ← φ(c)`, as legacy did: below the
+/// maximum greenhouse `φ` grows with `c`, so from above it falls onto the
+/// largest root of `g` below `start`, the warmest balance a cooling planet
+/// reaches, never past it. A collapse that starts at the maximum greenhouse
+/// can start at the fold of the warm branch, where `g` is about zero
+/// (measured on a methane Earth's edge search); there it crawls, `g` growing
+/// by about a tenth a step, for up to 58 steps at 17 bar (#731).
 ///
-/// Otherwise (#731) each step is at least the plain one and at most twice
-/// the last one and `widest` times the CO₂; where `g` falls, at most to
-/// the zero of the secant through the last two points too. Where `g` falls
-/// below `−noise` it has passed a root: the search brackets it between
-/// that point and the last one above zero, and closes in on it by the
-/// Illinois rule (Dowell & Jarratt 1971) to a point with `0 ≤ g ≤
-/// tolerance φ`. A root whose `g` crosses zero by no more than its noise
-/// is not one: until `g` has risen above its noise once, the search does
-/// not stop where it holds, and steps on ("A collapse from the fold
-/// (#731)" in `docs/science/planet-atmospheres.md`). A warm balance (a pair of roots) narrower than one step, at
-/// most `widest` of the CO₂, can be stepped over.
+/// Otherwise (#731) each step is at least the plain one and at most twice the
+/// last one and `widest` times the CO₂; where `g` falls, at most to the zero
+/// of the secant through the last two points too. Where `g` falls below
+/// `−noise` it has passed a root: the search brackets it between that point
+/// and the last one above zero, and closes in on it by the Illinois rule
+/// (Dowell & Jarratt 1971) to a point with `0 ≤ g ≤ tolerance φ`. A root
+/// whose `g` crosses zero by no more than its noise is not one: until `g` has
+/// risen above its noise once, the search does not stop where it holds, and
+/// steps on by no less than the noise; inside a bracket a point below the
+/// root within its noise ends the search, since the solve's tolerance lets
+/// `g` jump across a root by up to its noise ("A collapse from the fold
+/// (#731)" in
+/// `docs/science/planet-atmospheres.md`). A warm balance (a pair of roots)
+/// narrower than one step, at most `widest` of the CO₂, can be stepped over.
 pub(crate) fn collapse_search<S: Copy>(
     start: f64,
     mut solve: impl FnMut(f64) -> Kept<S>,
@@ -276,7 +278,7 @@ pub(crate) fn collapse_search<S: Copy>(
         return (c, here.state, evaluations);
     }
     // Whether `g` has risen above its noise since the start.
-    let mut left = widest == 0.0;
+    let mut left = widest == 0.0 || c - here.kept > here.noise;
     let mut before: Option<(f64, f64)> = None;
     let mut last_step = 0.0_f64;
     let mut above = (c, c - here.kept, here);
@@ -300,9 +302,10 @@ pub(crate) fn collapse_search<S: Copy>(
                     plain = false;
                 }
             }
-            if step <= 0.0 {
-                // At a zero within the noise: step on.
-                step = (2.0 * last_step).min(widest * c);
+            if !left && step < here.noise {
+                // Within the noise no zero is a balance: step on, by no
+                // less than the noise, so as not to crawl onto one.
+                step = (2.0 * last_step).max(here.noise).min(widest * c);
                 plain = false;
             }
         }
@@ -328,7 +331,9 @@ pub(crate) fn collapse_search<S: Copy>(
 }
 
 /// The root of `g` between `high` (`g ≥ 0`) and `low` (`g < 0`) by the
-/// Illinois rule, to a point above it that holds ([`collapse_search`]).
+/// Illinois rule, to a point above it that holds or one below it within
+/// its noise, where `g` jumps across the root by up to the noise of the
+/// solve ([`collapse_search`]).
 fn bracketed<S: Copy>(
     high: (f64, f64, Kept<S>),
     low: (f64, f64),
@@ -351,6 +356,9 @@ fn bracketed<S: Copy>(
             }
             side = 1;
         } else {
+            if gy >= -there.noise {
+                return (y, there.state, evaluations);
+            }
             low = (y, gy);
             if side == -1 {
                 high.1 *= 0.5;

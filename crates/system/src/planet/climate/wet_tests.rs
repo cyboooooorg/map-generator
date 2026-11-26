@@ -432,7 +432,7 @@ fn a_collapse_stops_at_a_warm_balance_wider_than_its_step() {
 
 #[test]
 fn a_collapse_steps_over_a_zero_within_its_noise() {
-    // A dip of 0.007 bar at 17.03 bar takes `g` 0.0015 bar under zero,
+    // A dip of 0.007 bar at 17.03 bar takes `g` 0.002 bar under zero,
     // within the noise: the plain iteration stops there (legacy's
     // lottery); the search steps on to the cold balance.
     let dips = [(0.007, 17.03, 0.004)];
@@ -459,4 +459,47 @@ fn a_collapse_whose_air_already_holds_does_not_step() {
         (c, n)
     };
     assert_eq!((c, n), (1.0, 0));
+}
+
+#[test]
+fn a_collapse_does_not_crawl_onto_a_zero_within_its_noise() {
+    // A dip that brings `g` to zero within the noise: the secant would
+    // close in on it by ever shorter steps; the steps stay at least the
+    // noise.
+    let dips = [(0.0047, 17.06, 0.003)];
+    let (fast, steps) = synthetic_collapse(&dips, COLLAPSE_STEP);
+    assert!((fast - 0.6).abs() < 1e-3, "{fast}");
+    let (_, plain_cold) = synthetic_collapse(&[], 0.0);
+    assert!(steps * 2 < plain_cold, "{steps} against {plain_cold}");
+}
+
+#[test]
+fn a_collapse_stops_where_its_gap_jumps_across_a_root() {
+    // A solve with a 0.01 K tolerance makes `g` piecewise smooth, with
+    // jumps up to its noise: here +4e-4 above the root at 2 bar and
+    // −6e-4 below it, no point within the tolerance above. The search
+    // stops within the noise of the root, well under its cap.
+    let jump = |c: f64| 0.1 * (c - 2.0) + if c > 2.0 { 4e-4 } else { -6e-4 };
+    let collapse = |start: f64, widest: f64| {
+        collapse_search(
+            start,
+            |c| Kept {
+                kept: c - jump(c),
+                noise: 6.6e-4,
+                state: (),
+            },
+            COLLAPSE_TOLERANCE,
+            COLLAPSE_ITERATIONS,
+            widest,
+        )
+    };
+    for start in [2.5, 4.0, 10.0] {
+        let (c, (), n) = collapse(start, COLLAPSE_STEP);
+        let (_, (), plain) = collapse(start, 0.0);
+        assert!((c - 2.0).abs() < 0.01, "from {start}: {c}");
+        assert!(
+            n <= plain && n < COLLAPSE_ITERATIONS,
+            "from {start}: {n} steps against {plain}"
+        );
+    }
 }
