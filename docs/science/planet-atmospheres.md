@@ -3661,22 +3661,25 @@ half the step the methane Earth's climates at 1.42875, 1.4355 and
 1.44 AU, around its outer edge, did not move (tier 3,
 `collapse_step_is_converged`). With the pairs and the split phase step
 of #746 the edge is 1.2534 AU and the test holds 1.25, 1.2534 and
-1.264 AU (`STEP_ORBITS`). The first two do not move. Past the edge the
-step moves the climate (measured 2026-11-26, at `COLLAPSE_STEP`, half,
-a quarter and the plain step):
+1.264 AU (`STEP_ORBITS`); none moves at half the step (at 1.264 AU,
+231.6489 against 231.6492 K). Measured on 2026-11-26 at `COLLAPSE_STEP`,
+half, a quarter and the plain step, the climates just past the edge
+stay within:
 
-- in the cycling band, 1.261 to 1.267 AU, the stored cold side holds
-  9.4 to 9.5, 10.3 to 10.5, 10.8 to 11.1 and 11.6 to 11.7 bar
-  (231.4 to 237.4 K); at 1.264 AU, 231.65 K at the full step against
-  234.22 K at half, so the test fails;
-- at 1.268 AU, a converged climate, 9.26, 9.78, 10.84 and 11.42 bar
-  (230.96 to 236.58 K);
-- from 1.272 AU on, the step moves the climate by under 0.1 K (227.31
-  to 227.37 K at 1.272 AU, 221.56 to 221.60 K at 1.28 AU).
+- 0.11 K at 1.268 AU, a converged climate (230.92 to 231.03 K, 9.25 to
+  9.28 bar of CO₂);
+- 0.08 K at 1.264 AU, 0.22 K at 1.266 AU and 0.33 K at 1.262 AU, on the
+  cold side where a cycling climate is stored (231.39 to 231.77 K, 9.41
+  to 9.54 bar): where a climate cycles, the step can change where the
+  cycle stops, by a few tenths of a kelvin.
 
-Before #746 the band was 1.268 to 1.278 AU and the collapse landed on
-9.91 or 8.00 bar there; those two balances are gone, but the step is
-still not converged just past the edge. This is open.
+Before #747 they moved by up to 5.6 K (9.26 to 11.42 bar at 1.268 AU),
+and before #746 they landed on 9.91 or 8.00 bar. The cause was the cap
+on a collapse's steps, not the step: just past the edge the CO₂ falls
+from 14.2 to about 9.3 bar on a flat gap and needs up to 207 plain
+steps, and stopped at 100 the collapse kept a climate that depended on
+the step. `COLLAPSE_ITERATIONS` is 300 since #747, and a collapse
+stopped at it is not converged.
 
 The gap's noise is how much `φ` moves within the temperature tolerance
 of the climate solve, `φ(T + TOLERANCE_K) − φ(T)`: 0.005 bar at 248 K
@@ -3736,7 +3739,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `PLATEAU_SURFACES_K` | 500 to 640 K by 20 K | Calibration | every 10 K and to 700 K, the plateau moves under 0.5 W/m² | 3 |
 | `COLLAPSE_ITERATIONS` | 300 | Definition | a collapsing Earth at 1.6 AU settles under it (tier 1); a methane Earth just past its outer edge with #703's pairs needs up to 207 steps, plain; a collapse stopped at it leaves its climate not converged | 1, 3 |
 | `COLLAPSE_TOLERANCE` | 1e-4 | Calibration | at 1e-5 the temperature moves under 0.01 K | 3 |
-| `COLLAPSE_STEP` | 0.005 of the CO₂ | Calibration | at 0.0025 a methane Earth's climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs (#731); since them and #746, 1.25 and 1.2534 AU do not move, and from 1.261 to 1.268 AU the climate moves by up to 5.6 K with the step (open) | 3 |
+| `COLLAPSE_STEP` | 0.005 of the CO₂ | Calibration | at 0.0025 a methane Earth's climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs (#731); since them and #746, 1.25, 1.2534 and 1.264 AU do not move, and from 1.262 to 1.268 AU full, half, quarter and plain steps stay within 0.11 K on a converged climate and 0.33 K on a cycle's cold side (5.6 K before the cap of #747) | 3 |
 | `PHASE_BAND` | 1 K | Calibration | Titan-like and Triton-like sweeps settle across their points | 3 |
 | `THAW_STEPS` | 13 | Calibration | at 16 steps Earth's thaw CO₂ moves under 0.1 % (measured: +0.165 % at 12 steps, +0.063 % at 13, 0.180932, 0.180748 and 0.180634 bar at 12, 13 and 16) | 3 |
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |

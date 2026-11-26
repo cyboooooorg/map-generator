@@ -106,11 +106,14 @@ pub(crate) const COLLAPSE_ITERATIONS: usize = 300;
 /// 0.005 (#731): 0.085 bar at 17 bar. A warm balance whose pocket of CO₂
 /// is narrower than one step can be stepped over, where the plain
 /// iteration would stop in it; at half of it a methane Earth's climates
-/// around its outer edge did not move before #703's pairs, a convergence
-/// test in tier 3 (`collapse_step_is_converged`). Since the pairs and
-/// #746, those just past the edge (1.261 to 1.268 AU) move by up to
-/// 5.6 K, and the test fails: open ("A collapse from the fold (#731)" in
-/// `docs/science/planet-atmospheres.md`).
+/// around its outer edge do not move, a convergence test in tier 3
+/// (`collapse_step_is_converged`, at 1.25, 1.2534 and 1.264 AU since
+/// #703's pairs and #746). Measured at the full, half and quarter step
+/// and the plain one: 0.11 K apart at most at 1.268 AU, a converged
+/// climate; 0.08 K on the cycle's cold side at 1.264 AU, 0.33 K at
+/// 1.262 AU. They moved by up to 5.6 K while [`COLLAPSE_ITERATIONS`] cut
+/// the slow collapses short (#747) ("A collapse from the fold (#731)"
+/// in `docs/science/planet-atmospheres.md`).
 /// Zero steps the collapse plainly, as legacy did.
 pub(crate) const COLLAPSE_STEP: f64 = 0.005;
 
