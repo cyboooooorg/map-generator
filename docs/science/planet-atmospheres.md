@@ -3620,8 +3620,10 @@ Since methane's grey stand-in is retired (#703) its edge is 1.2588 AU
 and the orbits with no fixed point run from 1.268 to 1.277 AU (probed
 every 0.001 AU); the tier-3 test
 `a_climate_with_no_fixed_point_stops_on_its_cold_side` moved from 1.44
-to 1.272 AU, where the climate cycles for 16 steps and is stored at
-227.17 K with 8.01 bar of CO₂.
+to 1.272 AU, where the climate cycled for 16 steps and was stored at
+227.17 K with 8.01 bar of CO₂ under the plain collapse; since the
+collapse of #743 it cycles for 17 steps and is stored at 232.79 K with
+9.91 bar (see "A collapse from the fold (#731)" below).
 
 #### A collapse from the fold (#731)
 
