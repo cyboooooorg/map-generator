@@ -27,12 +27,18 @@ mod tests;
 /// The table of cross-sections (see the module's documentation).
 const TABLE: &str = include_str!("../../data/ozone.tsv");
 
-/// Definition: the temperature of the ozone layer's cross-sections,
-/// 223 K, decided with the user on 2026-11-25 (`docs/science/ozone.md`,
-/// "Where it departs"): ozone lies above 80 to 90 % of the air's mass at
-/// 225 to 232 K (the AFGL profiles), and the study's probe found that
-/// 243 K moves Earth's Bond albedo by 0.0002 or less. The table also
-/// holds 233 K, which a test compares.
+/// Calibration: the temperature of the ozone layer's cross-sections,
+/// 223 K, one temperature for every layer and host, decided with the user
+/// on 2026-11-25. It rests on the ozone-weighted temperature of the AFGL
+/// profiles, 225 to 232 K (Anderson et al. 1986; ozone lies above 80 to
+/// 90 % of the air's mass), and 223 K is the column of Serdyuchenko et
+/// al. 2014's file nearest that range's cold end (the file steps by
+/// 10 K). Its weight is small: 233 K absorbs 0.33 % more (a single pass,
+/// measured on the table's Sun), and study 34's probe found that 243 K
+/// moves Earth's Bond albedo by 0.0002 or less. Searched and not found:
+/// an ozone-layer temperature for a planet of another host. See
+/// `docs/science/ozone.md`, "Calibrations". The table also holds 233 K,
+/// which a test compares.
 pub(crate) const OZONE_LAYER_K: f64 = 223.0;
 
 /// Definition: the thickness of a column of one Dobson unit brought to

@@ -51,15 +51,19 @@ mod tests;
 /// thick cloud reflects 0.5 to 0.7; Earth's cover counts thin clouds
 /// too).
 ///
-/// The fit absorbs what the port lacks. In the clear sky, the port is
-/// brighter than the observed sky by its missing O₂ bands (issue #653,
-/// about +0.002) and darker by the aerosols' reflection it does not
-/// carry (about 0.017, a documented departure, `docs/science/ozone.md`);
-/// and Earth's column at 77 % holds 1.735 cm of water, what one column
-/// needs for the observed field's outgoing longwave, where its absorbed
-/// sunlight would need about 2.4 cm: about 0.0025 of Bond albedo (Wiki
-/// study 33, issue #654). The clouds' reflectance makes up the rest:
-/// refit it when any of these lands. See
+/// The fit absorbs five errors of the port, in clear-sky albedo against
+/// the observed sky: its missing O₂ bands make it brighter (issue #653,
+/// about +0.002); the table's Sun against the measured one makes it
+/// brighter (about +0.0023, Wiki study 35); the two-stream layer's
+/// Rayleigh reflection makes it darker (about −0.0028 against an exact
+/// column, issue #727); the aerosols' reflection it does not carry makes
+/// it darker (about 0.017, a documented departure,
+/// `docs/science/ozone.md`); and Earth's column at 77 % holds 1.735 cm of
+/// water, what one column needs for the observed field's outgoing
+/// longwave, where its absorbed sunlight would need about 2.4 cm (about
+/// 0.0025 of Bond albedo, brighter; Wiki study 33, issue #654). The
+/// clouds' reflectance makes up the rest: refit it when any of these
+/// lands. See
 /// `docs/science/radiative-transfer.md`, "The cloud's water, the deck and
 /// the haze", and `docs/science/ozone.md`, "Calibrations".
 pub(crate) const CLOUD_ALBEDO: f64 = 0.322;

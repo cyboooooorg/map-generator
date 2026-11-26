@@ -3153,7 +3153,7 @@ their measured air (see "Test air and Solar System bounds" below):
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
-| Earth | 288 K, water, regulated, thermostat CO₂ 4.206e-3 bar, Bond albedo 0.3070 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone, Bond albedo 0.2913 and 288.02 K at 280 ppm (before #705: 2.114e-3 bar, 0.2965 and 287.20 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
+| Earth | 288 K, water, regulated, thermostat CO₂ 4.206e-3 bar, Bond albedo 0.3070 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone, Bond albedo 0.2913 and 288.02 K at 280 ppm (on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
 | Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the 577 K pin, the model's output (#594), moves to the tier-2 net in 2d-4 | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
 | Titan | 93.86 K on the measured air, hydrocarbons; the reference Titan settles at 94.24 K on the chain's own air (104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |

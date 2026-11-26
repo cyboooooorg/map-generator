@@ -1,8 +1,8 @@
 # How much ozone does an oxygen air hold, and what light does it take?
 
 Seen from: the Bond albedo and the outgoing heat of a rocky planet whose
-air holds oxygen (the `Oxidising` and `Modern` biospheres of planet PR
-2d-4). It is the study behind issues #653 (ozone, O₂ and aerosols in
+air holds oxygen (the `Modern` biosphere of planet PR 2d-4; its
+`Oxidising` air keeps no O₂ for now, issue #717). It is the study behind issues #653 (ozone, O₂ and aerosols in
 the shortwave) and #704 (ozone in the longwave),
 [Wiki study 34](https://github.com/cyboooooorg/map-generator/wiki/34-ozone-oxygen-aerosols-audit).
 Ozone's shortwave is in the app (see [In the app](#in-the-app)); its
@@ -286,8 +286,9 @@ app's table of spectra at 5772 K, TSIS-1 the measured Sun of the tests):
 | TSIS-1 | 300 DU | 0.1411 | 61.39 | not run |
 
 Ozone takes 10.83 W/m² of the clear-sky light under TSIS-1 and 12.67
-under the table's Sun, against Kiehl & Trenberth 1997's 13.9 (older
-cross-sections). With the 233 K cross-sections instead of 223 K it
+under the table's Sun, against Kiehl & Trenberth 1997's 13.9. Why they find more is not known; the candidate differences, none
+verified, are their cross-sections, their geometry (one column and its
+angles) and the scaling from their 342 W/m² of insolation. With the 233 K cross-sections instead of 223 K it
 absorbs 0.33 % more, a single pass measured on the table's Sun. With
 0.322 the climate's Earth (ground 0.1445, clouds 0.682) has a Bond
 albedo of 0.2929.
@@ -311,8 +312,10 @@ Coddington et al. 2021). Measured, 340.25 W/m²:
 - **The black body doubles ozone's share.** It puts 3.0 % of the light
   below 300 nm where the Sun puts 1.0 % (see radiative-transfer.md), so
   ozone takes 18.6 W/m² under it and 10.8 under the measured Sun.
-  Kiehl & Trenberth (1997, Table 4) give 13.9 at 340.25 with older
-  cross-sections. Ozone has to come with the measured spectrum (#655),
+  Kiehl & Trenberth (1997, Table 4) give 13.9 at 340.25. Why they find
+  more is not known; the candidate differences, none verified, are
+  their cross-sections, their geometry (one column and its angles) and
+  the scaling from their 342 W/m² of insolation. Ozone has to come with the measured spectrum (#655),
   or after it.
 - **The column matters little.** Under TSIS-1, 150, 270, 330 and 450 DU
   give 7.8, 10.3, 11.4 and 13.5 W/m² of clear-sky absorption; even 3 DU
@@ -339,8 +342,8 @@ longwave, of O₂'s bands and the aerosols' are the plan's (below).
 **Decided with the user (2026-11-25).** The measured Sun (#655) lands
 before ozone's shortwave; #705 refits `CLOUD_ALBEDO` over the climate's
 own ground (0.1445), not 0.122; the column is calibration 1 below; the
-`Oxidising` air of planet PR 2d-4 keeps no O₂, so no ozone (an issue
-tracks it); the aerosols are a departure (below); the work goes in three
+`Oxidising` air of planet PR 2d-4 keeps no O₂, so no ozone (issue
+#717); the aerosols are a departure (below); the work goes in three
 pull requests: ozone's shortwave with the #705 refit, ozone's longwave
 with the methane and N₂O of #703 (one rebuild of `opacity.bin`), and
 O₂'s bands. The order of the radiation studies' pull requests is 33, 35,
@@ -423,6 +426,18 @@ to keep it in the boil band.
 probe, 10.84, rounded down, not a source. Searched and not found: a
 global-mean line-by-line value of ozone's shortwave absorption with
 current cross-sections and a measured Sun. Measured: 10.83 W/m².
+
+### Calibration 4: the layer's temperature (`OZONE_LAYER_K`, 223 K)
+
+The cross-sections are taken at one temperature, 223 K, for every
+layer and host (decided with the user, 2026-11-25). It rests on the
+ozone-weighted temperature of the AFGL profiles, 225 to 232 K (Anderson
+et al. 1986, integrated in "Where ozone comes from"); 223 K is the
+column of Serdyuchenko et al.'s file nearest the cold end of that range
+(the file steps by 10 K). Measured sensitivity: 233 K absorbs 0.33 %
+more (a single pass, table's Sun), and the study's probe found 243 K
+moves Earth's Bond albedo by 0.0002 or less. Searched and not found: an
+ozone-layer temperature for a planet of another host.
 
 ## Sources
 

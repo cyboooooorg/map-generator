@@ -878,17 +878,19 @@ CH₄/CO₂ ratio of 0.2.
   (issue #653): together about 7 W/m² of Earth's clear-sky absorption
   (O₂ 2.0 from Kiehl & Trenberth 1997, aerosols 4.8 from Kim &
   Ramanathan 2008, scaled to 340.25), and the aerosols' 0.017 of albedo
-  (a departure, decided 2026-11-25). Ozone's shortwave is (study 34): its
-  column against the star is a calibration, and its 300 DU take
-  10.83 W/m² of the measured Sun in Earth's clear sky, against Kiehl &
-  Trenberth's 13.9 (older cross-sections): see [ozone.md](ozone.md).
+  (a departure, decided 2026-11-25). Ozone's shortwave is modelled
+  (study 34): its column against the star is a calibration, and its
+  300 DU take 10.83 W/m² of the measured Sun in Earth's clear sky,
+  against Kiehl & Trenberth's 13.9, for reasons not known (their
+  cross-sections, their geometry and the scaling from their 342 W/m²
+  are candidates, none verified): see [ozone.md](ozone.md).
 - **CO₂'s share** of the clear-sky absorption was read in two sources
   only, 1.0 and 1.6 W/m², on different profiles and spectroscopy; no
   global-mean line-by-line split of the absorption by gas was found
   (Ramanathan & Vogelmann 1997, *Ambio* 26, 38, could not be opened).
   The share of the reflected light that ozone removes was not found.
-- **Ozone, N₂O and the halocarbons are not modelled in the infrared
-  either, and methane only as a stand-in.** The column's one methane
+- **Ozone, N₂O and the halocarbons are not modelled in the infrared,
+  and methane only as a stand-in.** The column's one methane
   opacity is the grey stand-in of Titan's collision-induced greenhouse
   (`radiation::methane`, a calibration on Titan), not methane's bands;
   Earth's test air holds no methane. Ozone's share of Earth's clear-sky
@@ -1100,24 +1102,25 @@ the Bond albedo are there too (change 2b-2).
     figure as the column's test profile, which the paper takes from
     observed hemispheric means (read in study 33; *Water: saturation,
     humidity and the limit*).
-  - *Cloud albedo.* The water clouds reflect 0.322 of the light falling
-    on their share of the sky, fitted by bisection so that Earth's Bond
-    albedo is 0.293 (Stephens et al. 2015; 0.32233, kept 0.322, gives
-    0.29286), over the ground Earth's own cover gives it at 288 K, 0.1445,
-    the 77 % air over 288 K with its 300 DU of ozone, the law's cloud
-    cover of 0.682 and the Sun of the table of spectra (#705, decided
-    2026-11-25: over CERES's 0.122 the climate's Earth came out at 0.304
-    whatever the air held). No observation gives a single cloud
-    reflectance for one column. The fit absorbs what the port lacks: O₂'s
-    bands (#653) and the model Sun against the measured one, the aerosols'
-    reflection, and the sunlight the column's 1.735 cm of water leaves
-    unabsorbed against the 2.4 cm a single column needs for the observed
-    field (#654, study 33): about 0.0025 of Bond albedo (interpolated
-    between measured runs). It was 0.296 over 0.122 without ozone under
-    the table's Sun, and 0.276 under the black-body Sun (#655). The
-    legacy fitted 0.252 on 0.30. A body without O₂ holds no ozone and
-    comes out brighter under it than under 0.296: the reference Earth,
-    without O₂ until planet PR 2d-4, has 0.3070.
+  - *Cloud albedo.* The water clouds reflect 0.322 of the light falling on their
+    share of the sky, fitted by bisection so that Earth's Bond albedo is 0.293
+    (Stephens et al. 2015; 0.32233, kept 0.322, gives 0.29286), over the ground
+    Earth's own cover gives it at 288 K, 0.1445, the 77 % air over 288 K with
+    its 300 DU of ozone, the law's cloud cover of 0.682 and the Sun of the table
+    of spectra (#705, decided 2026-11-25: over CERES's 0.122 the climate's Earth
+    came out at 0.304 whatever the air held). No observation gives a single
+    cloud reflectance for one column. The fit absorbs five errors of the port,
+    in clear-sky albedo against the observed sky: its missing O₂ bands (#653,
+    about +0.002), the table's Sun against the measured one (study 35, about
+    +0.0023), the two-stream layer's Rayleigh reflection (#727, about −0.0028
+    against an exact column), the aerosols' reflection it does not carry (about
+    −0.017, a departure), and the sunlight the column's 1.735 cm of water leaves
+    unabsorbed against the 2.4 cm a single column needs for the observed field
+    (#654, study 33): about +0.0025 of Bond albedo (interpolated between
+    measured runs). It was 0.296 over 0.122 without ozone under the table's Sun,
+    and 0.276 under the black-body Sun (#655). The legacy fitted 0.252 on 0.30.
+    A body without O₂ holds no ozone and comes out brighter under it than under
+    0.296: the reference Earth, without O₂ until planet PR 2d-4, has 0.3070.
   - *Sulphuric deck.* The deck appears from 1e-3 bar of SO₂ in a surface
     above 273.15 K, over a share of the disc that grows over 40 K. The
     sourced route is the binary H₂SO₄–H₂O condensation (Zeleznik 1991;
@@ -1147,17 +1150,17 @@ the Bond albedo are there too (change 2b-2).
     scaled to the data at 2600-2730 nm, about 2 % of the light (a choice
     of the study, not a source). Study 35 re-measured these numbers and
     the error for other hosts.
-  - *No ozone* (in the app since #653's first pull request). With 300 DU
-    (Kim & Ramanathan 2008, Table 2) as a pure absorber above the
-    column, with the cross-sections of Serdyuchenko et al. (2014) at
-    223 K and TSIS-1: 0.1409 (−0.0145) in the study's probe, 0.1411 in
-    the app, the ozone absorbing 10.8 W/m² of 340.25 (10.83 in the app;
-    Kiehl & Trenberth's 13.9, scaled, uses older cross-sections). ±30 DU
-    moves the top of the atmosphere by ±0.17 W/m² in the study and by
-    0.2 in Kim & Ramanathan's Table 2. Ozone with the black-body Sun
-    also reaches 0.1412, but the air then absorbs 67 W/m²: ozone alone
-    fixes the albedo for the wrong reason, and the spectrum has to change
-    with it. Issue #653.
+  - *No ozone* (in the app since #653's first pull request). With 300 DU (Kim &
+    Ramanathan 2008, Table 2) as a pure absorber above the column, with the
+    cross-sections of Serdyuchenko et al. (2014) at 223 K and TSIS-1: 0.1409
+    (−0.0145) in the study's probe, 0.1411 in the app, the ozone absorbing 10.8
+    W/m² of 340.25 (10.83 in the app; Kiehl & Trenberth give 13.9, scaled, for
+    reasons not known: their cross-sections, their geometry and the scaling from
+    their 342 W/m² are candidates, none verified). ±30 DU moves the top of the
+    atmosphere by ±0.17 W/m² in the study and by 0.2 in Kim & Ramanathan's Table
+    2. Ozone with the black-body Sun also reaches 0.1412, but the air then
+    absorbs 67 W/m²: ozone alone fixes the albedo for the wrong reason, and the
+    spectrum has to change with it. Issue #653.
   - *No O₂.* Hogan & Matricardi (2020, Table 4) give 1.25 W/m² at the top
     of the atmosphere over a daytime mean of 680.5, that is −0.0018.
     Their N₂ collision-induced absorption, 0.062 W/m², is negligible.

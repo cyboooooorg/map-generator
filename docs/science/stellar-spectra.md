@@ -301,8 +301,7 @@ against RFMIP's line-by-line fluxes.
   The user retired the window on 2026-11-25: no line-by-line reference on
   water and CO₂ alone exists, and the total is compared with LBLRTM on
   RFMIP's field once the column holds O₂ too (ozone's shortwave is in
-since #653's first pull request; #715). Earth's
-  Bond albedo test still guards the budget; the column's responses to
+  since #653's first pull request; #715). Earth's Bond albedo test still guards the budget; the column's responses to
   CO₂ and to water are tested against LBLRTM on RFMIP's field (see [How
   does a planet's air set its outgoing heat and its
   albedo?](radiative-transfer.md), "Window of the H₂O and CO₂

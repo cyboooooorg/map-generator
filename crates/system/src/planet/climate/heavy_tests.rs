@@ -1438,8 +1438,10 @@ const F0V_BOILING_FLUX: f64 = 1.2963;
 /// it), and it absorbed 286.02 W/m², under its saturated column's peak
 /// (289.94 W/m² before #705): no boil, and no N₂ cut can bring the peak
 /// under about 289.7 W/m². A lighter planet's lower gravity lowers the
-/// peak; at this flux and [`HUNDREDTH_OF_N2`] 0.7 Earth masses still does
-/// not boil and 0.5 does (measured, release build).
+/// peak. Measured by a probe at this flux, with [`HUNDREDTH_OF_N2`] and
+/// 3e-4 of water (release build, 2026-11-26): 0.7 Earth masses absorbs
+/// 284.08 W/m² (Bond albedo 0.356) and does not boil; 0.5 absorbs
+/// 282.68 W/m² (0.359) and boils.
 const BOILING_MASS: f64 = 0.5;
 
 /// Definition: the water share of the boil that escapes all its water,
