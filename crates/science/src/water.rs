@@ -910,17 +910,19 @@ pub fn vapour_saturation_pressure(t: Kelvin) -> Pascal {
     Pascal(vapour_saturation_bar(t.0) * PASCALS_PER_BAR)
 }
 
-/// The condensate water vapour is in equilibrium with.
+/// The condensate a vapour is in equilibrium with: water's here, CO2's
+/// too ([`crate::volatiles::co2_condensate`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Condensate {
-    /// Ice Ih: the sublimation curve and its latent heat.
+    /// The solid (water's ice Ih, CO2's frost): the sublimation curve and
+    /// its latent heat.
     Ice,
-    /// Liquid water: the vaporisation curve and its latent heat.
+    /// The liquid: the vaporisation curve and its latent heat.
     Liquid,
 }
 
 impl Condensate {
-    /// The stable condensate at `t_k`: ice Ih below the triple point
+    /// Water's stable condensate at `t_k`: ice Ih below its triple point
     /// (and at a NaN temperature, read as 0 K), liquid above.
     pub(crate) fn at(t_k: f64) -> Condensate {
         if t_k.is_nan() || t_k < TRIPLE_POINT_TEMPERATURE.0 {

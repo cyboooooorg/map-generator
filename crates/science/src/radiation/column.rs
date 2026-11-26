@@ -61,7 +61,10 @@ use super::spectrum::{
 };
 use crate::constants::{MOLAR_GAS_CONSTANT, STEFAN_BOLTZMANN};
 use crate::units::{Kelvin, MetrePerSecondSquared, WattPerSquareMetre};
-use crate::volatiles::{co2_latent_j_mol, co2_saturation_bar, methane_saturation_bar};
+use crate::volatiles::{
+    CO2_TRIPLE_TEMPERATURE, co2_condensate, co2_latent_j_mol_over, co2_saturation_bar,
+    co2_saturation_bar_over, methane_saturation_bar,
+};
 use crate::water::{
     CRITICAL_POINT_TEMPERATURE, Condensate, TRIPLE_POINT_TEMPERATURE, vapour_latent_j_mol_over,
     vapour_saturation_bar, vapour_saturation_bar_over,
@@ -417,21 +420,63 @@ fn pseudo_adiabat(
 }
 
 /// `d T / d ln p`, K, at `temperature_k` and `pressure_bar` on the moist
-/// pseudo-adiabat of CO₂ condensing out of `air` ([`pseudo_adiabat`] with
-/// CO₂ the condensable, [`co2_latent_j_mol`] its latent heat, and the
-/// other gases and the little water vapour so cold an air holds the
-/// non-condensing part): Kasting 1991, Appendix B, which Kopparapu et al.
-/// 2013 (§2) follow "in the upper troposphere when condensation was
-/// encountered" (the Appendix itself not read: audit, Wiki study 19).
-fn co2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64) -> f64 {
+/// pseudo-adiabat of CO₂ condensing out of `air` over `condensate`
+/// ([`pseudo_adiabat`] with CO₂ the condensable, its curve and latent
+/// heat over that condensate, [`co2_saturation_bar_over`] and
+/// [`co2_latent_j_mol_over`], and the other gases and the little water
+/// vapour so cold an air holds the non-condensing part): Kasting 1991,
+/// Appendix B, which Kopparapu et al. 2013 (§2) follow "in the upper
+/// troposphere when condensation was encountered" (the Appendix itself
+/// not read: audit, Wiki study 19).
+fn co2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: Condensate) -> f64 {
     let t = temperature_k;
     pseudo_adiabat(
         t,
         pressure_bar,
-        co2_saturation_bar(t),
-        co2_latent_j_mol(t),
+        co2_saturation_bar_over(t, condensate),
+        co2_latent_j_mol_over(t, condensate),
         air.cp_without_co2(),
         CO2_HEAT_CAPACITY,
+    )
+}
+
+/// The temperature, K, a step of `h` in `ln p` up CO₂'s pseudo-adiabat
+/// reaches from `temperature_k` at `pressure_bar`: a midpoint
+/// (second-order Runge–Kutta) step over the condensate stable where it
+/// starts ([`co2_lapse`]).
+///
+/// The latent heat jumps by fusion's at CO₂'s triple point (216.592 K,
+/// [`CO2_TRIPLE_TEMPERATURE`], Span & Wagner 1996), so a step that
+/// crosses it is split there, as water's is ([`saturated_step`]): liquid
+/// down to where the step over liquid alone reaches the triple point
+/// (`T` taken linear across the step), frost below. Without the split
+/// the phase of the midpoint decides the whole step, and the column
+/// above jumps colder by up to 1 K when the surface moves the midpoint
+/// across 216.592 K: a cold CO₂-rich air's outgoing radiation fell by
+/// 1.3 W/m² over 0.005 K of its surface, and a methane Earth's collapse
+/// past its outer edge stopped on the jump (#703, 1.272 AU).
+fn co2_step(air: &DryAir, temperature_k: f64, pressure_bar: f64, h: f64) -> f64 {
+    let step = |t: f64, from: f64, h: f64, condensate: Condensate| {
+        let half = t - 0.5 * h * co2_lapse(air, t, from, condensate);
+        t - h * co2_lapse(air, half, from * (-0.5 * h).exp(), condensate)
+    };
+    let t = temperature_k;
+    let triple = CO2_TRIPLE_TEMPERATURE;
+    let condensate = co2_condensate(t);
+    if condensate == Condensate::Ice {
+        return step(t, pressure_bar, h, condensate);
+    }
+    let liquid = step(t, pressure_bar, h, condensate);
+    if liquid >= triple {
+        return liquid;
+    }
+    let f = (t - triple) / (t - liquid);
+    let frozen = step(t, pressure_bar, f * h, Condensate::Liquid);
+    step(
+        frozen,
+        pressure_bar * (-f * h).exp(),
+        (1.0 - f) * h,
+        Condensate::Ice,
     )
 }
 
@@ -907,12 +952,8 @@ fn with_column<R>(
         // where it does (the excess `ln(p_CO₂ / p_sat)` taken linear
         // across the step), so that the column moves smoothly with its
         // CO₂.
-        let moist = |t: f64, from: f64, h: f64| {
-            let half = t - 0.5 * h * co2_lapse(&air, t, from);
-            t - h * co2_lapse(&air, half, from * (-0.5 * h).exp())
-        };
         if co2_saturated {
-            t = moist(t, p_here, h);
+            t = co2_step(&air, t, p_here, h);
         } else {
             let mut next = if saturated {
                 saturated_step(&air, t, p_here, h)
@@ -953,7 +994,7 @@ fn with_column<R>(
                     below / (below - above)
                 };
                 let crossed = t + f * (next - t);
-                t = moist(crossed, p_here * (-f * h).exp(), (1.0 - f) * h);
+                t = co2_step(&air, crossed, p_here * (-f * h).exp(), (1.0 - f) * h);
                 co2_saturated = true;
             } else {
                 t = next;
