@@ -14,9 +14,10 @@ dioxide, their continua, and the brief pairs that colliding molecules form
 (CO₂–CO₂, and since study 36 N₂–N₂, O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄);
 the pairs replaced a grey stand-in for Titan's methane. Earth's real air
 also traps heat with ozone, methane's and nitrous oxide's (N₂O) lines and
-halocarbons. Line-by-line codes put the last five at about
-3.6 W/m² of Earth's clear-sky outgoing infrared at present-day amounts,
-and methane and N₂O at 2 to 3 W/m² at pre-industrial ones. Two findings
+halocarbons. Line-by-line codes put methane, N₂O and the halocarbons at
+about 3.39 W/m² of Earth's clear-sky outgoing infrared at present-day
+amounts (3.6 with the N₂ and O₂ pairs, which the column now holds), and
+methane and N₂O at 2 to 3 W/m² at pre-industrial ones. Two findings
 matter more than the numbers:
 
 - The model's Earth carries **no methane and no N₂O** at all: the chain
@@ -26,7 +27,8 @@ matter more than the numbers:
   +0.2 K.
 - The **nitrogen and methane pairs** of HITRAN's collision-induced files
   put a spectral Titan at 92.30 K without any fitted constant (measured:
-  93.65 K), where the column now needs a calibrated grey opacity. On
+  93.65 K), and replaced the calibrated grey opacity the column needed
+  before. On
   thick nitrogen airs the pairs grow with the pressure squared: −3.3 W/m²
   at 5 bar.
 
@@ -67,8 +69,9 @@ sources give it:
   GRTCODE, RFM-DISORT, LBLRTM 12.8, 4A/OP 1.5). Present day is 2014
   (1831 ppb of CH₄, 327 ppb of N₂O); pre-industrial is 808 ppb and
   273 ppb. The differences in the table are their outgoing fluxes,
-  experiment "PI CH4" or "PI N2O" less "PD" (derived here). The CO₂
-  parameterization RRTMGP gives 0.563 and 0.180 on the same profiles.
+  experiment "PI CH4" or "PI N2O" less "PD" (derived here). RRTMGP, the
+  k-distribution parameterization of the same group, gives 0.563 and
+  0.180 W/m² on the same profiles.
 - **Collins et al. 2006** (RTMIP, Table 8, case 3a-1a): adding 806 ppb
   of CH₄ and 275 ppb of N₂O to an air that had none, on the AFGL
   mid-latitude summer profile (294 K surface), lowers the outgoing
@@ -78,9 +81,10 @@ sources give it:
 
 **At pre-industrial amounts** (derived, the sources do not give it): the
 removal at present day less the RFMIP rise, and less the rise from
-RFMIP's present day to Hogan & Matricardi's (Etminan et al. 2016,
-0.04 W/m² for CH₄ and 0.02 for N₂O), gives about 0.85 W/m² for CH₄ and
-1.3 for N₂O on Hogan & Matricardi's profiles, 1.26 and 1.68 from
+RFMIP's present day to Hogan & Matricardi's (Etminan et al. 2016's
+square-root terms, 0.043 (√1921 − √1831) = 0.045 W/m² for CH₄ and
+0.117 (√332 − √327) = 0.016 for N₂O), gives about 0.84 W/m² for CH₄ and
+1.28 for N₂O on Hogan & Matricardi's profiles, 1.26 and 1.68 from
 Höpfner et al.'s. The two gases' bands overlap (Etminan et al. 2016 fit
 an overlap term for it), so together they take a little less than the
 sum: about 2.0 to 2.8 W/m² clear-sky. Halocarbons were nearly absent
@@ -184,9 +188,14 @@ do now.
   gone. The sourced Titan column settles at 92.296 K against the
   measured 93.65 ± 0.25 K (it was 93.60 K with the stand-in). The
   tier-1 test allows 1.4 K under the measurement, a calibration on the
-  measured gap, for what the column lacks: N₂–H₂ pairs (issue #720),
-  methane's own lines and the haze's infrared, each of which can only
-  warm it.
+  measured gap: its floor is 93.65 − 0.25 − 1.4 = 92.00 K, 0.3 K under
+  the column's 92.30 K. It is for what the column lacks: N₂–H₂ pairs
+  (issue #720), methane's own lines, the haze's infrared, and the
+  methane of the lower troposphere: the column applies the cold trap's
+  mixing ratio (`radiating_methane_bar`) at every level, so it holds
+  about 40 % of the sourced surface CH₄ there (a review's estimate,
+  derived, issue #744), likely a large share of the gap since N₂–CH₄ is
+  linear in CH₄. Each of them can only warm it.
 - **Which airs hold methane.** Methane is outgassed and survives only
   under an equilibrium temperature of 150 K (`METHANE_SURVIVES`), capped
   by its saturation: Titan's chain air keeps 0.091 bar. No law makes
@@ -235,8 +244,11 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give
   not written here.
 - **Titan's grey stand-in is gone.** Spectral N₂-N₂ and N₂-CH₄ pairs
   reach 92.3 K without a fit. What is still missing is N₂-H₂ (the model's
-  air has no H₂, issue #720), methane's own lines, and the haze's
-  infrared.
+  air has no H₂, issue #720), methane's own lines, the haze's infrared,
+  and the methane of the lower troposphere, which the column holds at
+  the cold trap's mixing ratio at every level (`radiating_methane_bar`,
+  about 40 % of the sourced surface CH₄, a review's estimate, issue
+  #744).
 - **The temperature grid** of `opacity.bin` starts at 100 K; Titan's
   column runs from 69 to 94 K and takes 100 K lines. The pairs' table
   starts at 70 K and ends at 400 K: Titan's 69 K skin takes the 70 K
@@ -281,8 +293,10 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give
   and derived values exist.
 - Why the column's N₂ pairs take about 0.1 W/m² more than the
   line-by-line sources on Earth.
-- How much of Titan's last 1.35 K belongs to N₂-H₂, to methane's lines
-  or to the haze.
+- How much of Titan's last 1.35 K belongs to N₂-H₂, to methane's lines,
+  to the haze, or to the methane the column leaves out of its lower
+  troposphere (issue #744); that last one is likely a large share, since
+  N₂-CH₄ absorbs in proportion to the methane.
 
 ## Sources
 
@@ -340,6 +354,32 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give
     doi:10.1029/2020JD033483 (the text was not reached; its line-by-line
     fluxes were read in `RobertPincus/rfmip-benchmark-paper-figures` at
     `76f2bff4`, `lw-lbl-models.nc`, SHA-256 `11101c39…e094b`).
+15. Chistikov, D. N., Finenko, A. A., Lokshtanov, S. E., Petrov, S. V.,
+    Vigasin, A. A. 2019, *J. Chem. Phys.* 151 (19),
+    doi:10.1063/1.5125756 (N₂–N₂ roto-translational; as HITRAN's
+    `CIA_References_2024.pdf` gives it, not read).
+16. Lafferty, W. J., Solodov, A. M., Weber, A., Olson, W. B., Hartmann,
+    J.-M. 1996, *Appl. Opt.* 35, 5911, doi:10.1364/AO.35.005911 (N₂
+    fundamental, 228-272 K; through HITRAN's references, not read).
+17. Baranov, Y. I., Lafferty, W. J., Fraser, G. T. 2005, *J. Mol.
+    Spectrosc.* 233, 160, doi:10.1016/j.jms.2005.06.008 (the N₂ and O₂
+    fundamentals near room temperature; through HITRAN's references, not
+    read).
+18. Hartmann, J.-M., Boulet, C., Toon, G. C. 2017, *J. Geophys. Res.
+    Atmos.* 122, 2419, doi:10.1002/2016JD025677 (N₂ near 2.16 µm; through
+    HITRAN's references, not read).
+19. Thibault, F. et al. 1997, *Appl. Opt.* 36, 563,
+    doi:10.1364/ao.36.000563 (O₂–N₂, O₂'s fundamental; through HITRAN's
+    references, not read).
+20. Orlando, J. J. et al. 1991, *J. Geophys. Res.* 96, 20755,
+    doi:10.1029/91JD02042 (O₂–N₂; through HITRAN's references, not read).
+21. Borysow, A., Frommhold, L. 1987, *Astrophys. J.* 318, 940,
+    doi:10.1086/165426 (CH₄–CH₄; through HITRAN's references, not read).
+22. Fulchignoni, M. et al. 2005, "In situ measurements of the physical
+    characteristics of Titan's environment", *Nature* 438, 785,
+    doi:10.1038/nature04314 (Titan's surface, 93.65 ± 0.25 K and
+    1467 hPa, as [What decides whether a world has an
+    atmosphere?](atmospheres.md) reads it).
 
 ## See also
 

@@ -7,15 +7,17 @@ the study the user asked for before the first pull request of study 36
 (issue #703, branch `feat/climate-longwave-gases`, commits `8bbe27ec`
 and `e59e6a92`) could go on:
 [Wiki study 38](https://github.com/cyboooooorg/map-generator/wiki/38-nitrogen-phases-audit).
-Nothing of it is in the app yet; [In the app](#in-the-app) says what the
-climate solver does with such a body today.
+The solver fix it called for landed in that pull request;
+[In the app](#in-the-app) says what the climate solver did with such a
+body and what it does now.
 
 ## Short answer
 
 Yes, two states under the same light are expected. Nitrogen frost is
 bright (an albedo of 0.7 to 0.8 on Triton); liquid nitrogen is clear in
 visible light, so a sea of it shows the darker ground under it. A body
-just under nitrogen's triple point (63.15 K, 0.125 bar) that keeps its
+just under nitrogen's triple point (63.14 K, 0.1253 bar, as the code
+takes it from Angus et al. 1979) that keeps its
 frost reflects enough light to stay frozen; the same body with its
 nitrogen melted absorbs enough to stay liquid. A thicker air over the
 liquid also holds more heat in, through the infrared absorption of
@@ -27,10 +29,11 @@ its ice, and an unfrozen one with nitrogen seas (Charnay et al. 2014).
 Three states are not expected. Between frozen and melted, a body
 covered in part by frost is in balance only at one point, and that
 balance is unstable: a little warmer, the frost retreats, the body
-darkens and warms more. The climate solver of the branch reports such a
-state as settled because its stopping test does not check stability. So
-the bistability is physics, and the third state is a numerical artefact
-of the solver.
+darkens and warms more. The climate solver of the branch reported such a
+state as settled because its stopping test did not check stability; it
+now keeps only a balance that attracts (see [In the app](#in-the-app)).
+So the bistability is physics, and the third state was a numerical
+artefact of the solver.
 
 ## The science
 
@@ -65,7 +68,7 @@ Three things change across nitrogen's melting:
   at the same temperature: a negative feedback.
 - **The air thickens.** The air is in vapour equilibrium with the
   ground, so its pressure follows the saturation curve: from 0.054 bar
-  at 59.3 K to 0.125 bar at the triple point and 0.16 bar at 64.4 K
+  at 59.3 K to 0.1253 bar at the triple point and 0.16 bar at 64.4 K
   (Fray & Schmitt's β-N₂ fit and Span et al.'s liquid curve, the model's
   `science::volatiles`). The pairs' absorption grows as the square of
   the density, so the greenhouse grows with temperature: a positive
@@ -220,7 +223,10 @@ states are both stable from 0.005918 to 0.007041 Earth fluxes (54 % to
 unstable branch between them. A transparent air (the model before the
 pairs) gives the same shape from 0.006818 to 0.008028 (18 %). The pairs
 lower the light both states need and weaken the branches' slopes (the
-frost branch's `d ln F*/dT` falls from 0.068 to 0.052 per K, derived);
+frost branch's `d ln F*/dT`, the chord of the table from 59.25 to
+62.10 K, falls from 0.069 to 0.044 per K, derived; the study first
+quoted 0.068 and 0.052, local slopes that the table's points do not
+show);
 they make no third branch. The last column is the scratch line-by-line
 sum (above) along N₂'s saturation curve, with the model's albedo,
 emissivity and air at each temperature; the same sum on the model's dry
@@ -256,8 +262,9 @@ show what it found:
   The scan's "melting frost" spreads its emissivity from 0.91 to 1.00
   at one temperature for that reason.
 
-So the two jumps of 0.013 % of light are where the warm start's path
-changes its landing, between the frozen branch, the unstable root and
+So the two jumps, each between neighbours of the sweep 0.26 % of light
+apart (the finer scan put each within 0.013 %), are where the warm
+start's path changes its landing, between the frozen branch, the unstable root and
 the liquid branch; they are not thresholds of the model. The one jump
 of the model before the pairs (59.77 to 63.15 K at 0.006861 to
 0.006878) was the same: the warm start lands on the liquid branch a
@@ -293,8 +300,9 @@ where the unstable branch meets the liquid one (not probed on `main`).
    little weak.
 5. **Leave `PHASE_BAND` a numerical smoothing.** Its width moves the
    frost branch's last point (at `T_m − w`) and so the top of the
-   hysteresis, by about 5 % of light between `w` = 1 K and none
-   (derived from the frost branch's slope, `d ln F*/dT` = 0.052 per K).
+   hysteresis, by about 4 to 5 % of light between `w` = 1 K and none
+   (derived: 4.4 % from the frost branch's chord, `d ln F*/dT` = 0.044
+   per K; 5.2 % from the 0.052 per K the study first quoted).
    Its stated purpose, a solution at the triple point, holds only when
    the emissivity's negative feedback outweighs the albedo's (a ground
    at least as bright as the frost); over a darker ground it holds the
@@ -403,6 +411,23 @@ The user took every recommendation of the study:
     collapses", *Icarus* 444, 116795, doi:10.1016/j.icarus.2025.116795
     (arXiv:2411.06871, read: abstract, introduction, results on the
     multiple climate modes).
+14. Angus, S., de Reuck, K. M. et al. 1979, nitrogen's triple point,
+    63.14 K and 0.1253 bar, as the code takes it (`volatiles.rs`), through
+    the NIST Chemistry WebBook (as [Planet
+    atmospheres](planet-atmospheres.md) reads it).
+15. Span, R., Lemmon, E. W., Jacobsen, R. T., Wagner, W., Yokozeki, A.
+    2000, "A reference equation of state for the thermodynamic properties
+    of nitrogen for temperatures from 63.151 to 1000 K and pressures to
+    2200 MPa", *J. Phys. Chem. Ref. Data* 29, 1361, doi:10.1063/1.1349047
+    (the liquid's vapour-pressure curve, as the code takes it).
+16. Lellouch, E., Stansberry, J., Emery, J., Grundy, W., Cruikshank, D. P.
+    2011, "Thermal properties of Pluto's and Charon's surfaces from Spitzer
+    observations", *Icarus* 214, 701 (the N₂ ice emissivity 0.8; not read,
+    cited through Meza et al. 2019).
+17. Meza, E. et al. 2019, "Pluto's lower atmosphere and pressure evolution
+    from ground-based stellar occultations, 1988-2016", *A&A* 625, A42,
+    doi:10.1051/0004-6361/201834281, arXiv:1903.02315 (§ 4 read for
+    [Planet atmospheres](planet-atmospheres.md)).
 
 ## See also
 

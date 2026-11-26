@@ -2194,13 +2194,18 @@ CH₄ and H₂, which warms it by 21 K, while its haze cools it by 9 K
 (McKay, Pollack & Courtin 1991, doi:10.1126/science.11538492, abstract
 checked); the column holds the N₂ and CH₄ pairs, and the anti-greenhouse
 (below) the cooling. Missing: N₂–H₂ pairs (H₂ is not a gas of the model,
-issue #720), methane's lines and the haze's infrared, which the tier-1
-test allows 1.4 K for (`balance_tests.rs`, `TITAN_MISSING_WARMING_K`).
+issue #720), methane's lines, the haze's infrared, and the methane the
+cold trap's ratio leaves out of the lower troposphere (issue #744,
+below), which the tier-1 test allows 1.4 K for (`balance_tests.rs`,
+`TITAN_MISSING_WARMING_K`; its floor is 93.65 − 0.25 − 1.4 = 92.00 K,
+0.3 K under the column's 92.30 K).
 
-**Methane** (issue #443). The `sqrt(p_CH₄ P)` law, calibrated on Titan,
-was stretched 500-fold past it: a planet at an equilibrium temperature of
-114 K under 26 bar of methane (seed 182, planet d) came out at 351 K with
-liquid water. Three rules bound it:
+**Methane** (issue #443). The legacy's grey `sqrt(p_CH₄ P)` law,
+calibrated on Titan, was stretched 500-fold past it: a planet at an
+equilibrium temperature of 114 K under 26 bar of methane (seed 182,
+planet d) came out at 351 K with liquid water. Three rules bounded it;
+since study 36 retired the grey law for HITRAN's pairs, the first two
+bound the pairs' methane, and the third is gone:
 
 - *Condensation at the surface.* Inside the climate's fixed point
   (`atmosphere::condense`, applied at each step to the temperature the
@@ -2224,7 +2229,11 @@ liquid water. Three rules bound it:
   pure methane's saturation pressure at the skin temperature `T_eq / 2^¼`
   allows at a 0.1 bar tropopause (`TROPOPAUSE_BAR`: the common tropopause
   of thick atmospheres, Robinson & Catling 2014, doi:10.1038/ngeo2020):
-  Titan's skin at 70 K lets about 3 % through.
+  Titan's skin at 70 K lets about 3 % through. The column applies that
+  ratio at every level, not only above the tropopause, so Titan's lower
+  troposphere holds about 40 % of its sourced surface methane (a
+  review's estimate, derived, issue #744), likely a large share of the
+  1.35 K the pairs leave Titan under its measurement.
 - *Saturation* (legacy, retired by study 36). The grey law counted
   `u = p / (1 + p / 0.01 bar)` (`CH4_SATURATION_BAR`), and the pressure
   it collides with counted the methane as `u`:
@@ -2332,10 +2341,11 @@ grey laws (`BROADENING_KNEE_BAR`, `LOCAL_KNEE_BAR`,
 `WATER_FOREIGN_BROADENING`, issues #440 and #441) are gone with them.
 Argon counts as air in the broadening, although it broadens less than N₂
 (0.78 of N₂ for CO₂, about 0.37 of air for water, measured): a departure
-(*Argon (study 29)* above). Methane's stand-in keeps the whole pressure, its
-own counted as the saturated amount `u` (see **Methane** above): it stands for
-Titan's collision-induced greenhouse, which grows with the nitrogen faster than
-line broadening.
+(*Argon (study 29)* above). Methane's grey stand-in kept the whole
+pressure, its own counted as the saturated amount `u` (see **Methane**
+above), standing for Titan's collision-induced greenhouse; since study 36
+the column holds that greenhouse as HITRAN's N₂–CH₄ and CH₄–CH₄ pairs,
+which grow as the product of the two gases' densities.
 
 **Thick nitrogen.** At 1 AU with modern CO₂ (4e-4 bar) and no
 thermostat, an Earth keeps a moist balance at 300, 310 and 319 K under 2,
@@ -2861,8 +2871,13 @@ amount covers (`frost / 0.02 bar` of N₂ alone: the most volatile frost
 condenses last and lies over the others, as Triton's N₂ lies over its
 CO₂). A grey surface sends out `ε σ T⁴`: `surface_temperature_k` and the
 wet balance take the column's outgoing radiation times `ε`, as through a
-transparent air, which holds over a nitrogen frost (its vapour is at
-most 0.125 bar). The emissivity is solved in the same fixed point as the
+transparent air. That held over a nitrogen frost (its vapour is at most
+0.125 bar) while the air absorbed nothing there; since the N₂ pairs of
+study 36 it absorbs (6 % to 16 % of `σ T⁴` near the triple point, study
+38), and `ε × OLR` scales the air's own emission by `ε` too and leaves
+out the frost's reflection of the air's downward emission, `(1 − ε)` of
+it: about 1 to 3 % of the outgoing radiation over the frost (a review's
+estimate, derived, not verified; issue #745). The emissivity is solved in the same fixed point as the
 albedo, damped the same way, and stored with the climate so that it
 reproduces (worlds stored before it read 1). The legacy's 0.89 was a calibration on
 Triton (above); Stansberry, Pisano & Yelle 1996 (*Planet. Space Sci.*
@@ -2955,7 +2970,7 @@ tier-3 test `the_fixed_point_converges_until_the_nitrogen_frost_melts`
 checks that the absorbed light rises across the jump as the column's
 own `ε OLR` does (×1.5520 against ×1.5518): `ε T⁴` (×1.7424) was the
 premise of a transparent air, which the pairs end (the column sends out
-6 % to 12 % less than `ε σ T⁴`). The tier-3 test
+6 % to 16 % less than `σ T⁴`, 0.9432 and 0.8417 of it, study 38). The tier-3 test
 `a_nitrogen_world_keeps_its_frost_and_its_liquid_over_a_range_of_light`
 follows both branches: the frost holds up to 0.0070506 Earth fluxes and
 the liquid down to 0.0059258, within three steps of the folds study 38
@@ -3224,8 +3239,11 @@ O₂ 20.95 % of 1.014 bar), under that air's own Bond albedo with the
 ozone its O₂ holds (`ozone_column`, [ozone.md](ozone.md)), taken at
 the reference Earth's temperature. Since #705 the cloud albedo is
 fitted with that ozone in (0.322), so the reference Earth without O₂
-is brighter (0.3070) and its thermostat holds 288 K with twice the CO₂. Dry bodies are never a runaway: Mercury and a
-dry Venus are `Temperate`.
+is brighter (0.3070; 0.3071 since the N₂ and O₂ pairs of #703, the
+heavy tests' 0.30703 and 0.30708) and its thermostat holds 288 K with
+4.071e-3 bar of CO₂, about twice the 2.058e-3 bar it held before #705
+(4.206e-3 bar before the pairs). Dry bodies are never a runaway: Mercury
+and a dry Venus are `Temperate`.
 
 The wet column against CERES (#680, study 32): on Earth's measured air
 at 288 K and 280 ppm the clear column sends out 274.72 W/m² on `main`
@@ -3306,9 +3324,9 @@ Titan's 9.57 AU, where the methane condenses: the two searches give
 14.2 and 52.0 bar, yet the settled climate is the same, 88.419440 K both
 ways (a gap of 2e-11 K), frozen, and the outer edge is 1.4326 AU both
 ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, see below;
-1.4443 AU once the stellar spectra of #730 came in, and 1.4355 AU since
-#729, below). Since methane's greenhouse is its pairs only (#703) the
-edge is 1.2588 AU both ways, and at 9.57 AU the climate settles at
+1.4443 AU once the stellar spectra of #730 came in, 1.4355 AU since
+#729, below, and 1.4365 AU since #734). Since methane's greenhouse is its
+pairs only (#703) the edge is 1.2588 AU both ways, and at 9.57 AU the climate settles at
 80.52 K (a gap of 5e-13 K), the two searches giving 21.87 and 21.84 bar.
 No regulated body can have a condensing air: the thermostat holds
 288 K, above the critical points of methane
@@ -3353,7 +3371,7 @@ then fell to the floor of the surface solver, the dew point of its
 vapour, 284.0103 K, at 1, 1.3 and 1.6 AU. Now it sits at 288.0000 K at 1
 AU (3.94 bar of CO₂) and 288.0004 K at 1.3 AU (7.73 bar), and is frozen
 at 1.6 AU. Its outer edge moves in from 1.6470 to 1.4331 AU (1.4355 AU
-since #730 and #729, 1.2588 AU since #703). The old
+since #730 and #729, 1.4365 AU since #734, 1.2588 AU since #703). The old
 edge came from the top end of the search: from about 1.43 to 1.65 AU
 even the most CO₂ sends out more from a 288 K surface than the air with
 that CO₂ absorbs (at 1.6 AU under a 0.3 albedo, 57.6 against 51.0 W/m²),
@@ -3599,7 +3617,7 @@ state is claimed. The edge of a methane Earth moves from 1.4443 to
 1.4355 AU with it (measured, `one_greenhouse_search_on_a_condensing_air`),
 and that test went from 833 s to 74 s (release). Since methane's grey
 stand-in is retired (#703) its edge is 1.2588 AU and the orbits with no
-fixed point run from 1.268 to 1.276 AU (probed every 0.001 AU); the
+fixed point run from 1.268 to 1.277 AU (probed every 0.001 AU); the
 tier-3 test `a_climate_with_no_fixed_point_stops_on_its_cold_side`
 moved from 1.44 to 1.272 AU, where the climate cycles for 16 steps and
 is stored at 227.17 K with 8.01 bar of CO₂.
@@ -4587,6 +4605,9 @@ another paper, from memory) is said where it is used.
   doi:10.1016/j.pss.2024.105863, arXiv:2403.09917, NH₃'s sublimation
   pressure at 80 to 120 K.
 - Bono et al. 2019, the age of Earth's inner core.
+- Borysow and Frommhold 1987, *Astrophys. J.* 318, 940,
+  doi:10.1086/165426, the CH₄–CH₄ pairs of HITRAN's `CH4-CH4_2011.cia`
+  (through HITRAN's references, not read).
 - Boukrouche, Lichtenberg and Pierrehumbert 2021, *ApJ* 919, 130,
   doi:10.3847/1538-4357/ac1345, arXiv:2107.14150, the end of the
   plateau (Fig. 9) and the post-runaway equilibrium (§ 4.3; read).
@@ -4605,8 +4626,15 @@ another paper, from memory) is said where it is used.
   doi:10.5670/oceanog.2010.51, Table 1, the volume and area of Earth's
   ocean (read).
 - Charnay et al. 2013, doi:10.1002/jgrd.50808.
+- Charnay, Forget, Tobie, Sotin and Wordsworth 2014, "Titan's past and
+  future: 3D modeling of a pure nitrogen atmosphere and geological
+  implications", *Icarus* 241, 269, doi:10.1016/j.icarus.2014.07.009
+  (arXiv:1407.1791, read for study 38: §2, §4.2, §4.3, Table 2).
 - Chen, Aziz and Lim 1971, *Can. J. Phys.* 49, 1569,
   doi:10.1139/p71-183, the vapour pressure of solid argon (record only).
+- Chistikov et al. 2019, *J. Chem. Phys.* 151 (19),
+  doi:10.1063/1.5125756, the N₂–N₂ roto-translational pairs of HITRAN's
+  `N2-N2_2021.cia` (through HITRAN's references, not read).
 - Christensen 2006, doi:10.1038/nature05342, the deep dynamo.
 - Christensen 2010, doi:10.1007/s11214-009-9553-2, the energy-flux
   scaling of the field.
@@ -4654,6 +4682,9 @@ another paper, from memory) is said where it is used.
   calcite.
 - Feistel and Wagner 2007, *Geochim. Cosmochim. Acta* 71, 36, the
   sublimation pressure of water ice, as Lisse et al. 2021 reproduce it.
+- Finenko et al. 2022, *Astrophys. J. Suppl.* 258, 33,
+  doi:10.3847/1538-4365/ac36d3, the N₂–CH₄ pairs of HITRAN's
+  `N2-CH4_2024.cia` (through HITRAN's references, not read).
 - Foley, Bercovici and Landuyt 2012, tectonics against
   planet size.
 - Fonseca and Lobo 1989, NH₃'s triple-point pressure, through the
