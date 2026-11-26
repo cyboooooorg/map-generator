@@ -1960,11 +1960,13 @@ fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
     assert!(frozen_over(c) && !c.regulated, "{c:?}");
 }
 
-/// Definition: the orbits around a methane Earth's outer edge where the
-/// collapse's step is held, AU: inside it (the thaw search of #731
-/// crossing the cycle), at its place before #734 (1.4355 AU, now just
-/// inside it) and past it ([`CYCLING_AU`]).
-const STEP_ORBITS: [f64; 3] = [1.42875, 1.4355, CYCLING_AU];
+/// Definition: test inputs placed around a methane Earth's outer edge,
+/// where the collapse's step is held, AU: just inside it (1.25), at the
+/// edge measured by `one_greenhouse_search_on_a_condensing_air` (1.2588
+/// since #703's pairs) and past it, where the fixed point cycles
+/// ([`CYCLING_AU`]). Before #703 the edge was 1.4365 AU and the orbits
+/// were 1.42875, 1.4355 and 1.44 AU.
+const STEP_ORBITS: [f64; 3] = [1.25, 1.2588, CYCLING_AU];
 
 #[test]
 #[ignore = "heavy: a methane Earth at three orbits around its outer edge, twice"]

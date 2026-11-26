@@ -3644,9 +3644,18 @@ zero of the secant through the last two points. Where `g` falls below
 minus its noise, the step has passed a balance: the search brackets it
 and closes in by the Illinois rule. A warm balance narrower than one
 step can be stepped over; the plain step finds every one (tier 1,
-synthetic collapses in the measured shape). At half the step the
-methane Earth's climates at 1.42875, 1.4355 and 1.44 AU, around its
-outer edge, do not move (tier 3, `collapse_step_is_converged`).
+synthetic collapses in the measured shape). Before #703's pairs, at
+half the step the methane Earth's climates at 1.42875, 1.4355 and
+1.44 AU, around its outer edge, did not move (tier 3,
+`collapse_step_is_converged`). Since the pairs the edge is 1.2588 AU and
+the test holds 1.25, 1.2588 and 1.272 AU (`STEP_ORBITS`). The first two
+do not move. Past the edge, from 1.268 to 1.278 AU, the collapse lands
+on one of two balances depending on the step: 9.91 bar and 232.79 K at
+`COLLAPSE_STEP`, 8.00 bar and 227.15 K at half of it, 8.01 bar with the
+plain step and 9.93 bar at a quarter (measured on the merged branch,
+2026-11-26). From 1.28 AU on, one balance is left and the step moves
+the climate by under 0.01 K. This is open: the step is not converged
+there.
 
 The gap's noise is how much `φ` moves within the temperature tolerance
 of the climate solve, `φ(T + TOLERANCE_K) − φ(T)`: 0.005 bar at 248 K
@@ -3661,13 +3670,15 @@ step at all, as in legacy. This follows the decision of #729 (at a
 discontinuity, the cold side; decided with the user, 2026-11-26). Before
 #734, on the methane Earth's edge search, 28 of 280 collapses that
 legacy stopped warm on noise fell cold, and the search went from 74 s to
-59 s (release), its crawls from the fold gone. Since #734 the maximum
+59 s (release), its crawls from the fold gone. Before #703's pairs, and
+since #734, the maximum
 greenhouse sits on the fold less often: 12 of 272 collapses (from 16.14
 and 16.23 bar, about 247 K) fall cold, at 16 to 18 climates each where
 the stops on noise took 2 to 6; the others keep their balance within
-0.001 K. The outer edge stays at 1.4365 AU, and
-`one_greenhouse_search_on_a_condensing_air` takes 40 s against 37 s
-with the plain step: the rule costs that, for a result that no longer
+0.001 K. The outer edge stayed at 1.4365 AU, and
+`one_greenhouse_search_on_a_condensing_air` took 40 s against 37 s
+with the plain step (these figures date from before #703's pairs, which
+moved the edge to 1.2588 AU; not measured again): the rule costs that, for a result that no longer
 depends on the solver's last digits. Within the noise the steps stay
 at least the noise, and inside a bracket a point below the balance
 within its noise ends the search: the solve's 0.01 K tolerance lets the
@@ -3689,7 +3700,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `PLATEAU_SURFACES_K` | 500 to 640 K by 20 K | Calibration | every 10 K and to 700 K, the plateau moves under 0.5 W/m² | 3 |
 | `COLLAPSE_ITERATIONS` | 100 | Definition | a collapsing Earth at 1.6 AU settles under it | 1 |
 | `COLLAPSE_TOLERANCE` | 1e-4 | Calibration | at 1e-5 the temperature moves under 0.01 K | 3 |
-| `COLLAPSE_STEP` | 0.005 of the CO₂ | Calibration | at 0.0025 a methane Earth's climates at 1.42875, 1.4355 and 1.44 AU do not move (#731) | 3 |
+| `COLLAPSE_STEP` | 0.005 of the CO₂ | Calibration | at 0.0025 a methane Earth's climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs (#731); since them, 1.25 and 1.2588 AU do not move, and from 1.268 to 1.278 AU the collapse lands on 9.9 or 8.0 bar by the step (open) | 3 |
 | `PHASE_BAND` | 1 K | Calibration | Titan-like and Triton-like sweeps settle across their points | 3 |
 | `THAW_STEPS` | 13 | Calibration | at 16 steps Earth's thaw CO₂ moves under 0.1 % (measured: +0.165 % at 12 steps, +0.063 % at 13, 0.180932, 0.180748 and 0.180634 bar at 12, 13 and 16) | 3 |
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |
