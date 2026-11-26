@@ -184,11 +184,13 @@ const NITROGEN_SWEEP: (f64, f64) = (0.55, 0.85);
 const NITROGEN_JUMP_K: f64 = 1.0;
 
 /// Definition: the relative agreement, 1 %, of the ratio of the light two
-/// adjacent climates absorb with the ratio of their `ε T⁴` across the
-/// nitrogen triple point: the thin air's column carries the surface's
-/// `ε σ T⁴` to space up to the share its own emission changes between
-/// the phases, which is far under 1 %. Measured: absorbed ×1.5556
-/// against `ε T⁴` ×1.5580, 0.15 % apart.
+/// adjacent climates absorb with the ratio of what they send to space,
+/// `ε OLR(T)` of their own column, across the nitrogen triple point: each
+/// is a fixed point of that balance, so the two ratios differ by the
+/// balance's residuals only, far under 1 %. Measured: absorbed ×1.4555
+/// against `ε OLR` ×1.4553, 0.01 % apart (before the N₂ pairs of #703,
+/// when the thin air was transparent, against `ε T⁴`: ×1.5556 against
+/// ×1.5580).
 const PHASE_RATIO_TOLERANCE: f64 = 0.01;
 
 /// Definition: the climates that must fall in the methane sea's melting
@@ -836,12 +838,21 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
     // the cold one; the absorbed light rises by a factor 1.55 and so does
     // ε T⁴ ((0.9983 / 0.80) (63.094 / 59.769)⁴). So a jump the sweep
     // lets through must leave the frost (to the melting frost or the
-    // liquid), and the absorbed flux must rise as ε T⁴ does, within
-    // PHASE_RATIO_TOLERANCE. Under the stellar spectra of #655 the jump
-    // lands on the melting frost below the triple point: 59.681 K at
-    // 0.006795 against 63.133 K at 0.006812 (albedo 0.7527 to 0.6130,
-    // emissivity 0.8000 to 0.9998, absorbed x1.5626 against ε T⁴
+    // liquid), and the absorbed flux must rise as what the body sends to
+    // space does, within PHASE_RATIO_TOLERANCE. Under the stellar spectra
+    // of #655 the jump lands on the melting frost below the triple point:
+    // 59.681 K at 0.006795 against 63.133 K at 0.006812 (albedo 0.7527 to
+    // 0.6130, emissivity 0.8000 to 0.9998, absorbed x1.5626 against ε T⁴
     // x1.5650).
+    //
+    // What it sends to space was ε σ T⁴ while the thin air was
+    // transparent, the premise of a grey column. Since the N₂ pairs of
+    // #703 the air absorbs at the roto-translational peak where a 60 K
+    // surface emits most: the column sends out 6 % (frost) to 12 %
+    // (melting frost) less than ε σ T⁴, so the check compares with the
+    // column's own ε OLR(T) at each climate's flux, the balance each
+    // fixed point solves, which tests the same physics without the grey
+    // premise (ε T⁴ is still printed).
     let reference = titan();
     let air = PartialPressures {
         n2: NITROGEN_WORLD_N2.0,
@@ -853,10 +864,25 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
         ..reference.clone()
     };
     let sweep = sweep_of(&reference, air, NITROGEN_SWEEP);
-    let absorbed_by = |c: &Settle| {
-        let mut body = ClimateBody::new(&base, Numerics::DEFAULT);
+    // What a climate of the sweep absorbs at its own flux, and what it
+    // sends to space, ε OLR(T) of its column as the balance takes it.
+    let cache = std::cell::RefCell::new(ColumnCache::default());
+    let balance_of = |flux: f64, c: &Settle| {
+        let at = lit(&base, flux);
+        let mut body = ClimateBody::new(&at, Numerics::DEFAULT);
         let light = body.starlight(c.bond_albedo);
-        absorbed(light, &c.air, base.heat_flux).0
+        let took = absorbed(light, &c.air, at.heat_flux).0;
+        let sent = c.emissivity.get()
+            * outgoing_longwave(
+                &c.air,
+                c.temperature,
+                skin(light),
+                at.gravity,
+                Profile::CLIMATE,
+                &mut cache.borrow_mut(),
+            )
+            .0;
+        (took, sent)
     };
     let explained = |(f0, a): Point<'_>, (f1, b): Point<'_>| {
         // The frost branch: no liquid, and the surface radiates nearer N₂
@@ -865,12 +891,13 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
         let frost =
             |c: &Settle| c.liquid.is_none() && c.emissivity.get() < 0.5 * (N2_ICE_EMISSIVITY + 1.0);
         let phase = frost(a) != frost(b);
-        let light = absorbed_by(b) / absorbed_by(a);
-        let emitted = (b.emissivity.get() * b.temperature.0.powi(4))
+        let ((took_a, sent_a), (took_b, sent_b)) = (balance_of(f0, a), balance_of(f1, b));
+        let (light, emitted) = (took_b / took_a, sent_b / sent_a);
+        let grey = (b.emissivity.get() * b.temperature.0.powi(4))
             / (a.emissivity.get() * a.temperature.0.powi(4));
         println!(
             "jump {f0:.6} -> {f1:.6}: {:.3} -> {:.3} K, albedo {:.4} -> {:.4}, emissivity \
-             {:.4} -> {:.4}, absorbed x{light:.4}, e T^4 x{emitted:.4}",
+             {:.4} -> {:.4}, absorbed x{light:.4}, e OLR x{emitted:.4}, e T^4 x{grey:.4}",
             a.temperature.0,
             b.temperature.0,
             a.bond_albedo.get(),
