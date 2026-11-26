@@ -2422,9 +2422,11 @@ spectral column sends out. Three things in the model cap it:
   the CO₂–CO₂ pairs close the 15 µm region, so each bar adds less
   trapping;
 - where the CO₂ of a cold column reaches its saturation
-  (`atmosphere::co2_saturation_bar`, its frost below 216.6 K, its liquid
-  above) it condenses, the air follows CO₂'s pseudo-adiabat
-  (`column::co2_lapse`, Kasting 1991 Appendix B) and the tropopause
+  (`volatiles::co2_saturation_bar`, its frost below 216.592 K, its
+  liquid above) it condenses, the air follows CO₂'s pseudo-adiabat
+  (`column::co2_lapse`, Kasting 1991 Appendix B, over the condensate
+  stable where each step starts, the step that crosses the triple point
+  split there by `column::co2_step`) and the tropopause
   (`climate::tropopause_k`, the skin temperature `T_eff 2^-¼` of the
   climate's own albedo) cold-traps it;
 - its Rayleigh scattering keeps growing with the column, averaged over
@@ -3251,11 +3253,13 @@ rewrite does the same (`ClimateBody::greenhouse_co2(air)`, tier-3 test
 `one_greenhouse_search_on_a_condensing_air`). The departure is measured
 on the reference Earth under Titan's measured 2.11 bar of methane, at
 Titan's 9.57 AU, where the methane condenses: the two searches give
-14.2 and 52.0 bar, yet the settled climate is the same, 88.419440 K both
+14.2 and 52.0 bar (11.0 bar on the condensed air since CO₂'s phase step
+was split, radiative transfer page, *CO₂'s phase step*), yet the settled climate is the same, 88.419440 K both
 ways (a gap of 2e-11 K), frozen, and the outer edge is 1.4326 AU both
 ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, see below;
 1.4443 AU once the stellar spectra of #730 came in, 1.4355 AU since
-#729, below, and 1.4365 AU since #734).
+#729, below, 1.4365 AU since #734, and 1.4351 AU since CO₂'s phase step
+was split).
 No regulated body can have a condensing air: the thermostat holds
 288 K, above the critical points of methane
 (190.564 K, Setzmann & Wagner 1991) and nitrogen (126.192 K, Span et al.
@@ -3299,7 +3303,8 @@ then fell to the floor of the surface solver, the dew point of its
 vapour, 284.0103 K, at 1, 1.3 and 1.6 AU. Now it sits at 288.0000 K at 1
 AU (3.94 bar of CO₂) and 288.0004 K at 1.3 AU (7.73 bar), and is frozen
 at 1.6 AU. Its outer edge moves in from 1.6470 to 1.4331 AU (1.4355 AU
-since #730 and #729, 1.4365 AU since #734). The old
+since #730 and #729, 1.4365 AU since #734, 1.4351 AU since CO₂'s phase
+step was split). The old
 edge came from the top end of the search: from about 1.43 to 1.65 AU
 even the most CO₂ sends out more from a 288 K surface than the air with
 that CO₂ absorbs (at 1.6 AU under a 0.3 albedo, 57.6 against 51.0 W/m²),
@@ -3523,7 +3528,7 @@ future law would rest on these papers for. The rewrite draws no share
 of time: the cold side and the `cycles` flag say that no stable warm
 state is claimed. The edge of a methane Earth moves from 1.4443 to
 1.4355 AU with it (measured, `one_greenhouse_search_on_a_condensing_air`;
-1.4365 AU since #734),
+1.4365 AU since #734, 1.4351 AU since CO₂'s phase step was split),
 and that test went from 833 s to 74 s (release).
 
 #### A collapse from the fold (#731)
@@ -3568,7 +3573,8 @@ legacy stopped warm on noise fell cold, and the search went from 74 s to
 greenhouse sits on the fold less often: 12 of 272 collapses (from 16.14
 and 16.23 bar, about 247 K) fall cold, at 16 to 18 climates each where
 the stops on noise took 2 to 6; the others keep their balance within
-0.001 K. The outer edge stays at 1.4365 AU, and
+0.001 K. The outer edge stays at 1.4365 AU (1.4351 AU since CO₂'s phase
+step was split, which puts 1.4355 AU just past it again), and
 `one_greenhouse_search_on_a_condensing_air` takes 40 s against 37 s
 with the plain step: the rule costs that, for a result that no longer
 depends on the solver's last digits. Within the noise the steps stay
