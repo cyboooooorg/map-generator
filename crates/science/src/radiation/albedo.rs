@@ -200,8 +200,10 @@ impl ShortwaveCache {
 /// deck's share of the disc then reflects [`DECK_ALBEDO`] over the rest.
 /// A star whose temperature is not positive or not finite (NaN, infinite)
 /// is at the Sun's temperature, a metallicity that is not finite the
-/// Sun's. A negative or NaN partial pressure or ozone column counts as
-/// none; without air the ground's albedo comes back. A gravity that is
+/// Sun's. A negative or NaN partial pressure counts as none, and so does
+/// an ozone column that is negative or not finite; without air (no column
+/// to lie above) the ozone counts for nothing and the ground's albedo
+/// comes back. A gravity that is
 /// not finite or not positive is no air, and no ozone: the budget is that
 /// of a body without air, the ground under the clouds and the deck.
 ///
@@ -240,7 +242,11 @@ pub fn shortwave_budget(
             metallicity.0,
         )
     } else {
-        let ozone = if ozone.0 > 0.0 { ozone.0 } else { 0.0 };
+        let ozone = if ozone.0.is_finite() && ozone.0 > 0.0 {
+            ozone.0
+        } else {
+            0.0
+        };
         cache.paths(gases, ozone, surface.0, gravity.0, star.0, metallicity.0)
     };
     let below = paths.budget(

@@ -517,7 +517,8 @@ fn titans_air_is_brighter_than_earths() {
 }
 
 /// Review Focus 2: with no air, the ground's albedo comes back, and a
-/// cloud layer over it adds as a non-absorbing layer does.
+/// cloud layer over it adds as a non-absorbing layer does; an ozone
+/// column given with no air lies on nothing and counts for nothing.
 #[test]
 fn no_air_returns_the_ground() {
     for p in [0.0, NEGATIVE_TRACE_BAR] {
@@ -538,6 +539,17 @@ fn no_air_returns_the_ground() {
                 "{p} {g}: {bare:?}"
             );
             assert!(bare.absorbed_by_air.get() < EXACT, "{p} {g}: {bare:?}");
+            let with_ozone = shortwave_budget(
+                &none,
+                EARTH_OZONE_COLUMN,
+                Kelvin(EARTH_SURFACE_K),
+                STANDARD_GRAVITY,
+                SOLAR_EFFECTIVE_TEMPERATURE,
+                Dex(SOLAR_METALLICITY),
+                under(g, 0.0, 0.0),
+                &mut ShortwaveCache::default(),
+            );
+            assert_eq!(with_ozone, bare, "{p} {g}");
             let cloudy = earth_budget(&none, EARTH_SURFACE_K, under(g, 0.5, 0.0));
             let c = 0.5 * CLOUD_ALBEDO;
             let adding = c + (1.0 - c) * (1.0 - c) * g / (1.0 - c * g);
@@ -726,6 +738,29 @@ fn a_weightless_air_is_no_air() {
                 && (b.absorbed_by_air.get() - airless.absorbed_by_air.get()).abs() < 1e-12,
             "gravity {g}: {b:?} against {airless:?}"
         );
+    }
+}
+
+/// An ozone column that is not finite (infinite, NaN) or negative counts
+/// as none: the budget is that of the same air without ozone, never the
+/// NaN an infinite depth would give.
+#[test]
+fn an_ozone_column_out_of_range_is_none() {
+    let budget = |ozone: f64| {
+        shortwave_budget(
+            &earth_air(),
+            DobsonUnit(ozone),
+            Kelvin(EARTH_SURFACE_K),
+            STANDARD_GRAVITY,
+            SOLAR_EFFECTIVE_TEMPERATURE,
+            Dex(SOLAR_METALLICITY),
+            clear(),
+            &mut ShortwaveCache::default(),
+        )
+    };
+    let none = budget(0.0);
+    for ozone in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN, -1.0] {
+        assert_eq!(budget(ozone), none, "{ozone}");
     }
 }
 

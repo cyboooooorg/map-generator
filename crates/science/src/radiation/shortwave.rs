@@ -524,19 +524,15 @@ impl Paths {
         let top = Stack::EMPTY.over(hr, ht);
         let column = air.column.filter(|c| !c.spans.is_empty());
         let Some(levels) = column else {
-            // No air: the Rayleigh layer (none, or a trace) over the clouds.
-            let mut paths = Vec::with_capacity(bands.len());
-            for (i, &(scale, weight)) in bands.iter().enumerate() {
-                let (r, t) = layer(0.0, air.rayleigh_550 * scale);
-                let ozone = Ozone::of(i, air.ozone);
-                push(
-                    &mut paths,
-                    ozone.as_ref(),
-                    weight,
-                    top.over(r, t),
-                    Stack::EMPTY,
-                );
-            }
+            // No air: the Rayleigh layer (none, or a trace) over the
+            // clouds, and no ozone, which lies on top of an air.
+            let paths = bands
+                .iter()
+                .map(|&(scale, weight)| {
+                    let (r, t) = layer(0.0, air.rayleigh_550 * scale);
+                    (weight, top.over(r, t), Stack::EMPTY)
+                })
+                .collect();
             return Paths { paths };
         };
         let table = &*SHORTWAVE;
