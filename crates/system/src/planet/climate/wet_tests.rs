@@ -5,8 +5,8 @@ use super::ClimateInputs;
 use super::body::ClimateBody;
 use super::carbon::thermostat;
 use super::fixture::{earth, moved};
-use super::wet::{boils, collapsed_climate, wet_balance};
-use super::{COLLAPSE_ITERATIONS, COLLAPSE_TOLERANCE, Light, Numerics};
+use super::wet::{Kept, boils, collapse_search, collapsed_climate, wet_balance};
+use super::{COLLAPSE_ITERATIONS, COLLAPSE_STEP, COLLAPSE_TOLERANCE, Light, Numerics};
 use science::balance::{EARTH_DRY_AIR, TOLERANCE, absorbed, skin};
 use science::habitable::{OCEAN_MASS, runaway_flux};
 use science::radiation::albedo::{ShortwaveCache, shortwave_budget};
@@ -360,4 +360,103 @@ fn two_half_suns_boil_as_one() {
     };
     assert!(boils_earth(&split(VENUS_ORBIT)));
     assert!(!boils_earth(&split(1.0)));
+}
+
+/// A synthetic collapse in the shape measured in #731, CO₂ in bar: from
+/// the fold at 17.065 bar, `g(c) = c − φ(c)` rises from 0.0045 bar by a
+/// factor e every 0.3 bar, until the climate falls to its cold balance
+/// at 0.6 bar. Each `dip` (depth, middle, half-width, bar) takes from it.
+fn synthetic_gap(c: f64, dips: &[(f64, f64, f64)]) -> f64 {
+    let rise = (c - 0.6).min(0.0045 * (3.3 * (FOLD - c)).exp());
+    dips.iter().fold(rise, |g, &(depth, middle, half)| {
+        g - depth * (-((c - middle) / half).powi(2)).exp()
+    })
+}
+
+/// Definition: the fold the synthetic collapse starts from, bar.
+const FOLD: f64 = 17.065;
+
+/// Definition: the synthetic collapse's noise, 0.005 bar at the fold, as
+/// measured there (#731).
+const SYNTHETIC_NOISE: f64 = 0.005;
+
+/// The collapse of the synthetic gap from the fold, plain (`widest` 0)
+/// or not: its CO₂ and its evaluations.
+fn synthetic_collapse(dips: &[(f64, f64, f64)], widest: f64) -> (f64, usize) {
+    let (c, (), n) = collapse_search(
+        FOLD,
+        |c| Kept {
+            kept: c - synthetic_gap(c, dips),
+            noise: SYNTHETIC_NOISE * c / FOLD,
+            state: (),
+        },
+        COLLAPSE_TOLERANCE,
+        COLLAPSE_ITERATIONS * 10,
+        widest,
+    );
+    (c, n)
+}
+
+#[test]
+fn a_collapse_from_the_fold_reaches_the_cold_balance_in_fewer_steps() {
+    let (plain, plain_steps) = synthetic_collapse(&[], 0.0);
+    let (fast, fast_steps) = synthetic_collapse(&[], COLLAPSE_STEP);
+    assert!((plain - 0.6).abs() < 1e-3, "{plain}");
+    assert!((fast - 0.6).abs() < 1e-3, "{fast}");
+    assert!(
+        fast_steps * 3 < plain_steps,
+        "{fast_steps} against {plain_steps}"
+    );
+}
+
+#[test]
+fn a_collapse_stops_at_a_warm_balance_wider_than_its_step() {
+    // A warm balance between 16.53 and 16.67 bar, wider than a step
+    // (0.083 bar there): the plain iteration stops at its upper root, and
+    // so must the search.
+    let dips = [(0.15, 16.6, 0.05)];
+    let (plain, plain_steps) = synthetic_collapse(&dips, 0.0);
+    let (fast, fast_steps) = synthetic_collapse(&dips, COLLAPSE_STEP);
+    assert!((plain - 16.67).abs() < 0.01, "{plain}");
+    assert!((fast - plain).abs() < 0.01, "{fast} against {plain}");
+    // At most within its noise below the root, where it holds.
+    assert!(
+        synthetic_gap(fast, &dips) >= -SYNTHETIC_NOISE,
+        "{fast} below the root"
+    );
+    assert!(
+        fast_steps * 3 < plain_steps,
+        "{fast_steps} against {plain_steps}"
+    );
+}
+
+#[test]
+fn a_collapse_steps_over_a_zero_within_its_noise() {
+    // A dip of 0.007 bar at 17.03 bar takes `g` 0.0015 bar under zero,
+    // within the noise: the plain iteration stops there (legacy's
+    // lottery); the search steps on to the cold balance.
+    let dips = [(0.007, 17.03, 0.004)];
+    let (plain, _) = synthetic_collapse(&dips, 0.0);
+    let (fast, _) = synthetic_collapse(&dips, COLLAPSE_STEP);
+    assert!(plain > 17.0, "{plain}");
+    assert!((fast - 0.6).abs() < 1e-3, "{fast}");
+}
+
+#[test]
+fn a_collapse_whose_air_already_holds_does_not_step() {
+    let (c, n) = {
+        let (c, (), n) = collapse_search(
+            1.0,
+            |c| Kept {
+                kept: 2.0 * c,
+                noise: 0.0,
+                state: (),
+            },
+            COLLAPSE_TOLERANCE,
+            COLLAPSE_ITERATIONS,
+            COLLAPSE_STEP,
+        );
+        (c, n)
+    };
+    assert_eq!((c, n), (1.0, 0));
 }

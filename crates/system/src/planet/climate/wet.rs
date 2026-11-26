@@ -223,16 +223,156 @@ pub(crate) struct Collapsed {
     pub iterations: usize,
 }
 
+/// What the surface of a climate solved with some CO₂ keeps, bar: `kept`,
+/// `φ(c)` ([`co2_saturation_pressure`] of its temperature), and `noise`,
+/// by how much `φ` moves within the temperature tolerance of the solve,
+/// with the climate solved (`state`).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Kept<S> {
+    pub kept: f64,
+    pub noise: f64,
+    pub state: S,
+}
+
+/// The CO₂, bar, at which a collapse from `start` settles, with the climate
+/// solved there and the evaluations after the first one.
+///
+/// `solve(c)` solves the climate with `c` bar of CO₂ ([`Kept`]). The
+/// collapse settles at a `c` that keeps what its air holds within
+/// `tolerance`, `g(c) = c − φ(c) ≤ tolerance φ(c)`, after at most `most`
+/// evaluations.
+///
+/// With `widest` zero it steps plainly, `c ← φ(c)`, as legacy did: below
+/// the maximum greenhouse `φ` grows with `c`, so from above it falls onto
+/// the largest root of `g` below `start`, the warmest balance a cooling
+/// planet reaches, never past it. A collapse that starts at the maximum
+/// greenhouse starts at the fold of the warm branch, where `g` is about
+/// zero; there it crawls, `g` growing by about a tenth a step, for up to
+/// 58 steps at 17 bar (#731).
+///
+/// Otherwise (#731) each step is at least the plain one and at most twice
+/// the last one and `widest` times the CO₂; where `g` falls, at most to
+/// the zero of the secant through the last two points too. Where `g` falls
+/// below `−noise` it has passed a root: the search brackets it between
+/// that point and the last one above zero, and closes in on it by the
+/// Illinois rule (Dowell & Jarratt 1971) to a point with `0 ≤ g ≤
+/// tolerance φ`. A root whose `g` crosses zero by no more than its noise
+/// is not one: until `g` has risen above its noise once, the search does
+/// not stop where it holds, and steps on ("A collapse from the fold
+/// (#731)" in `docs/science/planet-atmospheres.md`). A warm balance (a pair of roots) narrower than one step, at
+/// most `widest` of the CO₂, can be stepped over.
+pub(crate) fn collapse_search<S: Copy>(
+    start: f64,
+    mut solve: impl FnMut(f64) -> Kept<S>,
+    tolerance: f64,
+    most: usize,
+    widest: f64,
+) -> (f64, S, usize) {
+    let holds = |c: f64, k: f64| c <= k * (1.0 + tolerance);
+    let first = solve(start);
+    let (mut c, mut here) = (start, first);
+    let mut evaluations = 0;
+    if holds(c, here.kept) {
+        return (c, here.state, evaluations);
+    }
+    // Whether `g` has risen above its noise since the start.
+    let mut left = widest == 0.0;
+    let mut before: Option<(f64, f64)> = None;
+    let mut last_step = 0.0_f64;
+    let mut above = (c, c - here.kept, here);
+    while evaluations < most {
+        let g = c - here.kept;
+        if left && holds(c, here.kept) {
+            break;
+        }
+        let mut step = g;
+        let mut plain = true;
+        if widest > 0.0 {
+            if let Some((c0, g0)) = before {
+                let secant = if g0 > g {
+                    g * (c0 - c) / (g0 - g)
+                } else {
+                    f64::INFINITY
+                };
+                let longer = secant.min(2.0 * last_step).min(widest * c);
+                if longer > step && longer < c {
+                    step = longer;
+                    plain = false;
+                }
+            }
+            if step <= 0.0 {
+                // At a zero within the noise: step on.
+                step = (2.0 * last_step).min(widest * c);
+                plain = false;
+            }
+        }
+        // The plain step lands on what the surface keeps, bit for bit.
+        let x = if plain { here.kept } else { c - step };
+        let there = solve(x);
+        evaluations += 1;
+        let gx = x - there.kept;
+        if widest > 0.0 && gx < -there.noise {
+            return bracketed(above, (x, gx), &mut solve, &holds, most, evaluations);
+        }
+        before = Some((c, g));
+        last_step = step;
+        (c, here) = (x, there);
+        if gx > there.noise {
+            left = true;
+        }
+        if gx > 0.0 {
+            above = (x, gx, there);
+        }
+    }
+    (c, here.state, evaluations)
+}
+
+/// The root of `g` between `high` (`g ≥ 0`) and `low` (`g < 0`) by the
+/// Illinois rule, to a point above it that holds ([`collapse_search`]).
+fn bracketed<S: Copy>(
+    high: (f64, f64, Kept<S>),
+    low: (f64, f64),
+    solve: &mut impl FnMut(f64) -> Kept<S>,
+    holds: &impl Fn(f64, f64) -> bool,
+    most: usize,
+    mut evaluations: usize,
+) -> (f64, S, usize) {
+    let (mut high, mut low) = (high, low);
+    let mut side = 0_i8;
+    while evaluations < most && !holds(high.0, high.2.kept) {
+        let y = high.0 - high.1 * (high.0 - low.0) / (high.1 - low.1);
+        let there = solve(y);
+        evaluations += 1;
+        let gy = y - there.kept;
+        if gy >= 0.0 {
+            high = (y, gy, there);
+            if side == 1 {
+                low.1 *= 0.5;
+            }
+            side = 1;
+        } else {
+            low = (y, gy);
+            if side == -1 {
+                high.1 *= 0.5;
+            }
+            side = -1;
+        }
+    }
+    (high.0, high.2.state, evaluations)
+}
+
 /// [`wet_climate`] of a body whose CO₂ has built up with no thermostat to
 /// hold it (a snowball's, or one past its maximum greenhouse): where its
 /// surface is colder than the point at which the air's CO₂ condenses
 /// ([`co2_saturation_pressure`]), the CO₂ frosts out until the air keeps
 /// what its surface allows, the surface cooling with it. Steps from the
-/// CO₂ of `air` down to that of its surface, until the air's CO₂ exceeds
-/// what its surface keeps by under the numerics' `collapse_tolerance`, at
-/// most `collapse_iterations` steps: they converge on the warmest such
-/// balance, the one a cooling planet reaches (the cold trap at the
-/// surface the climate solves).
+/// CO₂ of `air` down to that of its surface ([`collapse_search`], steps of
+/// at most the numerics' `collapse_step` of the CO₂), until the air's CO₂
+/// exceeds what its surface keeps by under the numerics'
+/// `collapse_tolerance`, at most `collapse_iterations` steps: they
+/// converge on the warmest balance whose gap crosses zero by more than
+/// the solve's noise, the one a cooling planet reaches (the cold trap at
+/// the surface the climate solves).
 pub(crate) fn collapsed_climate(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
@@ -240,17 +380,24 @@ pub(crate) fn collapsed_climate(
     emissivity: Fraction,
 ) -> Collapsed {
     let numerics = body.numerics;
-    let (mut kept_air, mut t) = wet_climate(body, starlight, air, emissivity);
-    let mut iterations = 0;
-    while iterations < numerics.collapse_iterations {
-        let kept = Bar::from(co2_saturation_pressure(t)).0;
-        if kept_air.co2 <= kept * (1.0 + numerics.collapse_tolerance) {
-            break;
-        }
-        let next = PartialPressures { co2: kept, ..*air };
-        (kept_air, t) = wet_climate(body, starlight, &next, emissivity);
-        iterations += 1;
-    }
+    let within = numerics.solver.tolerance;
+    let (_, (kept_air, t), iterations) = collapse_search(
+        air.co2,
+        |co2| {
+            let next = PartialPressures { co2, ..*air };
+            let (kept_air, t) = wet_climate(body, starlight, &next, emissivity);
+            let kept = Bar::from(co2_saturation_pressure(t)).0;
+            let warmer = Bar::from(co2_saturation_pressure(Kelvin(t.0 + within.0))).0;
+            Kept {
+                kept,
+                noise: (warmer - kept).abs(),
+                state: (kept_air, t),
+            }
+        },
+        numerics.collapse_tolerance,
+        numerics.collapse_iterations,
+        numerics.collapse_step,
+    );
     Collapsed {
         air: kept_air,
         temperature: t,
