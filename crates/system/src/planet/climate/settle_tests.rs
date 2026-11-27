@@ -5,7 +5,10 @@
 
 use super::body::ClimateBody;
 use super::fixture::{earth, mars, moved, titan};
-use super::settle::{Bracket, End, Next, Settle, albedo_for, attracting, settle, warm_start};
+use super::settle::{
+    AlbedoMap, Bracket, End, Next, Settle, albedo_fixed_point, albedo_for, attracting, settle,
+    warm_start,
+};
 use super::{
     ALBEDO_BRACKET, ALBEDO_ITERATIONS, ALBEDO_TOLERANCE_K, CONDENSE_ITERATIONS, ClimateInputs,
     Light, Numerics,
@@ -568,4 +571,134 @@ fn the_probe_albedo_puts_the_radiative_equilibrium_where_asked() {
         let ratio = ((1.0 - moved) / (1.0 - albedo)).powf(0.25);
         assert!((used * ratio - target).abs() < 1e-12, "{moved}");
     }
+}
+
+/// Definition: the light of a constructed climate, the radiative
+/// equilibrium of a black, unit-emissivity body, 300 K: its radiative
+/// equilibrium under albedo `A` and emissivity `ε` is `300 (1 − A)^¼
+/// ε^-¼`, as `settle` reads a body's.
+const CONSTRUCTED_LIGHT: f64 = 300.0;
+
+/// Definition: where a constructed climate jumps, K of radiative
+/// equilibrium: 274.4, between the radiative equilibria of the two
+/// albedos its branches derive (273.42 under 0.31, 275.38 under 0.29).
+const JUMP_AT: f64 = 274.4;
+
+/// Definition: the albedos a constructed climate's branches derive, the
+/// warm one's brighter (`#729`: a warm climate at its maximum greenhouse
+/// derives a Rayleigh albedo that collapses its CO₂) and the collapsed
+/// one's darker, a swing of 0.02 as on a methane Earth past its edge.
+const WARM_DERIVES: f64 = 0.31;
+const COLD_DERIVES: f64 = 0.29;
+
+/// Definition: the most albedo steps a climate with no fixed point takes
+/// to stop, 40: from the swing of 0.02 to [`ALBEDO_BRACKET`] is about 15
+/// halvings, and the Illinois rule may take two steps for one; a test
+/// bound, the one the methane Earth's cycling test held before #749.
+const CYCLING_STEPS: usize = 40;
+
+/// A constructed climate: its radiative equilibrium `x` under the albedo
+/// and emissivity it was solved under, and its surface temperature.
+#[derive(Clone, Copy, Debug)]
+struct Constructed {
+    x: f64,
+    temperature: f64,
+}
+
+/// A climate that jumps at [`JUMP_AT`]: above it warm (30 K of
+/// greenhouse) and deriving [`WARM_DERIVES`], under it collapsed (60 K
+/// colder than its radiative equilibrium) and deriving [`COLD_DERIVES`].
+/// Each derives an albedo that puts it on the other side: it has no fixed
+/// point.
+struct Jump;
+
+/// A smooth climate (30 K of greenhouse) whose derived albedo rises with
+/// its temperature, 0.004 per K of radiative equilibrium about 0.30 at
+/// [`JUMP_AT`]: a stable root.
+struct Smooth;
+
+fn radiative(albedo: f64, emissivity: f64) -> f64 {
+    CONSTRUCTED_LIGHT * (1.0 - albedo).powf(0.25) / emissivity.powf(0.25)
+}
+
+impl AlbedoMap for Jump {
+    type Climate = Constructed;
+    fn solve(&mut self, albedo: f64, emissivity: f64) -> Constructed {
+        let x = radiative(albedo, emissivity);
+        let temperature = if x >= JUMP_AT { x + 30.0 } else { x - 60.0 };
+        Constructed { x, temperature }
+    }
+    fn temperature(climate: &Constructed) -> f64 {
+        climate.temperature
+    }
+    fn regulated(_: &Constructed) -> bool {
+        false
+    }
+    fn derived(&mut self, climate: &Constructed) -> (f64, f64) {
+        let albedo = if climate.x >= JUMP_AT {
+            WARM_DERIVES
+        } else {
+            COLD_DERIVES
+        };
+        (albedo, 1.0)
+    }
+    fn radiative(&mut self, albedo: f64, emissivity: f64) -> f64 {
+        radiative(albedo, emissivity)
+    }
+}
+
+impl AlbedoMap for Smooth {
+    type Climate = Constructed;
+    fn solve(&mut self, albedo: f64, emissivity: f64) -> Constructed {
+        let x = radiative(albedo, emissivity);
+        Constructed {
+            x,
+            temperature: x + 30.0,
+        }
+    }
+    fn temperature(climate: &Constructed) -> f64 {
+        climate.temperature
+    }
+    fn regulated(_: &Constructed) -> bool {
+        false
+    }
+    fn derived(&mut self, climate: &Constructed) -> (f64, f64) {
+        (0.30 + 0.004 * (climate.x - JUMP_AT), 1.0)
+    }
+    fn radiative(&mut self, albedo: f64, emissivity: f64) -> f64 {
+        radiative(albedo, emissivity)
+    }
+}
+
+#[test]
+fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
+    // #729, rebuilt on a constructed climate (#767): started warm, the
+    // climate derives a brighter albedo that collapses it, and the
+    // collapsed one a darker albedo that warms it back. The plain step
+    // swings across the jump, the bracket narrows on it, and the fixed
+    // point stops there with the colder end, not converged.
+    let fixed = albedo_fixed_point(&mut Jump, (COLD_DERIVES, 1.0), &Numerics::DEFAULT);
+    println!(
+        "albedo {:.8}, {:.3} K, {} steps",
+        fixed.albedo, fixed.climate.temperature, fixed.steps
+    );
+    assert!(fixed.cycles && !fixed.settled, "{fixed:?}");
+    assert!(fixed.climate.x < JUMP_AT, "the colder side: {fixed:?}");
+    assert!(
+        JUMP_AT - fixed.climate.x < 1e-3,
+        "on the jump within the bracket: {fixed:?}"
+    );
+    assert!(fixed.steps <= CYCLING_STEPS, "{} steps", fixed.steps);
+}
+
+#[test]
+fn a_climate_with_a_stable_root_settles_on_it() {
+    // The same loop on a smooth climate: it settles, and its albedo is
+    // the one it derives within the tolerance.
+    let fixed = albedo_fixed_point(&mut Smooth, (COLD_DERIVES, 1.0), &Numerics::DEFAULT);
+    assert!(fixed.settled && !fixed.cycles, "{fixed:?}");
+    let derived = Smooth.derived(&fixed.climate).0;
+    let off = radiative(derived, 1.0) - fixed.climate.x;
+    assert!(off.abs() < ALBEDO_TOLERANCE_K.0, "{off} K: {fixed:?}");
+    assert!(fixed.steps < CYCLING_STEPS, "{} steps", fixed.steps);
 }

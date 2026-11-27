@@ -3819,9 +3819,17 @@ from 1.305 to 1.352 AU (at 1.282 AU it now regulates at 288 K with
 on its regulated side, near 288 K: not the frozen, unregulated cold
 side the test held. With no methane Earth to stand on, the tier-3 test
 `a_climate_with_no_fixed_point_stops_on_its_cold_side` and its orbit
-(`CYCLING_AU`) were deleted in #749; issue #767 records its intent and
-this orbit history, and rebuilds the stopping rule on constructed
-inputs.
+(`CYCLING_AU`) were deleted in #749. Since #767 the stopping rule is
+held in tier 1 on a constructed climate instead: `settle`'s loop is
+`albedo_fixed_point`, which reads a climate only through `AlbedoMap`
+(solve under an albedo and emissivity, the temperature, the albedo it
+derives), and the test of the same name drives it with a climate that
+jumps at a radiative equilibrium of 274.4 K, warm above and deriving an
+albedo of 0.31, collapsed below and deriving 0.29, a swing of 0.02 as
+on the methane Earth past its edge. Started warm, the loop swings
+across the jump, its bracket closes on it, and it stops after 14 steps
+on the collapsed side, `cycles` and not settled (the test's bound is
+the old 40 steps). A smooth climate in the same loop settles.
 
 #### A collapse from the fold (#731)
 
@@ -4102,7 +4110,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |
 | `ALBEDO_TOLERANCE_K` | 0.1 K | Calibration | at 0.01 K the reference climates move under 0.1 K | 1 |
 | `ALBEDO_DAMPING` | 0.5 | Definition | at 0.25 the converged climates agree | 3 |
-| `ALBEDO_BRACKET` | 1e-6 in albedo | Definition | a cycling climate stopped on its cold side within 40 steps (#729); the test was deleted in #749, no methane Earth cycling any more (#767) | 3 |
+| `ALBEDO_BRACKET` | 1e-6 in albedo | Definition | a cycling climate stopped on its cold side within 40 steps (#729), on a constructed climate since #767 (14 steps) | 1 |
 | `CONDENSE_ITERATIONS` | 100 | Definition | Titan and Triton settle under it | 1 |
 | `THERMOSTAT_TOLERANCE` | 1e-3 in ln CO₂ | Calibration | at 1e-4 Earth moves under 0.01 K | 1 |
 | `GREENHOUSE_DECADES` | 4 | Definition | the reference maxima lie inside the range | 1 |
