@@ -167,8 +167,9 @@ of 2026-11-23); the signature is fixed:
 
 `GlobalArgs` (`--root`, `--cache-budget`) is flattened into `Cli`, so
 both commands take them; the `dead_code` expectations of pull request A
-go. The drawn-seed notice becomes one helper used by `system` and
-`world`.
+go. The drawn-seed notice is shared by `system` and `world`: each
+command's arm of `dispatch` returns the drawn seed in `Run.drawn_seed`,
+and `main` prints it, also when the command then fails.
 
 ### Naming the body
 

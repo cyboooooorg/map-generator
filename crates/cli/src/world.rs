@@ -36,32 +36,20 @@ pub struct WorldCommand {
     /// no surface).
     #[arg(long)]
     pub body: String,
-    /// The grid's cell size in km, above 0 [default: 15].
+    /// The grid's cell size in km, above 0.
     #[arg(
         long,
         value_name = "KM",
         allow_negative_numbers = true,
         default_value_t = world::DEFAULT_CELL.0 / METRES_PER_KM,
-        hide_default_value = true,
         value_parser = parse_cell_km
     )]
     pub cell_km: f64,
-    /// The field to project [default: relief.height].
-    #[arg(
-        long,
-        value_name = "CODE",
-        default_value = HEIGHT,
-        hide_default_value = true,
-        value_parser = parse_field
-    )]
+    /// The field to project.
+    #[arg(long, value_name = "CODE", default_value = HEIGHT, value_parser = parse_field)]
     pub field: FieldId,
-    /// The PNG width in pixels, even and above 0 [default: 2048].
-    #[arg(
-        long,
-        value_name = "PIXELS",
-        default_value_t = 2048,
-        hide_default_value = true
-    )]
+    /// The PNG width in pixels, even and above 0; the height is half.
+    #[arg(long, value_name = "PIXELS", default_value_t = 2048, allow_negative_numbers = true, value_parser = parse_width)]
     pub width: u32,
     /// The directory the world file and the PNG are written to.
     #[arg(long, value_name = "DIR")]
@@ -80,6 +68,18 @@ pub fn parse_cell_km(text: &str) -> Result<f64, String> {
             "the cell size must be finite and above 0 km, got {text}"
         ))
     }
+}
+
+/// Parses `--width`: an even number of pixels above 0, as the 2:1
+/// projection needs.
+pub fn parse_width(text: &str) -> Result<u32, String> {
+    let width = text
+        .parse::<u32>()
+        .map_err(|error| format!("the width {text:?} is not a number of pixels: {error}"))?;
+    if width == 0 || !width.is_multiple_of(2) {
+        return Err(format!("the width must be even and above 0, got {width}"));
+    }
+    Ok(width)
 }
 
 /// Parses `--field`: the shape of a code only; the export refuses a field
@@ -210,17 +210,19 @@ where
         return Err(CliError::Width(request.width));
     }
     let id = SystemId::of(inputs);
+    let (all, timelines_cached) = match TimelineCache::get(store, id, ENGINE_VERSION)? {
+        Some(all) => (all, true),
+        None => (timelines(inputs)?, false),
+    };
+    // The inputs become stored truth only once the engine has accepted
+    // them, and before their cache entry (eviction drops the caches of
+    // systems no longer stored).
     if SystemRepository::get(store, id)?.is_none() {
         SystemRepository::put(store, &StoredSystem::new(inputs.clone(), ENGINE_VERSION))?;
     }
-    let (all, timelines_cached) = match TimelineCache::get(store, id, ENGINE_VERSION)? {
-        Some(all) => (all, true),
-        None => {
-            let all = timelines(inputs)?;
-            TimelineCache::put(store, id, ENGINE_VERSION, &all)?;
-            (all, false)
-        }
-    };
+    if !timelines_cached {
+        TimelineCache::put(store, id, ENGINE_VERSION, &all)?;
+    }
     let no_such_body = || CliError::NoSuchBody(request.body.clone());
     let number = all.first().ok_or_else(no_such_body)?.body.system.get();
     let body: Designation = format!("MGS {number} {}", request.body)
@@ -539,6 +541,12 @@ mod tests {
             error,
             CliError::Contract(ContractError::NoKeyframe)
         ));
+        // Inputs the engine refuses are not stored truth.
+        assert!(
+            SystemRepository::get(&store, SystemId::of(&inputs()))
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

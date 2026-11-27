@@ -234,6 +234,28 @@ mod tests {
     }
 
     #[test]
+    fn world_refuses_an_odd_or_zero_width() {
+        for bad in ["0", "63", "-2", "x"] {
+            let error = world_command(&["--body", "b", "--out", "o", "--width", bad]).unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::ValueValidation, "{bad}");
+        }
+    }
+
+    #[test]
+    fn world_help_shows_the_defaults() {
+        let help = Cli::try_parse_from(["map-generator", "world", "--help"])
+            .unwrap_err()
+            .to_string();
+        for default in [
+            "[default: 15]",
+            "[default: relief.height]",
+            "[default: 2048]",
+        ] {
+            assert!(help.contains(default), "{default}\n{help}");
+        }
+    }
+
+    #[test]
     fn world_refuses_a_malformed_field() {
         let error =
             world_command(&["--body", "b", "--out", "o", "--field", "Relief Height"]).unwrap_err();

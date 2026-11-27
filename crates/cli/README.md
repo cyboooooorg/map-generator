@@ -117,7 +117,7 @@ designation (`MGS 99401 c`) from the drawn system's number. A text that
 is not a body part is refused before the system is drawn
 (`cli.world.invalid-body`); the star `A` is refused once it is drawn
 (`cli.world.not-a-planet`), and so is a planet without a solid surface
-(`world.relief.no-surface`). Multiple-star systems (#585) will name their
+(`relief.no-surface`). Multiple-star systems (#585) will name their
 stars `A`, `B`… with no change to the flag.
 
 The first run stores the inputs, then caches the timelines and the
@@ -139,8 +139,7 @@ It prints a JSON summary on stdout:
 | `evicted` | How many cache entries the eviction removed |
 | `world`, `png` | The files written |
 
-Map planet c of seed 15, the only planet with surface water among seeds
-1 to 40:
+Map planet c of seed 15, which has surface water with engine 4:
 
 ```bash
 map-generator world --seed 15 --body c --out out
@@ -152,6 +151,21 @@ The same with a smaller cache, given before the command:
 map-generator --cache-budget 512MiB world --seed 15 --body c --out out
 ```
 
+The `world` command fails with exit 1 and one of these codes, after
+those of the draw (`system.*`), the relief (`relief.*`) and the export:
+
+| Code | Meaning |
+| --- | --- |
+| `cli.world.invalid-body` | `--body` is not a body part (`b`, `c`…, `A`); refused before the draw |
+| `cli.world.no-such-body` | The system has no such body |
+| `cli.world.not-a-planet` | The body is the star |
+| `cli.world.no-present-keyframe` | The body's timeline has no state at its present |
+| `cli.world.width` | The width is odd or zero (from the library; the flag refuses it first) |
+| `cli.store` | The store could not be read or written |
+
+A wrong `--field` that is well formed is refused by the export, after the
+world is built.
+
 The world is stamped with the body timeline's engine version and the map
 generator's, so a new engine never reads an old cache entry.
 
@@ -161,7 +175,7 @@ generator's, so a new engine never reads an old cache entry.
 | --- | --- |
 | 0 | Success (also when the reader closes stdout early) |
 | 1 | The command failed; stderr is `map-generator: <code>: <message>` |
-| 2 | Usage error (bad flag, malformed `ID=COUNT`, `--cell-km` at or below 0) |
+| 2 | Usage error: a bad flag, a malformed `ID=COUNT`, a `--cell-km` at or below 0 or not finite, an odd or zero `--width`, a malformed `--field` |
 
 A stdout write error other than a closed pipe exits 1 with `cli.io`.
 
