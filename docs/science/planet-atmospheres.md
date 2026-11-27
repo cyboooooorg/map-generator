@@ -794,7 +794,7 @@ the crust; Venus's SO₂ is lost to its surface rocks, Fegley & Prinn 1989,
 doi:10.1038/337055a0, abstract: the share is not in it; a calibration on
 Venus's
 SO₂ below the clouds, 130 ± 50 ppmv, Marcq et al. 2008 as quoted by a later
-paper, which the model's 150 ppm sits inside, and washed out of a wet or
+paper, which the model's 115 ppm by volume sits inside, and washed out of a wet or
 oxygen-rich air, see **Sulphur and
 SO₂** below). Water is vapour only in a
 runaway greenhouse, and then all that the runaway left
@@ -1321,9 +1321,17 @@ frost (0.63, see *Volcanic SO₂*).
 The CO₂ and the NH₃ of the kept air are each held to their frost pressure at one combined
 equilibrium temperature, the fourth root of the sum of every star's
 `T_eq⁴` (`StellarSources::equilibrium_k`; one star's own with a single
-star), which the reducing test and the methane line read too; the step records `planet.air.trapped.co2` and
-`planet.air.trapped.nh3`, each citing the kept gas and the equilibria,
-and `planet.air.frozen-co2`, citing the kept and the trapped CO₂. What
+star), which the reducing test and the methane line read too. The air
+keeps weights, so each keeps the weight whose partial pressure, over the
+air as it stands (its photolysed methane, its washed SO₂), is its frost
+pressure (`science::surface::cold_trapped`, the closed form of *Weights
+and partial pressures*, the two in rounds since each raises the other's
+share; issue #749: the trap capped the weight itself before, which left
+a trace CO₂ in an N₂ air at 28/44 of its frost pressure, Callisto's
+4.88e-6 bar becoming 7.66e-6 bar by weight). The step records
+`planet.air.trapped.co2` and `planet.air.trapped.nh3`, each citing the
+kept gas, the rest of the air and the equilibria, and
+`planet.air.frozen-co2`, citing the kept and the trapped CO₂. What
 the trap leaves is what the photochemistry reads. Where it departs from
 legacy: the frost curves of CO₂ and ammonia are the sourced ones above;
 `condense` (the climate's condensation of methane and nitrogen at the
@@ -1450,6 +1458,15 @@ into the air (`frost`); a CO₂ collapse keeps the weight whose partial
 pressure is CO₂'s saturation (`collapsed_climate`). The sea's
 dissolved nitrogen reads the N₂'s partial pressure, and whether an air
 is a Titan's reads its total, a sum of weights.
+
+*How the chain uses them.* The chain's steps add and scale weights. The
+two that read a partial pressure convert the air as it stands: the
+cold trap (`cold_trapped`, *How the rewrite computes the cold trap*) and
+the wash-out, whose oxidising threshold (`OXIDISING_O2`, a twentieth of
+Earth's O₂ by volume) reads the O₂'s partial pressure; its column, the
+surface pressure, is the sum of the weights. The chain's O₂ is 0 until
+life gives it some (2d-4), so the wash-out's reading moves no reference
+body today; the trap moves Callisto's CO₂ alone among them.
 
 **Calibration of `NITROGEN_RECYCLED_UNDER_PLATES`** (0.7965; studies 23,
 part 5, and 28). Study 23 fitted it first: legacy's 0.8 gave the
@@ -3109,8 +3126,10 @@ share `SULPHUR_IN_AIR` (5e-5); over liquid water or with free oxygen above
 0.01 bar it is washed out to sulphate in about a day and a half
 (`WET_SO2_SHARE`, 2.2e-9 of the dry lifetime), and in a dry, oxygen-free air
 its lifetime grows with the column (`DRY_COLUMN_BAR`, 10 bar). That gives
-Earth under 1e-6 bar of SO₂ (2e-11), Venus about 1e-2 bar (150 ppm of
-92 bar, inside the 130 ± 50 ppmv below the clouds) and Mars under its 0.3 ppb
+Earth under 1e-6 bar of SO₂ (2e-11), Venus 0.0151 bar by weight, a
+partial pressure of 0.0103 bar, 115 ppm of its air by volume (inside the
+130 ± 50 ppmv below the clouds; the test reads the partial pressure, and
+the wash-out reads the O₂'s, since #749) and Mars under its 0.3 ppb
 limit (Krasnopolsky 2012, doi:10.1016/j.icarus.2011.10.019: the upper limit
 itself was not reached). The constants are calibrations on
 Venus and Mars together. The wet lifetime of 1 to 2 days (1 to 3 days in a

@@ -7,8 +7,8 @@ use crate::radiation::test_points::{EARTH_AIR, TITAN_SURFACE_AIR, TITAN_SURFACE_
 use crate::surface::{PHASE_BAND, methane_sea_vapour};
 use crate::units::Bar;
 use crate::volatiles::{
-    ARGON_TRIPLE_PRESSURE, ARGON_TRIPLE_TEMPERATURE, argon_frost_pressure,
-    methane_saturation_pressure, nitrogen_frost_pressure,
+    ARGON_TRIPLE_PRESSURE, ARGON_TRIPLE_TEMPERATURE, ammonia_frost_pressure, argon_frost_pressure,
+    co2_frost_pressure, methane_saturation_pressure, nitrogen_frost_pressure,
 };
 
 /// Definition: the tolerance of an identity.
@@ -310,4 +310,62 @@ fn argon_under_its_triple_pressure_stays_in_a_warm_air() {
         assert_eq!(air.ar, ar, "{t} K");
         assert_eq!(condensate.ar, 0.0, "{t} K");
     }
+}
+
+/// Definition: an equilibrium temperature under the triple points of CO2
+/// (216.592 K) and NH3 (195.49 K), 150 K, a test input.
+const TRAP_K: Kelvin = Kelvin(150.0);
+
+/// Definition: an equilibrium temperature over both triple points,
+/// 220 K, a test input: nothing is trapped.
+const WARM_TRAP_K: Kelvin = Kelvin(220.0);
+
+/// Definition: the trap test's air, weights, a test input: 1 bar of N2,
+/// 2 bar of CO2 and 0.1 bar of NH3, both far over their frost pressures
+/// at [`TRAP_K`].
+const TRAP_AIR: Weights = Weights {
+    n2: 1.0,
+    co2: 2.0,
+    h2o: 0.0,
+    ch4: 0.0,
+    nh3: 0.1,
+    so2: 0.0,
+    o2: 0.0,
+    ar: 0.0,
+};
+
+fn frost_bar(p: Option<crate::units::Pascal>) -> f64 {
+    p.expect("under the triple point").0 / crate::constants::PASCALS_PER_BAR
+}
+
+/// The cold trap holds the CO2 and the NH3 of an air at their frost
+/// pressures, both together (each raises the other's share as it
+/// leaves), and leaves its other gases as they are.
+#[test]
+fn the_cold_trap_holds_co2_and_nh3_at_their_frost_pressures() {
+    let trapped = cold_trapped(&TRAP_AIR, TRAP_K);
+    let p = trapped.partial_pressures();
+    let co2 = frost_bar(co2_frost_pressure(TRAP_K));
+    let nh3 = frost_bar(ammonia_frost_pressure(TRAP_K));
+    assert!((p.co2 / co2 - 1.0).abs() < TIGHT, "{p:?} against {co2:e}");
+    assert!((p.nh3 / nh3 - 1.0).abs() < TIGHT, "{p:?} against {nh3:e}");
+    assert_eq!(trapped.n2, TRAP_AIR.n2);
+    assert!(trapped.co2 < TRAP_AIR.co2 && trapped.nh3 < TRAP_AIR.nh3);
+}
+
+/// Over their triple points, or under their frost pressures, the trap
+/// takes nothing.
+#[test]
+fn the_cold_trap_takes_nothing_it_cannot_freeze() {
+    assert_eq!(cold_trapped(&TRAP_AIR, WARM_TRAP_K), TRAP_AIR);
+    let thin = Weights {
+        co2: 1e-12,
+        nh3: 1e-15,
+        ..TRAP_AIR
+    };
+    assert_eq!(cold_trapped(&thin, TRAP_K), thin);
+    assert_eq!(
+        cold_trapped(&Weights::default(), TRAP_K),
+        Weights::default()
+    );
 }

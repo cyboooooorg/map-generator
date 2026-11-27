@@ -13,11 +13,13 @@
 //! see `docs/science/planet-atmospheres.md`.
 
 use super::liquids::{SEA_METHANE_SHARE, bar, frozen_share, sea_freezes};
-use crate::radiation::gases::{AR_MOLAR_MASS, CH4_MOLAR_MASS, N2_MOLAR_MASS, Weights};
+use crate::radiation::gases::{
+    AR_MOLAR_MASS, CH4_MOLAR_MASS, CO2_MOLAR_MASS, N2_MOLAR_MASS, NH3_MOLAR_MASS, Weights,
+};
 use crate::units::{Bar, Kelvin};
 use crate::volatiles::{
-    METHANE_TRIPLE_TEMPERATURE, argon_saturation_pressure, methane_saturation_bar,
-    nitrogen_saturation_pressure,
+    METHANE_TRIPLE_TEMPERATURE, ammonia_frost_pressure, argon_saturation_pressure,
+    co2_frost_pressure, methane_saturation_bar, nitrogen_saturation_pressure,
 };
 
 /// What a surface leaves of an inventory of gases: the air and the
@@ -118,6 +120,53 @@ pub fn condense(inventory: &Weights, t: Kelvin) -> Condensed {
         ..Weights::default()
     };
     Condensed { air, condensate }
+}
+
+/// `air` under the cold trap at the equilibrium temperature `t`: its CO2
+/// and NH3 each capped at the weight whose partial pressure is its frost
+/// pressure ([`co2_frost_pressure`], [`ammonia_frost_pressure`]) over the
+/// air's other gases ([`Weights::weight_at`]), uncapped at or above its
+/// triple point; the other gases pass through. The two are capped in
+/// turn, in rounds as in [`condense`], since each raises the other's
+/// share as it leaves. A `Definition:` (a frost holds its gas at its
+/// sublimation pressure, on partial pressures; issue #749), with the
+/// frost curves of `crate::volatiles`.
+pub fn cold_trapped(air: &Weights, t: Kelvin) -> Weights {
+    let cap =
+        |frost: Option<crate::units::Pascal>| frost.map_or(Bar(f64::INFINITY), |p| Bar(bar(p)));
+    let (co2_cap, nh3_cap) = (cap(co2_frost_pressure(t)), cap(ammonia_frost_pressure(t)));
+    let keep = |stock: f64, most: Bar| if stock > most.0 { most.0 } else { stock };
+    let mut trapped = *air;
+    for _ in 0..CONDENSE_ROUNDS {
+        let before = trapped;
+        trapped.co2 = keep(
+            air.co2,
+            Weights::weight_at(
+                &Weights {
+                    co2: 0.0,
+                    ..trapped
+                },
+                CO2_MOLAR_MASS,
+                co2_cap,
+            ),
+        );
+        trapped.nh3 = keep(
+            air.nh3,
+            Weights::weight_at(
+                &Weights {
+                    nh3: 0.0,
+                    ..trapped
+                },
+                NH3_MOLAR_MASS,
+                nh3_cap,
+            ),
+        );
+        let moved = |a: f64, b: f64| (a - b).abs() > CONDENSE_SETTLED * a.abs().max(b.abs());
+        if !(moved(trapped.co2, before.co2) || moved(trapped.nh3, before.nh3)) {
+            break;
+        }
+    }
+    trapped
 }
 
 /// `air` with its N2, CH4 and Ar set to what their `inventory` (bar,

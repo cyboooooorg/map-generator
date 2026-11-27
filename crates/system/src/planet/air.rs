@@ -36,10 +36,10 @@ use science::outgassing::{
 use science::photochemistry::{
     LymanSource, methane_left, methane_survives, nitrogen_from_ammonia, reducing,
 };
-use science::units::{Bar, Dex, Fraction, Kelvin, Kilogram, Metre, Pascal, WattPerSquareMetre};
-use science::volatiles::{
-    ammonia_frost_pressure, co2_frost_pressure, disc_temperature, inventory, traps_nitrogen,
-};
+use science::radiation::gases::Weights;
+use science::surface::cold_trapped;
+use science::units::{Bar, Dex, Fraction, Kilogram, Metre, WattPerSquareMetre};
+use science::volatiles::{disc_temperature, inventory, traps_nitrogen};
 use science::xuv::{History, history};
 use timeline::{Atmosphere, Code, Gas, NodeId, Provenance, TectonicRegime, Trace, Traced, Water};
 
@@ -130,16 +130,18 @@ pub(crate) struct Air {
 ///    again from it. Out of a runaway the water is returned as given.
 /// 6. **Wash-out** (`planet.air.so2-kept`): [`so2_kept`], wet when the
 ///    water keeps a wet balance (out of a runaway, some water kept),
-///    with the O2 and the surface pressure of the kept air before it; the
-///    SO2 partial is the outgassed one times the shoreline's share and
-///    this one.
+///    with the O2's partial pressure and the surface pressure (the sum of
+///    the weights) of the air as it stands before it: the kept gases,
+///    the photolysed CH4 and the SO2 the shoreline kept; the SO2's weight
+///    is the outgassed one times the shoreline's share and this one.
 /// 7. **Cold trap** (`planet.air.trapped.co2`, `planet.air.trapped.nh3`):
-///    the CO2 and the NH3 (the photolysis leaves them as kept) capped by
-///    their frost pressure at the equilibrium temperature
-///    ([`co2_frost_pressure`], [`ammonia_frost_pressure`]), uncapped at
-///    or above their triple point. `planet.air.frozen-co2` is the
-///    photolysed CO2 less the trapped CO2: legacy books all of it as a
-///    frost, which overstates it on small icy bodies (#590).
+///    the CO2 and the NH3 (the photolysis leaves them as kept) of the
+///    same air with its SO2 washed, each capped at
+///    the weight whose partial pressure is its frost pressure at the
+///    equilibrium temperature ([`cold_trapped`]), uncapped at or above
+///    its triple point; they derive from the whole air. `planet.air.frozen-co2`
+///    is the photolysed CO2 less the trapped CO2: legacy books all of it
+///    as a frost, which overstates it on small icy bodies (#590).
 /// 8. **Photochemistry** (`planet.air.photochemistry.<gas>`): the trapped
 ///    NH3 becomes N2 ([`nitrogen_from_ammonia`], added to the kept N2)
 ///    and leaves 0 bar; the photolysed CH4 stays where it survives the OH
@@ -236,18 +238,32 @@ pub(crate) fn air(
         water.clone()
     };
 
-    // Step 6: the SO2 the shoreline keeps, before its wash-out, weighs in
-    // the column the wash-out reads.
+    // Step 6: the wash-out, on the air as it stands: its methane is the
+    // photolysed one, and the SO2 the shoreline keeps, before its
+    // wash-out, weighs in the column the wash-out reads.
     let so2 = outgassed[&Gas::So2];
     let so2_before = so2.value().0 * share;
-    let before: f64 = partial.values().map(|p| p.value().0).sum::<f64>() + so2_before;
+    let standing = Weights {
+        ch4: photolysed.value().0,
+        so2: so2_before,
+        ..weights_of(&partial)
+    };
     let wet = !runaway && water.inventory.value().0 > 0.0;
     let mut from: Vec<NodeId> = vec![water.runaway.node(), water.inventory.node()];
-    from.extend(partial.values().map(Traced::node));
-    from.extend([so2.node(), shoreline.node()]);
+    from.extend(
+        partial
+            .iter()
+            .filter(|(gas, _)| **gas != Gas::Ch4)
+            .map(|(_, p)| p.node()),
+    );
+    from.extend([photolysed.node(), so2.node(), shoreline.node()]);
     let washed = trace.record(
         Code::of(codes::AIR_SO2_KEPT),
-        so2_kept(wet, *partial[&Gas::O2].value(), Bar(before)),
+        so2_kept(
+            wet,
+            Bar(standing.partial_pressures().o2),
+            Bar(standing.total()),
+        ),
         &from,
     )?;
     let p = trace.record(
@@ -257,26 +273,28 @@ pub(crate) fn air(
     )?;
     partial.insert(Gas::So2, p);
 
-    // Step 7: the cold trap, at the equilibrium temperature.
-    let trap = |code: &'static str,
-                frost: fn(Kelvin) -> Option<Pascal>,
-                kept: Traced<Bar>,
-                trace: &mut Trace| {
-        let gas = frost(equilibrium).map_or(*kept.value(), |cap| {
-            Bar(kept.value().0.min(Bar::from(cap).0))
-        });
+    // Step 7: the cold trap, at the equilibrium temperature, on the same
+    // air with its SO2 washed.
+    let standing = Weights {
+        so2: p.value().0,
+        ..standing
+    };
+    let trapped = cold_trapped(&standing, equilibrium);
+    let mut whole: Vec<NodeId> = partial
+        .iter()
+        .filter(|(gas, _)| **gas != Gas::Ch4)
+        .map(|(_, p)| p.node())
+        .collect();
+    whole.push(photolysed.node());
+    whole.extend(&cold);
+    let mut trap = |code: &'static str, kept: Traced<Bar>, gas: f64| {
         let mut from = vec![kept.node()];
-        from.extend(&cold);
-        trace.record(Code::of(code), gas, &from)
+        from.extend(whole.iter().filter(|n| **n != kept.node()));
+        trace.record(Code::of(code), Bar(gas), &from)
     };
     let co2 = partial[&Gas::Co2];
-    let trapped_co2 = trap(codes::AIR_TRAPPED_CO2, co2_frost_pressure, co2, trace)?;
-    let trapped_nh3 = trap(
-        codes::AIR_TRAPPED_NH3,
-        ammonia_frost_pressure,
-        partial[&Gas::Nh3],
-        trace,
-    )?;
+    let trapped_co2 = trap(codes::AIR_TRAPPED_CO2, co2, trapped.co2)?;
+    let trapped_nh3 = trap(codes::AIR_TRAPPED_NH3, partial[&Gas::Nh3], trapped.nh3)?;
     let frozen_co2 = trace.record(
         Code::of(codes::AIR_FROZEN_CO2),
         Bar(co2.value().0 - trapped_co2.value().0),
@@ -585,6 +603,21 @@ fn water_and_oxygen(
         Provenance::Imposed,
     )?;
     Ok([(Gas::H2o, h2o), (Gas::O2, o2)])
+}
+
+/// The weights of the gases of `partial`, bar; a gas it lacks is none.
+fn weights_of(partial: &BTreeMap<Gas, Traced<Bar>>) -> Weights {
+    let w = |gas: Gas| partial.get(&gas).map_or(0.0, |p| p.value().0);
+    Weights {
+        n2: w(Gas::N2),
+        co2: w(Gas::Co2),
+        h2o: w(Gas::H2o),
+        ch4: w(Gas::Ch4),
+        nh3: w(Gas::Nh3),
+        so2: w(Gas::So2),
+        o2: w(Gas::O2),
+        ar: w(Gas::Ar),
+    }
 }
 
 /// The CH4 the stars' ultraviolet leaves of the `kept` one (step 3 of

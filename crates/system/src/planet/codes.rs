@@ -294,8 +294,9 @@ pub(crate) const AIR_PHOTOLYSED_CH4: &str = "planet.air.photolysed.ch4";
 /// does not hold a reducing air's CO2 back. A reducing air outgasses no
 /// CO2 ([`AIR_OUTGASSED_CO2`] is then 0 and derives from it).
 pub(crate) const AIR_REDUCING: &str = "planet.air.reducing";
-/// Weight of CO2 the cold trap leaves as gas: the kept one,
-/// capped by the CO2 frost pressure at the equilibrium temperature below
+/// Weight of CO2 the cold trap leaves as gas: the kept one, capped at
+/// the weight whose partial pressure, over the rest of the air as it
+/// stands, is the CO2 frost pressure at the equilibrium temperature below
 /// CO2's triple point (`science::volatiles::co2_frost_pressure`).
 pub(crate) const AIR_TRAPPED_CO2: &str = "planet.air.trapped.co2";
 /// Weight of NH3 the cold trap leaves as gas (see
