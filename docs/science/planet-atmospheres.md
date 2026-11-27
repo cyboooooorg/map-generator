@@ -1386,6 +1386,52 @@ mass of the dry air, 5.1352e18 kg (Trenberth & Smith 2005, *J. Climate*
 which weighs 0.746 bar at 9.80665 m/s². The 0.78 bar quoted elsewhere
 is its share by volume times a bar.
 
+**Weights and partial pressures** (issue #749). The system keeps an air
+as the weights of its gases, `w_i = m_i g / (4 π R²)`
+(`science::radiation::gases::Weights`): weights add as masses do, the
+dry air's surface pressure is their sum, and a gas that comes or goes
+leaves the others' weights as they were. A gas's partial pressure, its
+share of the moles times the pressure, is not additive: with `n_i` moles
+per area, `p_i = x_i p = n_i g M̄ / A`, which moves with the mean molar
+mass `M̄` whenever any other gas comes or goes. The laws that read a
+partial pressure (the column, the shortwave budget, the saturation of a
+condensing gas, the sea's dissolved nitrogen) read the weights of the air
+as it is when they read it (definitions, from `n_i = m_i / M_i` and a
+column's weight being its pressure):
+
+```text
+p_i = x_i Σ_j w_j,    x_i = (w_i / M_i) / Σ_j (w_j / M_j)    (Weights::partial_pressures)
+w_i = p_i M_i / M̄,    M̄ = Σ_j p_j M_j / Σ_j p_j               (PartialPressures::weights)
+```
+
+the sums over the dry gases; the water vapour is kept apart, as the
+column takes it: a pressure added to the dry air's. A measured air given
+by its shares by volume becomes weights through the second line: Earth's
+78.08 % N₂ and 9340 ppm Ar by volume (NASA Earth fact sheet) are 0.7555
+and 1.289 % of the mass among N₂, O₂ and Ar alone, the 0.7551 and 1.288 %
+above within the 0.04 % of the air those three leave out.
+
+*A gas capped at its saturation.* A condensing gas keeps the weight `w`
+whose partial pressure is its cap (its saturation times its activity),
+the other dry gases' weights held. With `A = Σ_j w_j / M_j` and
+`B = Σ_j w_j` over the others, its partial pressure is
+`(w/M) / (A + w/M) · (B + w)`, which rises with `w`; setting it to the
+cap gives
+
+```text
+w² + (B − cap) w − cap A M = 0
+```
+
+whose positive root is the weight kept (`Weights::weight_at`, taken as
+`2 cap A M / ((B − cap) + √((B − cap)² + 4 cap A M))` when `B` exceeds
+the cap, so that it does not cancel). A pure gas keeps its cap. Checked
+by hand on a Titan: over 1.422 bar of N₂ by weight (`A` = 0.05076,
+`B` = 1.422) a methane capped at 0.08 bar keeps 0.0469 bar by weight
+(`w² + 1.342 w − 0.06515 = 0`), whose partial pressure reads back
+0.0800 bar. Scaling the methane's weight by its partial pressure's share
+instead (keeping `cap / p_CH4` of it) would leave it 40 % over its cap
+in the air its condensation leaves, the N₂'s share having grown.
+
 **Calibration of `NITROGEN_RECYCLED_UNDER_PLATES`** (0.7965; studies 23,
 part 5, and 28). Study 23 fitted it first: legacy's 0.8 gave the
 rewrite's Earth 0.804 bar of N₂, 7.8 % over the target; the chain's N₂ on
