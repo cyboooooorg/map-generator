@@ -77,7 +77,7 @@ pub enum Stage {
 }
 
 /// The stage of a planet whose surface liquid is water now (`water`), in
-/// a system `age` old, with its life `draw` in `[0, 1)`: [`Stage::Lifeless`]
+/// a system `age` old, with its life `draw` in `(0, 1)`: [`Stage::Lifeless`]
 /// unless `water`, `age` at least [`LIFE_MIN_GYR`] and `draw` under
 /// [`LIFE_CHANCE`]; then by age, each step from its threshold on. The
 /// model counts from the system's formation, not from when the planet
