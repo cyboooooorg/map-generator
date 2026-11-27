@@ -26,7 +26,7 @@ use super::tests::{
 use super::water::water;
 use crate::Trial;
 use science::constants::STEFAN_BOLTZMANN;
-use science::radiation::gases::PartialPressures;
+use science::radiation::gases::{PartialPressures, Weights};
 use science::radiation::ozone::ozone_column;
 use science::steam::STEAM_WORLD_MIN_BAR;
 use science::surface::{condense, titan_like_air};
@@ -83,7 +83,7 @@ const TITAN_PRESSURE: f64 = 1.467;
 const TITAN_METHANE_SHARE: f64 = 0.0565;
 
 /// Definition: the methane a test inventory holds above what Titan's air
-/// keeps, 0.5 bar, so that the sea can form. A test input chosen to
+/// keeps, 0.5 bar (a weight), so that the sea can form. A test input chosen to
 /// exceed the saturation of the air at Titan's temperature, not a
 /// measurement: the measured air is what the sea leaves in the air.
 const TITAN_METHANE_SURPLUS: f64 = 0.5;
@@ -140,7 +140,9 @@ const EARTH_SURFACE: Kelvin = Kelvin(288.0);
 const EARTH_WINDOW: Kelvin = Kelvin(6.0);
 
 /// Definition: the CO₂ under which the thermostat keeps an Earth whose
-/// air is not a runaway's, 0.01 bar (legacy `the_solar_system_has_its_climates`).
+/// air is not a runaway's, 0.01 bar of partial pressure (legacy
+/// `the_solar_system_has_its_climates`, whose climate read its air as
+/// partial pressures).
 const EARTH_CO2_BOUND: f64 = 0.01;
 
 /// Source: Earth's cloud cover, 0.68 ± 0.03 (Stubenrauch et al. 2013,
@@ -176,7 +178,8 @@ const EARTH_AR_SHARE: f64 = 9340e-6;
 
 /// Earth's measured air as an imposed test input, without its CO₂ (the
 /// test sets it): [`EARTH_N2_SHARE`], [`EARTH_O2_SHARE`] and
-/// [`EARTH_AR_SHARE`] of [`EARTH_PRESSURE`]. `balance::EARTH_DRY_AIR` is
+/// [`EARTH_AR_SHARE`] of [`EARTH_PRESSURE`], partial pressures; the
+/// climate reads their weights ([`PartialPressures::weights`], #749). `balance::EARTH_DRY_AIR` is
 /// legacy's rounded 0.78 and 0.21 bar, a `Definition:`, not this air.
 const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
     n2: EARTH_PRESSURE * EARTH_N2_SHARE,
@@ -237,10 +240,10 @@ fn albedo(settled: &Settled) -> f64 {
     climate(settled).global.bond_albedo.value().get()
 }
 
-/// The partial pressures of the air `climate` leaves.
-fn air_of(climate: &Climate) -> PartialPressures {
+/// The weights of the air `climate` leaves, as it records them.
+fn air_of(climate: &Climate) -> Weights {
     let p = |gas: Gas| climate.atmosphere.partial[&gas].value().0;
-    PartialPressures {
+    Weights {
         n2: p(Gas::N2),
         co2: p(Gas::Co2),
         h2o: p(Gas::H2o),
@@ -346,17 +349,21 @@ fn titan_on_its_measured_air() -> (Bare, Rotation, Trace) {
     let (t, d) = reference_trial(&mut trace, &TITAN);
     let rot = rotation(&mut trace, TITAN_OBLIQUITY, false);
     let mut bare = bare_with(&t, &d, &mut trace).unwrap();
-    // Refs #679: the measured air replaces the reference trial's.
+    // Refs #679: the measured air replaces the reference trial's, in the
+    // weights the chain records (#749): the measured shares by volume read
+    // as weights, and the surplus, an amount, added to the methane's.
+    let weights = PartialPressures {
+        n2: TITAN_PRESSURE * (1.0 - TITAN_METHANE_SHARE),
+        ch4: TITAN_PRESSURE * TITAN_METHANE_SHARE,
+        ..PartialPressures::default()
+    }
+    .weights();
     let measured = [
-        (
-            Gas::N2,
-            "test.titan.n2",
-            TITAN_PRESSURE * (1.0 - TITAN_METHANE_SHARE),
-        ),
+        (Gas::N2, "test.titan.n2", weights.n2),
         (
             Gas::Ch4,
             "test.titan.ch4",
-            TITAN_PRESSURE * TITAN_METHANE_SHARE + TITAN_METHANE_SURPLUS,
+            weights.ch4 + TITAN_METHANE_SURPLUS,
         ),
         (Gas::Co2, "test.titan.co2", 0.0),
         (Gas::H2o, "test.titan.h2o", 0.0),
@@ -667,12 +674,7 @@ fn a_reducing_air_keeps_its_co2_only_when_titan_like() {
 
 /// The temperature of the wet climate of `inputs` under `air`, at the
 /// Bond `albedo` and the settled emissivity of `c`.
-fn wet_temperature(
-    inputs: &ClimateInputs,
-    albedo: Fraction,
-    c: &Climate,
-    air: &PartialPressures,
-) -> f64 {
+fn wet_temperature(inputs: &ClimateInputs, albedo: Fraction, c: &Climate, air: &Weights) -> f64 {
     use super::climate::body::ClimateBody;
     use super::climate::wet::wet_climate;
     let mut body = ClimateBody::new(inputs, Numerics::DEFAULT);
@@ -701,8 +703,11 @@ fn earth_has_its_climate() {
     );
     assert!(*c.regulated.value(), "{c:?}");
     assert_eq!(*c.global.state.value(), ClimateState::Temperate, "{c:?}");
-    let co2 = c.atmosphere.partial[&Gas::Co2].value().0;
-    println!("reference Earth: {t} K, thermostat CO₂ {co2} bar");
+    // The bound is on the CO₂'s partial pressure, the greenhouse the
+    // column reads; the climate records its weight (#749).
+    let weight = c.atmosphere.partial[&Gas::Co2].value().0;
+    let co2 = air_of(c).partial_pressures().co2;
+    println!("reference Earth: {t} K, thermostat CO₂ {weight} bar by weight, {co2} bar");
     assert!(co2 < EARTH_CO2_BOUND, "{co2} bar");
     assert!(
         (albedo(&earth) - EARTH_BOND).abs() <= EARTH_BOND_WINDOW,
@@ -730,9 +735,14 @@ fn earth_has_its_climate() {
     // Bond albedo is the climate's at the reference Earth's temperature,
     // with that ozone, its own dry gases and the reference Earth's
     // vapour and CO₂.
-    let measured = |co2: f64| PartialPressures {
-        co2,
-        ..EARTH_MEASURED_AIR
+    // `co2` is a partial pressure, as the 280 ppm are; the air the
+    // climate reads is its weights.
+    let measured = |co2: f64| {
+        PartialPressures {
+            co2,
+            ..EARTH_MEASURED_AIR
+        }
+        .weights()
     };
     let inputs = ClimateInputs {
         sources: inputs
@@ -747,9 +757,10 @@ fn earth_has_its_climate() {
     };
     let albedo = ClimateBody::new(&inputs, Numerics::DEFAULT).derived_albedo(
         Kelvin(t),
-        &PartialPressures {
+        &Weights {
             h2o: air.h2o,
-            ..measured(air.co2)
+            co2: air.co2,
+            ..measured(0.0)
         },
     );
     println!(
@@ -780,7 +791,10 @@ fn earth_has_its_climate() {
         co2_for(PREINDUSTRIAL_RANGE.1.0),
     );
     let on_measured_air = ClimateInputs {
-        air: measured(inputs.air.co2),
+        air: Weights {
+            co2: inputs.air.co2,
+            ..measured(0.0)
+        },
         ..inputs.clone()
     };
     let mut body = ClimateBody::new(&on_measured_air, Numerics::DEFAULT);
@@ -788,14 +802,15 @@ fn earth_has_its_climate() {
     let (kept, held, regulated) = thermostat(
         &mut body,
         starlight,
-        &measured(on_measured_air.air.co2),
+        &on_measured_air.air,
         *c.emissivity.value(),
     );
     assert!(regulated, "{held:?}");
+    // Its CO₂'s partial pressure, as the bounds are.
+    let kept = kept.partial_pressures().co2;
     assert!(
-        (cold..=warm).contains(&kept.co2),
-        "{} outside {cold}..{warm}",
-        kept.co2
+        (cold..=warm).contains(&kept),
+        "{kept} outside {cold}..{warm}"
     );
 
     // Earth is bistable, with a share of its history frozen as dated.

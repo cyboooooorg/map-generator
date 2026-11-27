@@ -359,7 +359,7 @@ fn earth_cover_ground() -> Fraction {
         Kelvin(EARTH_SURFACE_K),
         OCEAN_MASS,
         EARTH_MEAN_RADIUS,
-        &PartialPressures::default(),
+        &crate::radiation::gases::Weights::default(),
         Radian::from(Degree(EARTH_OBLIQUITY_DEGREES)),
         false,
     );

@@ -12,7 +12,7 @@
 
 use super::cover::{FROST_LAYER, share};
 use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STEFAN_BOLTZMANN};
-use crate::radiation::gases::PartialPressures;
+use crate::radiation::gases::{CO2_MOLAR_MASS, SO2_MOLAR_MASS, Weights};
 use crate::units::{Bar, Fraction, Kelvin, Kilogram, Pascal, WattPerSquareMetre};
 use crate::volatiles::{
     ETHANE_TRIPLE_TEMPERATURE, METHANE_TRIPLE_TEMPERATURE, NITROGEN_TRIPLE_TEMPERATURE,
@@ -119,11 +119,13 @@ pub(super) fn bar(p: Pascal) -> f64 {
     p.0 / PASCALS_PER_BAR
 }
 
-/// The liquid on a surface at `t` under `air` (bar), with `water` kept
-/// by the body (`runaway` when it is all steam) and `condensate` (bar,
-/// the N2 and CH4 the air cannot hold) on its ground, from the phase
-/// diagrams, each window holding its lower edge and leaving out its upper
-/// one:
+/// The liquid on a surface at `t` under `air` (bar, weights), with
+/// `water` kept by the body (`runaway` when it is all steam) and
+/// `condensate` (bar, weights: the N2 and CH4 the air cannot hold) on its
+/// ground, from the phase diagrams, each window holding its lower edge
+/// and leaving out its upper one; the pressure is the air's
+/// ([`Weights::total`]), the methane and nitrogen the sea reads their
+/// partial pressures ([`Weights::partial_pressures`]):
 ///
 /// - lava from [`LAVA_TEMPERATURE`], read on the hotter of `t` and the
 ///   `substellar` temperature of a tidally locked body
@@ -142,13 +144,14 @@ pub(super) fn bar(p: Pascal) -> f64 {
 /// - none otherwise.
 pub fn liquid(
     t: Kelvin,
-    air: &PartialPressures,
+    air: &Weights,
     water: Kilogram,
     runaway: bool,
-    condensate: &PartialPressures,
+    condensate: &Weights,
     substellar: Option<Kelvin>,
 ) -> Option<Liquid> {
     let pressure = Pascal(air.total() * PASCALS_PER_BAR);
+    let partial = air.partial_pressures();
     let water_on_top = water.0 > 0.0;
     let water_window = || {
         boiling_temperature(pressure)
@@ -159,8 +162,8 @@ pub fn liquid(
         Some(Liquid::Lava)
     } else if water_on_top && !runaway && water_window() {
         Some(Liquid::Water)
-    } else if (condensate.ch4 > 0.0 || methane_condenses(Bar(air.ch4), t))
-        && t.0 >= sea_freezes(Bar(air.n2), condensate).0
+    } else if (condensate.ch4 > 0.0 || methane_condenses(Bar(partial.ch4), t))
+        && t.0 >= sea_freezes(Bar(partial.n2), condensate).0
         && t.0 < ethane_boiling_temperature(pressure).0
     {
         Some(Liquid::Hydrocarbons)
@@ -172,14 +175,14 @@ pub fn liquid(
 }
 
 /// The temperature under which the hydrocarbon sea of a body whose air
-/// holds `air_n2` of nitrogen, with `condensate` (bar) on its ground,
-/// freezes. Where nitrogen itself condenses, the sea is nitrogen with
+/// holds a partial pressure `air_n2` of nitrogen, with `condensate` (bar,
+/// weights) on its ground, freezes. Where nitrogen itself condenses, the sea is nitrogen with
 /// methane dissolved in it, liquid down to nitrogen's triple point, where
 /// pure nitrogen freezes (a simple rule that errs towards freezing: N2
 /// and CH4 freeze into solid solutions an ideal liquidus does not
 /// describe; issue #524). Otherwise the liquidus of a methane-ethane sea
 /// with the nitrogen the air dissolves in it ([`methane_freezes`]).
-pub fn sea_freezes(air_n2: Bar, condensate: &PartialPressures) -> Kelvin {
+pub fn sea_freezes(air_n2: Bar, condensate: &Weights) -> Kelvin {
     if condensate.n2 > 0.0 {
         NITROGEN_TRIPLE_TEMPERATURE
     } else {
@@ -288,44 +291,61 @@ pub fn melting(condensate: Bar, frozen: Fraction) -> Bar {
     }
 }
 
-/// The frost on the ground of a body at `t` under `air`, bar, gas by gas:
+/// The frost on the ground of a body at `t` under `air`, bar, weights,
+/// gas by gas:
 ///
 /// - the N2 of `condensate` under nitrogen's triple point (above it, a
 ///   liquid), and its CH4 under the sea's freezing point
-///   ([`sea_freezes`]; above it, a sea), each melting over the last
-///   [`PHASE_BAND`] under its point ([`melting`]);
-/// - the CO2 the cold trap froze out (`frozen_co2`) that the air, at most
-///   CO2's sublimation pressure there, cannot take back;
+///   ([`sea_freezes`] of the air's N2 partial pressure; above it, a sea),
+///   each melting over the last [`PHASE_BAND`] under its point
+///   ([`melting`]);
+/// - the CO2 the cold trap froze out (`frozen_co2`) that the air cannot
+///   take back: the air takes back frost until its CO2's partial pressure
+///   reaches CO2's sublimation pressure there, up to the weight
+///   [`Weights::weight_at`] gives over its other gases;
 /// - the SO2 frost its volcanoes lay (`so2_frost`), less what the air
 ///   takes back the same way at SO2's sublimation pressure.
 ///
 /// Over a frost's triple point its curve gives no pressure, read as an
 /// infinite one: the frost all goes back to the air.
 pub fn frost(
-    condensate: &PartialPressures,
+    condensate: &Weights,
     frozen_co2: Bar,
     so2_frost: Bar,
     t: Kelvin,
-    air: &PartialPressures,
-) -> PartialPressures {
+    air: &Weights,
+) -> Weights {
     let n2 = melting(
         Bar(condensate.n2),
         frozen_share(t, NITROGEN_TRIPLE_TEMPERATURE),
     );
     let ch4 = melting(
         Bar(condensate.ch4),
-        frozen_share(t, sea_freezes(Bar(air.n2), condensate)),
+        frozen_share(t, sea_freezes(Bar(air.partial_pressures().n2), condensate)),
     );
-    let kept = |frozen: Bar, sublimes: Option<Pascal>, in_air: f64| {
-        let sublimes = sublimes.map_or(f64::INFINITY, bar);
-        (frozen.0.max(0.0) - (sublimes - in_air.max(0.0)).max(0.0)).max(0.0)
+    let kept = |frozen: Bar, sublimes: Option<Pascal>, others: Weights, molar_mass, in_air: f64| {
+        let sublimes = Bar(sublimes.map_or(f64::INFINITY, bar));
+        let holds = Weights::weight_at(&others, molar_mass, sublimes).0;
+        (frozen.0.max(0.0) - (holds - in_air.max(0.0)).max(0.0)).max(0.0)
     };
-    PartialPressures {
+    Weights {
         n2: n2.0,
         ch4: ch4.0,
-        co2: kept(frozen_co2, co2_frost_pressure(t), air.co2),
-        so2: kept(so2_frost, sulphur_dioxide_frost_pressure(t), air.so2),
-        ..PartialPressures::default()
+        co2: kept(
+            frozen_co2,
+            co2_frost_pressure(t),
+            Weights { co2: 0.0, ..*air },
+            CO2_MOLAR_MASS,
+            air.co2,
+        ),
+        so2: kept(
+            so2_frost,
+            sulphur_dioxide_frost_pressure(t),
+            Weights { so2: 0.0, ..*air },
+            SO2_MOLAR_MASS,
+            air.so2,
+        ),
+        ..Weights::default()
     }
 }
 

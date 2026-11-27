@@ -150,10 +150,13 @@ study](../../docs/superpowers/studies/2026-11-22-relief/README.md). Laws:
 
 `science::surface`: `cover` and `ground_albedo` (ocean, land, ice, frost),
 `RELATIVE_HUMIDITY`, and `liquid`, `frost`, `melting` (the freezing of methane
-and nitrogen seas included); `surface::condense`: `condense` keeps in the air
-what a gas's saturation allows at a temperature (nitrogen, methane, then
-argon) and
-returns the condensate. Values:
+and nitrogen seas included), all on an air of `Weights`; `surface::condense`:
+`condense` keeps in the air the weight whose partial pressure a gas's
+saturation allows at a temperature (nitrogen, methane and argon, in rounds
+since each raises the others' shares) and returns the condensate;
+`condensables` puts an inventory's three condensing gases over an air's
+others; `cold_trapped` caps an air's CO₂ and NH₃ at their frost pressures
+(the chain's cold trap). Values:
 [planet atmospheres](../../docs/science/planet-atmospheres.md#climate-and-surface-liquid).
 
 ## Radiative balance
@@ -178,8 +181,16 @@ caller owns the `ShortwaveCache`), `starlight` (the star's spectrum, from
 cross-sections from `data/ozone.tsv`), `rayleigh`,
 `veils`, `methane::stratospheric_share`.
 `radiation::gases::PartialPressures` holds the eight gases of a column (N₂,
-CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar); argon absorbs nothing, weighs, scatters,
-has a monatomic heat capacity and broadens the lines as air does.
+CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar) as partial pressures, shares of the moles
+times the pressure; argon absorbs nothing, weighs, scatters, has a monatomic
+heat capacity and broadens the lines as air does. `radiation::gases::Weights`
+holds the same gases as weights (`m g / 4πR²`, what the system keeps):
+`Weights::partial_pressures` reads them as partial pressures,
+`PartialPressures::weights` turns a measured air by volume into weights, and
+`Weights::weight_at` gives the weight of a gas whose partial pressure is a
+cap over the other gases (issue #749, [planet
+atmospheres](../../docs/science/planet-atmospheres.md), "Weights and partial
+pressures").
 See [OPACITY.md](data/OPACITY.md), [SPECTRA.md](data/SPECTRA.md),
 [RFMIP.md](data/RFMIP.md) (the field the shortwave is tested on), [radiative
 transfer](../../docs/science/radiative-transfer.md), [stellar

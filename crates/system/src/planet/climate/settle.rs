@@ -12,10 +12,10 @@ use super::carbon::thermostat;
 use super::wet::{collapsed_climate, wet_climate};
 use science::balance::{LEAST_EMISSIVITY, Point, regula_falsi, surface_temperature};
 use science::constants::STEFAN_BOLTZMANN;
-use science::radiation::gases::PartialPressures;
+use science::radiation::gases::Weights;
 use science::surface::{
-    ICE_COVERED_TEMPERATURE, ICE_FREE_TEMPERATURE, Liquid, condense, condensed_air, liquid,
-    substellar_temperature, surface_vapour,
+    ICE_COVERED_TEMPERATURE, ICE_FREE_TEMPERATURE, Liquid, condensables, condense, condensed_air,
+    liquid, substellar_temperature, surface_vapour,
 };
 use science::units::{Bar, Fraction, Kelvin, WattPerSquareMetre};
 
@@ -23,7 +23,7 @@ use science::units::{Bar, Fraction, Kelvin, WattPerSquareMetre};
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Pass {
     /// The air the climate leaves.
-    pub air: PartialPressures,
+    pub air: Weights,
     /// The surface temperature.
     pub temperature: Kelvin,
     /// Whether the carbonate thermostat holds it.
@@ -45,7 +45,7 @@ pub(crate) struct Pass {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Settle {
     /// The air the climate leaves.
-    pub air: PartialPressures,
+    pub air: Weights,
     /// The surface temperature.
     pub temperature: Kelvin,
     /// The equilibrium temperature of the light the surface took,
@@ -64,7 +64,7 @@ pub(crate) struct Settle {
     pub converged: bool,
     /// The N₂, CH₄ and Ar on its ground at its temperature ([`condense`] of
     /// its inventory).
-    pub condensate: PartialPressures,
+    pub condensate: Weights,
     /// The liquid on its surface ([`liquid`]).
     pub liquid: Option<Liquid>,
     /// The steps of the last condensation's fixed point
@@ -267,7 +267,7 @@ pub(crate) fn pair_residuals(
     albedo: f64,
     emissivity: f64,
     t: Kelvin,
-    air: &PartialPressures,
+    air: &Weights,
 ) -> (f64, f64) {
     let used = radiative(body, albedo, emissivity);
     let derived = body.derived_albedo(t, air).get();
@@ -287,10 +287,26 @@ fn equilibrium(starlight: WattPerSquareMetre) -> Kelvin {
 
 /// What condenses of `body`: its inventory air, with the CO₂ its frozen
 /// branch holds when it has one ([`ClimateBody::co2`]).
-fn inventory(body: &ClimateBody) -> PartialPressures {
+fn inventory(body: &ClimateBody) -> Weights {
     let air = body.inputs.air;
-    body.co2
-        .map_or(air, |co2| PartialPressures { co2: co2.0, ..air })
+    body.co2.map_or(air, |co2| Weights { co2: co2.0, ..air })
+}
+
+/// The air `gases` (the inventory the climate is given: its CO₂ the
+/// inventory's, which the thermostat and the collapse start from) with
+/// its N₂, CH₄ and Ar condensed at `t` over the other gases of `last`,
+/// the air the last climate solved with ([`condense`] of
+/// [`condensables`]): the weight that holds a gas at its cap depends on
+/// the others (`Weights::weight_at`), and those the climate reads are
+/// the solved air's CO₂ and vapour, not the inventory's (#749).
+fn condensed_over(gases: &Weights, last: &Weights, t: Kelvin) -> Weights {
+    let kept = condense(&condensables(last, gases), t).air;
+    Weights {
+        n2: kept.n2,
+        ch4: kept.ch4,
+        ar: kept.ar,
+        ..*gases
+    }
 }
 
 /// The climate of `body` under `starlight` with `air`, its surface
@@ -307,14 +323,14 @@ fn inventory(body: &ClimateBody) -> PartialPressures {
 fn climate_of(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
-    air: &PartialPressures,
+    air: &Weights,
     emissivity: Fraction,
-) -> (PartialPressures, Kelvin, bool) {
+) -> (Weights, Kelvin, bool) {
     if !body.wet() {
         let i = body.inputs;
         let t = surface_temperature(
             starlight,
-            air,
+            &air.partial_pressures(),
             i.longwave_ozone(),
             i.heat_flux,
             emissivity,
@@ -408,8 +424,11 @@ fn under_light(
                 (before, here)
             };
             if low.x < high.x {
+                // The other gases are the last climate's: the caps' weights
+                // depend on them (`Weights::weight_at`).
+                let around = pass.0;
                 let excess = |x: f64| {
-                    let air = condense(&gases, Kelvin(x)).air;
+                    let air = condensed_over(&gases, &around, Kelvin(x));
                     x - climate_of(body, starlight, &air, emissivity).1.0
                 };
                 t = regula_falsi(
@@ -420,7 +439,7 @@ fn under_light(
                     solver.iterations,
                 )
                 .x;
-                air = condense(&gases, Kelvin(t)).air;
+                air = condensed_over(&gases, &around, Kelvin(t));
                 pass = climate_of(body, starlight, &air, emissivity);
                 converged = (pass.1.0 - t).abs() < solver.tolerance.0;
                 break;
@@ -428,7 +447,9 @@ fn under_light(
         }
         last = Some(here);
         t = pass.1.0;
-        let next = condense(&gases, Kelvin(t)).air;
+        // Condensed over the last climate's other gases (its CO₂ and
+        // vapour), which set the weight each cap keeps.
+        let next = condensed_over(&gases, &pass.0, Kelvin(t));
         if next == air {
             converged = true;
             break;
@@ -477,7 +498,7 @@ pub(crate) fn warm_start(body: &mut ClimateBody) -> (Fraction, Fraction) {
     let warm = Kelvin(pass.temperature.0.max(ICE_FREE_TEMPERATURE.0));
     let air = if body.wet() {
         let water = body.water_column();
-        PartialPressures {
+        Weights {
             h2o: surface_vapour(warm, water).0,
             ..pass.air
         }
@@ -704,7 +725,7 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
     }
     let i = body.inputs;
     let t = pass.temperature;
-    let condensate = condense(&inventory(body), t).condensate;
+    let condensate = condense(&condensables(&pass.air, &inventory(body)), t).condensate;
     let substellar = i.locked.then(|| substellar_temperature(pass.starlight));
     Settle {
         air: pass.air,

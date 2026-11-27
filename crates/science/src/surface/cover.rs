@@ -9,7 +9,7 @@
 
 use crate::constants::STANDARD_ATMOSPHERE;
 use crate::habitable::OCEAN_MASS;
-use crate::radiation::gases::PartialPressures;
+use crate::radiation::gases::Weights;
 use crate::units::{Bar, Fraction, Kelvin, Kilogram, Metre, Radian};
 use crate::water::{ice_ih_density, ice_ih_melting_temperature, vapour_saturation_bar};
 
@@ -191,22 +191,23 @@ pub fn ice_line_share(t: Kelvin) -> Fraction {
     share(1.0 - x2.clamp(0.0, 1.0).sqrt())
 }
 
-/// Share of a disc that `frost` (bar, gas by gas, all together) covers:
-/// `frost / FROST_LAYER`, all of it from that amount on.
-pub fn frost_cover(frost: &PartialPressures) -> Fraction {
+/// Share of a disc that `frost` (bar, weights, gas by gas, all together)
+/// covers: `frost / FROST_LAYER`, all of it from that amount on.
+pub fn frost_cover(frost: &Weights) -> Fraction {
     share(frost.total() / FROST_LAYER.0)
 }
 
-/// Emissivity of a surface with `frost` (bar, gas by gas) on its ground:
+/// Emissivity of a surface with `frost` (bar, weights, gas by gas) on its
+/// ground:
 /// [`N2_ICE_EMISSIVITY`] over the share of its disc that its nitrogen
 /// frost covers ([`frost_cover`] of N2 alone), 1 elsewhere. Rock, water
 /// ice and the other frosts radiate close to a black body; nitrogen, the
 /// most volatile frost, condenses last and lies over the others. The
 /// result is `1 - (1 - N2_ICE_EMISSIVITY) * share`.
-pub fn frost_emissivity(frost: &PartialPressures) -> Fraction {
-    let nitrogen = PartialPressures {
+pub fn frost_emissivity(frost: &Weights) -> Fraction {
+    let nitrogen = Weights {
         n2: frost.n2.max(0.0),
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     share(1.0 - (1.0 - N2_ICE_EMISSIVITY) * frost_cover(&nitrogen).get())
 }
@@ -248,8 +249,8 @@ pub fn sunlit_cap(edge: f64, obliquity: Radian) -> Fraction {
 
 /// What covers a body at mean surface temperature `t` with `water` (kg of
 /// liquid and ice; 0 when the planet is dry or in runaway: the caller
-/// decides) on a sphere of `radius`, and `frost` bar of N2, CH4, CO2 and
-/// SO2 frost on its ground.
+/// decides) on a sphere of `radius`, and `frost` bar (weights) of N2,
+/// CH4, CO2 and SO2 frost on its ground.
 ///
 /// - The water is open ocean ([`ocean_fraction`] of its oceans) where the
 ///   surface is warmer than the ice line and ice or snow where it is
@@ -267,7 +268,7 @@ pub fn cover(
     t: Kelvin,
     water: Kilogram,
     radius: Metre,
-    frost: &PartialPressures,
+    frost: &Weights,
     obliquity: Radian,
     locked: bool,
 ) -> Cover {
