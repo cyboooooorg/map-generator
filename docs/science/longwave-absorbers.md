@@ -295,7 +295,7 @@ do now.
 | N₂O's 324.2 ppb taken out, Earth clear (a probe, no test) | | 2.179 W/m² | 1.5 (Hogan & Matricardi 2020, 332 ppb); 1.88 (Höpfner et al. 2012) | 16 % over the larger |
 | RFMIP, CO₂'s step "PI CO2" − "PD" (a probe, without N₂O) | 1.379 W/m² | | LBLRTM 12.8 1.322 (Pincus et al. 2020's fluxes) | 4.3 % over |
 | Earth's clear sky against CERES like for like | 263.41 W/m² (window 266.14 to 274.58) | 261.24 W/m² | 264.64 to 273.08 (N₂O's 1.5 W/m² out of `MINOR_GASES_W_M2`) | 3.40 under |
-| Titan's sourced column | 92.300 K | 92.300 K | 92.296 K before the lines; measured 93.65 ± 0.25 | unchanged |
+| Titan's sourced column | 92.300 K | 92.300 K (91.813 K since N₂ condenses, #741) | 92.296 K before the lines (91.809 K on `main` with #741); measured 93.65 ± 0.25 | +0.004 K |
 
 The methane step hardly depends on the bins (0.710 on 20 cm⁻¹, 0.720
 on 10 cm⁻¹, Earth's single column, without N₂O) and the table holds
@@ -309,6 +309,19 @@ the skin temperature) more than at the lines. Ozone's 8.4 W/m² sits
 under that stratosphere (on RFMIP's own temperatures it takes
 7.46 W/m²). The CERES test's clear sky is 3.4 W/m² under its window:
 see "Where it departs".
+
+The clouds' infrared emissivity was then refitted on CERES (#705,
+`CLOUD_EMISSIVITY` 0.848, [radiative-transfer.md](radiative-transfer.md)),
+and the bodies measured after #741 (`main` b6845f95 against the branch):
+the reference Earth holds 288 K with 6.910e-3 bar of CO₂ (4.071e-3);
+Earth's measured air settles at 289.39 K at 280 ppm (288.18 K; 290.95 K
+with the lines before the refit, out of its 286-290 K window); Mars
+214.131 K and the Triton-like body 37.975 K do not move; the reference
+Titan 92.613 → 92.616 K; the methane Earth's outer edge 1.2534 →
+1.2720 AU and its cycling orbit 1.264 → 1.282 AU; N₂'s frost and liquid
+branches (up to 0.0076953 and down to 0.0064470 Earth fluxes, one jump
+0.006565 → 0.006581) do not move; Earth's snowball chance 0.01400 →
+0.01408 under 9.80 bar, refitted to 9.85 bar (0.01401).
 
 - **What the study measured** on the column of `main` (1e122416), with
   HITRAN's pair files binned like `co2-cia.tsv` in a scratch probe

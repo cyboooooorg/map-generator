@@ -1724,7 +1724,13 @@ under a 214.4 K skin (the test's 214.51 K moves each by about
   measured air, with its ozone, has a Bond albedo of 0.2913 at 288 K
   and its 280 ppm climate is 288.02 K (`earth_has_its_climate`), 288.18 K
   since the N₂ and O₂ pairs of #703; the reference Earth without O₂ has
-  0.3070 (0.3071 since the pairs).
+  0.3070 (0.3071 since the pairs). Since #704 its ozone, methane and
+  N₂O absorb in the infrared, and the clouds' infrared emissivity is
+  fitted on CERES (#705): the measured air settles at 289.39 K, the
+  reference Earth holds 6.910e-3 bar of CO₂ (Bond albedo 0.3064), and
+  the cloudy column at 389 ppm and 288 K, with CERES's methane and N₂O,
+  sends out 233.90 W/m², 6.2 under CERES's 240.1: the clear sky's
+  shortfall of the CERES test, the clouds now taking CERES's 25.7.
 
 **Sources the audit could not read.** Kasting 1991 (Appendix B),
 Pierrehumbert 2010 (equation 2.33), the CRC polarizabilities and Sobolev
