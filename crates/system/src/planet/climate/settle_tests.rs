@@ -11,7 +11,7 @@ use super::{
     Light, Numerics,
 };
 use science::balance::{BRACKET_TOLERANCE, Point, TOLERANCE};
-use science::radiation::gases::PartialPressures;
+use science::radiation::gases::{PartialPressures, Weights};
 use science::radiation::ozone::ozone_column;
 use science::surface::Liquid;
 use science::units::{Bar, Dex, EarthFlux, Kelvin, Kilogram, WattPerSquareMetre};
@@ -21,7 +21,9 @@ use science::units::{Bar, Dex, EarthFlux, Kelvin, Kilogram, WattPerSquareMetre};
 /// marsfact.html): 6.05 mbar of CO₂, 0.165 mbar of N₂ and 0.010 mbar of
 /// O₂, imposed (study 25, "Test air and Solar System bounds"), and its
 /// 1.93 % of argon-40, 0.123 mbar (Mahaffy et al. 2013, Science 341, 263,
-/// abstract, as study 29 reads it).
+/// abstract, as study 29 reads it). These are partial pressures, shares
+/// by volume of the surface pressure; the climate reads their weights
+/// ([`PartialPressures::weights`], issue #749).
 const MARS_AIR: PartialPressures = PartialPressures {
     n2: 0.165e-3,
     co2: 6.05e-3,
@@ -70,8 +72,11 @@ const COLD_EQUILIBRIUM: Kelvin = Kelvin(114.07);
 
 /// Definition: the census case of #443: its air, 4.379 bar of N₂,
 /// 26.26 bar of CH₄, 1.14e-5 bar of CO₂ and 2.4e-4 bar of SO₂, a test
-/// input.
-const COLD_AIR: PartialPressures = PartialPressures {
+/// input, weights: legacy's census drew them with its chain (seed 182,
+/// `planet_census`, legacy `census_182_d`), whose gases were column
+/// pressures, `m g / 4πR²`, typed as partial pressures (#749). Its census
+/// bound of 4 to 5 bar was on that chain's N₂, the 4.379 bar here.
+const COLD_AIR: Weights = Weights {
     n2: 4.379,
     co2: 1.14e-5,
     h2o: 0.0,
@@ -143,7 +148,7 @@ pub(super) fn settled(inputs: &ClimateInputs, numerics: Numerics) -> Settle {
 /// Mars's inputs under the imposed air of [`MARS_AIR`].
 pub(super) fn imposed_mars() -> ClimateInputs {
     ClimateInputs {
-        air: MARS_AIR,
+        air: MARS_AIR.weights(),
         ..mars()
     }
 }
@@ -163,9 +168,9 @@ pub(super) fn triton_like() -> ClimateInputs {
             equilibrium: Kelvin(sun.equilibrium.0 * (flux.0 / sun.flux.0).powf(0.25)),
             ..sun
         }],
-        air: PartialPressures {
+        air: Weights {
             n2: TRITON_N2.0,
-            ..PartialPressures::default()
+            ..Weights::default()
         },
         water: Kilogram(0.0),
         heat_flux: WattPerSquareMetre(0.0),
@@ -280,7 +285,7 @@ fn a_methane_greenhouse_cannot_warm_a_cold_world() {
 #[test]
 fn a_hot_locked_earth_has_lava() {
     let bare = ClimateInputs {
-        air: PartialPressures::default(),
+        air: Weights::default(),
         water: Kilogram(0.0),
         ..moved(&earth(), HOT_ORBIT)
     };
@@ -391,7 +396,7 @@ const TRITON_ARGON_SHARE: f64 = 0.05;
 fn a_triton_like_body_keeps_its_argon_as_frost() {
     let bare = triton_like();
     let inputs = ClimateInputs {
-        air: PartialPressures {
+        air: Weights {
             ar: TRITON_ARGON.0,
             ..bare.air
         },
@@ -403,12 +408,14 @@ fn a_triton_like_body_keeps_its_argon_as_frost() {
         .expect("under argon's triple point")
         .0
         / science::constants::PASCALS_PER_BAR;
-    assert!((c.air.ar / frost - 1.0).abs() < 1e-9, "{c:?} {frost:e}");
+    let held = c.air.partial_pressures();
+    assert!((held.ar / frost - 1.0).abs() < 1e-9, "{c:?} {frost:e}");
     assert!(c.condensate.ar > 0.0, "{c:?}");
-    let share = c.air.ar / c.air.total();
+    let share = held.ar / held.total();
     println!(
-        "Triton-like: {:.3} K, {:.3e} bar of Ar, {share:.4} of the air",
-        c.temperature.0, c.air.ar
+        "Triton-like: {:.3} K, {:.3e} bar of Ar by weight, {:.3e} bar of partial \
+         pressure, {share:.4} of the moles",
+        c.temperature.0, c.air.ar, held.ar
     );
     assert!(share < TRITON_ARGON_SHARE, "{share}");
 }

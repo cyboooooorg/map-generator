@@ -10,7 +10,7 @@ use science::balance::{
     LEAST_EMISSIVITY, Point, THERMOSTAT_K, absorbed, regula_falsi, skin, surface_temperature,
 };
 use science::radiation::column::{Profile, outgoing_longwave};
-use science::radiation::gases::PartialPressures;
+use science::radiation::gases::Weights;
 use science::surface::surface_vapour;
 use science::units::{Bar, Fraction, Kelvin, WattPerSquareMetre};
 
@@ -56,15 +56,15 @@ const TRACE_CO2_SHARE: f64 = 1.0 / (1u64 << 60) as f64;
 pub(crate) fn thermostat(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
-    air: &PartialPressures,
+    air: &Weights,
     emissivity: Fraction,
-) -> (PartialPressures, Kelvin, bool) {
+) -> (Weights, Kelvin, bool) {
     let most = body.greenhouse_co2(air).0;
     let water = body.water_column();
     let i = body.inputs;
     let numerics = body.numerics;
     let air = *air;
-    let at_target = PartialPressures {
+    let at_target = Weights {
         h2o: surface_vapour(THERMOSTAT_K, water).0,
         ..air
     };
@@ -77,7 +77,7 @@ pub(crate) fn thermostat(
     // share of the light that the CO₂ dilutes (#681), and
     // `surface_temperature` reads the same air.
     let mut gain_at = |co2: f64| {
-        let gases = PartialPressures { co2, ..at_target };
+        let gases = Weights { co2, ..at_target }.partial_pressures();
         absorbed(starlight, &gases, i.heat_flux).0
             - e * outgoing_longwave(
                 &gases,
@@ -92,21 +92,11 @@ pub(crate) fn thermostat(
     };
     let all = gain_at(most);
     if all <= 0.0 {
-        let c = collapsed_climate(
-            body,
-            starlight,
-            &PartialPressures { co2: most, ..air },
-            emissivity,
-        );
+        let c = collapsed_climate(body, starlight, &Weights { co2: most, ..air }, emissivity);
         return (c.air, c.temperature, false);
     }
     if gain_at(0.0) > 0.0 {
-        let (g, t) = wet_climate(
-            body,
-            starlight,
-            &PartialPressures { co2: 0.0, ..air },
-            emissivity,
-        );
+        let (g, t) = wet_climate(body, starlight, &Weights { co2: 0.0, ..air }, emissivity);
         return (g, t, false);
     }
     let floor = most * TRACE_CO2_SHARE;
@@ -132,10 +122,10 @@ pub(crate) fn thermostat(
         .x
         .exp()
     };
-    let regulated = PartialPressures { co2, ..at_target };
+    let regulated = Weights { co2, ..at_target };
     let t = surface_temperature(
         starlight,
-        &regulated,
+        &regulated.partial_pressures(),
         ozone,
         i.heat_flux,
         emissivity,
@@ -161,7 +151,7 @@ pub(crate) fn thermostat(
 /// given, a condensed one included, `climate.rs` l.1975-1983). Where CO₂ condenses in the column its greenhouse flattens
 /// and its scattering wins: the maximum Kopparapu et al. 2013
 /// (doi:10.1088/0004-637X/765/2/131) find near 8 bar.
-pub(crate) fn maximum_greenhouse(body: &mut ClimateBody, air: &PartialPressures) -> Bar {
+pub(crate) fn maximum_greenhouse(body: &mut ClimateBody, air: &Weights) -> Bar {
     let i = body.inputs;
     let most = i.carbon.0.max(i.air.co2).max(0.0);
     if most <= 0.0 {
@@ -170,20 +160,21 @@ pub(crate) fn maximum_greenhouse(body: &mut ClimateBody, air: &PartialPressures)
     let numerics = body.numerics;
     let water = body.water_column();
     let ozone = i.longwave_ozone();
-    let at_target = PartialPressures {
+    let at_target = Weights {
         h2o: surface_vapour(THERMOSTAT_K, water).0,
         ..*air
     };
     let mut gain = |ln_co2: f64| {
-        let gases = PartialPressures {
+        let gases = Weights {
             co2: ln_co2.exp(),
             ..at_target
         };
         let albedo = body.derived_albedo(THERMOSTAT_K, &gases);
         let light = body.starlight(albedo);
-        absorbed(light, &gases, WattPerSquareMetre(0.0)).0
+        let partial = gases.partial_pressures();
+        absorbed(light, &partial, WattPerSquareMetre(0.0)).0
             - outgoing_longwave(
-                &gases,
+                &partial,
                 ozone,
                 THERMOSTAT_K,
                 skin(light),

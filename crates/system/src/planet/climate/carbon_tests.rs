@@ -5,7 +5,7 @@ use super::carbon::{maximum_greenhouse, thermostat};
 use super::fixture::{earth, titan};
 use super::{ClimateInputs, GREENHOUSE_DECADES, Numerics, THERMOSTAT_TOLERANCE};
 use science::balance::{THERMOSTAT_K, TOLERANCE};
-use science::radiation::gases::PartialPressures;
+use science::radiation::gases::Weights;
 use science::units::{Bar, Fraction, Kelvin, WattPerSquareMetre};
 
 /// Definition: the Bond albedo the tests take the light under, 0.3, a
@@ -81,7 +81,7 @@ fn the_thermostat_holds_a_methane_earth_at_its_target() {
     // surface solver's tolerance and what the thermostat's own moves it
     // by.
     let inputs = ClimateInputs {
-        air: PartialPressures {
+        air: Weights {
             ch4: titan().air.ch4,
             ..earth().air
         },

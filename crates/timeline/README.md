@@ -22,8 +22,11 @@ the kind of the central object.
   `Composition`, `Heat`, `Surface`, `Atmosphere`, `GlobalClimate`,
   `SurfaceLiquid`, `Terrain`, `Life`): the state of a body at a date.
   A giant has no `Surface`. An `Atmosphere` holds its surface pressure and
-  a partial pressure per `Gas` (N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar), whose
-  sum is the surface pressure.
+  a weight per `Gas` (N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar; the gas's mass
+  times the gravity over the planet's area, in bar, in the field
+  `partial`), whose sum is the surface pressure. A gas's partial pressure
+  depends on the whole air: a reader converts it
+  (`science::radiation::gases::Weights::partial_pressures`, issue #749).
 - `InteriorProfile`: layers with their stored mass, and radial samples.
 - `Keyframe`: a date, a `BodyState` and the cause graph of its fields.
 - `Timeline`: the keyframes of one body, with its seed, the

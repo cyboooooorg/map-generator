@@ -6,6 +6,7 @@ use super::*;
 use crate::constants::{EARTH_MEAN_RADIUS, SOLAR_EFFECTIVE_TEMPERATURE, STANDARD_GRAVITY};
 use crate::radiation::albedo::{ShortwaveCache, Underneath, shortwave_budget};
 use crate::radiation::clouds::cloud_cover;
+use crate::radiation::gases::PartialPressures;
 use crate::radiation::ozone::ozone_column;
 use crate::radiation::starlight::SOLAR_METALLICITY;
 use crate::radiation::test_points::{EARTH_AIR, EARTH_SURFACE_K};
@@ -36,8 +37,8 @@ const COLD_BODY_K: f64 = 100.0;
 /// section 6: `1 - ice_line_share`, rounded).
 const EARTH_ICE_EDGE: f64 = 0.898;
 
-fn no_frost() -> PartialPressures {
-    PartialPressures::default()
+fn no_frost() -> Weights {
+    Weights::default()
 }
 
 fn dry(t: f64) -> Cover {
@@ -55,10 +56,10 @@ fn oceans(n: f64) -> Kilogram {
     Kilogram(n * OCEAN_MASS.0)
 }
 
-fn nitrogen(bar: f64) -> PartialPressures {
-    PartialPressures {
+fn nitrogen(bar: f64) -> Weights {
+    Weights {
         n2: bar,
-        ..PartialPressures::default()
+        ..Weights::default()
     }
 }
 
@@ -199,7 +200,7 @@ fn bare_rock_is_all_land() {
 
 #[test]
 fn frost_brightens_a_body_in_proportion_to_its_amount() {
-    let at = |frost: &PartialPressures| {
+    let at = |frost: &Weights| {
         cover(
             Kelvin(40.0),
             Kilogram(0.0),
@@ -221,9 +222,9 @@ fn frost_brightens_a_body_in_proportion_to_its_amount() {
     let a_full = ground_albedo(&full, Bar(10.0)).get();
     assert!((a_full - ground_albedo(&deep, Bar(10.0)).get()).abs() < TIGHT);
     assert!((a_full - FROST_ALBEDO).abs() < TIGHT, "{a_full}");
-    let sulphur = at(&PartialPressures {
+    let sulphur = at(&Weights {
         so2: 10.0,
-        ..PartialPressures::default()
+        ..Weights::default()
     });
     assert_eq!(sulphur.so2_frost.get(), 1.0);
     assert!((ground_albedo(&sulphur, Bar(10.0)).get() - SO2_FROST_ALBEDO).abs() < TIGHT);
@@ -288,7 +289,7 @@ fn cover_shares_sum_to_one() {
     for t in [40.0, 200.0, 260.0, 288.0, 400.0] {
         for water in [0.0, 0.005, 1.0, 5.0] {
             for frost in [0.0, 0.005, 0.02, 1.0] {
-                let mix = PartialPressures {
+                let mix = Weights {
                     n2: frost / 2.0,
                     so2: frost / 2.0,
                     ..no_frost()
@@ -408,9 +409,9 @@ fn nitrogen_frost_radiates_less_than_a_black_body() {
     assert!((N2_ICE_EMISSIVITY - 0.80).abs() < TIGHT);
     // Half the layer covers half the disc: 1 - 0.2 / 2.
     assert!((frost_emissivity(&nitrogen(FROST_LAYER.0 / 2.0)).get() - 0.90).abs() < TIGHT);
-    let co2 = PartialPressures {
+    let co2 = Weights {
         co2: 10.0,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     assert_eq!(frost_emissivity(&co2).get(), 1.0);
 }

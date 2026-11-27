@@ -9,7 +9,7 @@ use super::{ClimateInputs, Rotation};
 use crate::planet::bare::Bare;
 use crate::planet::codes;
 use crate::planet::interior::InteriorError;
-use science::radiation::gases::PartialPressures;
+use science::radiation::gases::Weights;
 use science::steam::hides_surface;
 use science::surface::Liquid;
 use science::units::{Bar, Fraction, Kelvin};
@@ -68,8 +68,8 @@ fn kind(liquid: Liquid) -> LiquidKind {
     }
 }
 
-/// `air` of the gas `gas`, bar.
-fn partial(air: &PartialPressures, gas: Gas) -> f64 {
+/// The weight of the gas `gas` in `air`, bar.
+fn partial(air: &Weights, gas: Gas) -> f64 {
     match gas {
         Gas::N2 => air.n2,
         Gas::Co2 => air.co2,
@@ -98,7 +98,7 @@ fn partial(air: &PartialPressures, gas: Gas) -> f64 {
 ///   columns weighted by the sources' light,
 ///   `ClimateInputs::longwave_ozone`);
 /// - the trial's metallicity (the stars' spectra, `Light::metallicity`);
-/// - the bare air's partial pressures;
+/// - the bare air's weights;
 /// - the water inventory and whether it ran away;
 /// - the three heats;
 /// - the radius, the gravity, the regime and the volcanism;
@@ -115,10 +115,14 @@ fn partial(air: &PartialPressures, gas: Gas) -> f64 {
 /// - the albedo, the emissivity, `regulated`, `converged` and `cycles`
 ///   from the temperature and `I`;
 /// - the equilibrium temperature from the albedo and the fluxes;
-/// - each partial pressure from its bare partial and the temperature
-///   (the CO2 also from the CO2 outgassed and frozen, the vapour also
-///   from the water inventory); the pressure from the partials;
-/// - each condensate from its bare partial and the temperature;
+/// - each gas's weight from its bare weight and the temperature (the
+///   CO2 also from the CO2 outgassed and frozen, the vapour also from the
+///   water inventory; the gases that condense or collapse, N2, CH4, Ar
+///   and CO2, also from the whole bare air, since the weight that holds a
+///   gas at its cap depends on the others, `Weights::weight_at`); the
+///   pressure from the weights;
+/// - each condensate from its bare weight, the temperature and the
+///   weight the air keeps of it;
 /// - the liquid from the temperature, the pressure, the water inventory,
 ///   whether it ran away and whether the body is locked, and the N2 and
 ///   CH4 condensates (not the argon frost, which it does not read); for a
@@ -266,6 +270,14 @@ pub(crate) fn record(
             Gas::H2o => from.push(surface.water.inventory.node()),
             _ => {}
         }
+        if matches!(gas, Gas::N2 | Gas::Ch4 | Gas::Ar | Gas::Co2) {
+            let bare = surface.atmosphere.partial.values().map(Traced::node);
+            for node in bare {
+                if !from.contains(&node) {
+                    from.push(node);
+                }
+            }
+        }
         let p = trace.record(Code::of(code), Bar(partial(&settle.air, gas)), &from)?;
         partials.insert(gas, p);
     }
@@ -291,6 +303,10 @@ pub(crate) fn record(
                 .into_iter()
                 .collect();
             from.push(temperature.node());
+            // What the air keeps of it, which the other gases set.
+            if let Some(kept) = partials.get(&gas) {
+                from.push(Traced::node(kept));
+            }
             condensate.insert(gas, trace.record(Code::of(code), Bar(amount), &from)?);
         }
     }
@@ -350,7 +366,7 @@ pub(crate) fn record(
 /// The errors of the trace.
 pub(crate) fn record_titan_like(
     climate: &Climate,
-    air: &PartialPressures,
+    air: &Weights,
     reducing: &Traced<bool>,
     trace: &mut Trace,
 ) -> Result<Traced<bool>, InteriorError> {

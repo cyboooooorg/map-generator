@@ -12,7 +12,7 @@ use science::balance::{
 };
 use science::constants::STEFAN_BOLTZMANN;
 use science::radiation::column::{Profile, outgoing_longwave};
-use science::radiation::gases::PartialPressures;
+use science::radiation::gases::{CO2_MOLAR_MASS, Weights};
 use science::surface::surface_vapour;
 use science::units::{Bar, Fraction, Kelvin, WattPerSquareMetre};
 use science::volatiles::co2_saturation_pressure;
@@ -20,8 +20,8 @@ use science::water::CRITICAL_POINT_TEMPERATURE;
 
 /// `air` with the vapour a surface at `t` holds of `water`
 /// ([`surface_vapour`]).
-fn with_vapour(air: &PartialPressures, t: f64, water: Bar) -> PartialPressures {
-    PartialPressures {
+fn with_vapour(air: &Weights, t: f64, water: Bar) -> Weights {
+    Weights {
         h2o: surface_vapour(Kelvin(t), water).0,
         ..*air
     }
@@ -51,15 +51,15 @@ fn with_vapour(air: &PartialPressures, t: f64, water: Bar) -> PartialPressures {
 pub(crate) fn wet_balance(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
-    air: &PartialPressures,
+    air: &Weights,
     emissivity: Fraction,
-) -> Option<(PartialPressures, Kelvin)> {
+) -> Option<(Weights, Kelvin)> {
     let numerics = body.numerics;
     let water = body.water_column();
     let (heat, gravity) = (body.inputs.heat_flux, body.inputs.gravity);
     // The dry air absorbs least: its vapour only dilutes the methane whose
     // stratosphere takes a share of the light (#681).
-    let dry = PartialPressures { h2o: 0.0, ..*air };
+    let dry = Weights { h2o: 0.0, ..*air }.partial_pressures();
     let least = absorbed(starlight, &dry, heat).0;
     let skin = skin(starlight);
     let e = emissivity.get().clamp(LEAST_EMISSIVITY, 1.0);
@@ -70,7 +70,7 @@ pub(crate) fn wet_balance(
     let ozone = body.inputs.longwave_ozone();
     let columns = &mut body.columns;
     let mut excess_of = |t: f64, profile: Profile| {
-        let gases = with_vapour(air, t, water);
+        let gases = with_vapour(air, t, water).partial_pressures();
         e * outgoing_longwave(&gases, ozone, Kelvin(t), skin, gravity, profile, columns).0
             - absorbed(starlight, &gases, heat).0
     };
@@ -145,20 +145,20 @@ pub(crate) fn first_balance(
 pub(crate) fn wet_climate(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
-    air: &PartialPressures,
+    air: &Weights,
     emissivity: Fraction,
-) -> (PartialPressures, Kelvin) {
+) -> (Weights, Kelvin) {
     if let Some(balance) = wet_balance(body, starlight, air, emissivity) {
         return balance;
     }
-    let steam = PartialPressures {
+    let steam = Weights {
         h2o: body.water_column().0.max(0.0),
         ..*air
     };
     let i = body.inputs;
     let t = surface_temperature(
         starlight,
-        &steam,
+        &steam.partial_pressures(),
         i.longwave_ozone(),
         i.heat_flux,
         emissivity,
@@ -203,7 +203,7 @@ pub(crate) fn wet_climate(
 ///   (`docs/science/planet-atmospheres.md`, study 26, "The boil").
 pub(crate) fn boils(
     inputs: &ClimateInputs,
-    air: &PartialPressures,
+    air: &Weights,
     bond_albedo: Fraction,
     emissivity: Fraction,
 ) -> bool {
@@ -220,7 +220,7 @@ pub(crate) fn boils(
 /// the numerics' `collapse_iterations` on its way down.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Collapsed {
-    pub air: PartialPressures,
+    pub air: Weights,
     pub temperature: Kelvin,
     pub iterations: usize,
     pub held: bool,
@@ -537,7 +537,7 @@ fn pocket_above<S>(
 pub(crate) fn collapsed_climate(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
-    air: &PartialPressures,
+    air: &Weights,
     emissivity: Fraction,
 ) -> Collapsed {
     let numerics = body.numerics;
@@ -545,10 +545,24 @@ pub(crate) fn collapsed_climate(
     let (_, (kept_air, t), iterations, held) = collapse_search(
         air.co2,
         |co2| {
-            let next = PartialPressures { co2, ..*air };
+            let next = Weights { co2, ..*air };
             let (kept_air, t) = wet_climate(body, starlight, &next, emissivity);
-            let kept = Bar::from(co2_saturation_pressure(t)).0;
-            let warmer = Bar::from(co2_saturation_pressure(Kelvin(t.0 + within.0))).0;
+            // The CO₂ weight whose partial pressure is the saturation,
+            // over the air's other gases.
+            let others = Weights {
+                co2: 0.0,
+                ..kept_air
+            };
+            let holds = |t: Kelvin| {
+                Weights::weight_at(
+                    &others,
+                    CO2_MOLAR_MASS,
+                    Bar::from(co2_saturation_pressure(t)),
+                )
+                .0
+            };
+            let kept = holds(t);
+            let warmer = holds(Kelvin(t.0 + within.0));
             Kept {
                 kept,
                 noise: (warmer - kept).abs(),
