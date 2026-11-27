@@ -288,8 +288,46 @@ surface albedo raised to reproduce Earth.
   (`Light::ozone`) weighted by its share of the planet's light, none
   without light. The O₂-free bodies (all of them until planet PR 2d-4)
   hold none, so their climates do not move. Around several stars the
-  weighting is calibration 7 below. Earth's moist plateau keeps none
-  (`EARTH_PLATEAU_OZONE`): calibration 6 below.
+  weighting is calibration 7 below.
+- **Ozone on the moist plateau** (#761). Goldblatt et al. 2013 find
+  the Simpson–Nakajima limit set by "the minimum absorption cross
+  section in the 10 µm water vapour window; any additional opacity here
+  would raise the τλ = 1 surface to a higher altitude that radiates at
+  a lower temperature" (accepted manuscript, p. 6; 1 % of CO₂ lowers it
+  by 2 W/m², 1 % of NH₃ by 6). Ozone's 9.6 µm band lies in that window.
+  A body in a water runaway takes its own steam column's plateau, with
+  its ozone (`ClimateBody::plateau`), where it exceeds Earth's air's
+  under the same ozone (`balance::earth_moist_plateau_under`); the floor
+  stands for a body whose air has no plateau of its own (a thick CO₂
+  air, legacy `Body::plateau`), and taking it at the body's ozone keeps
+  the floor from handing back the light the ozone holds in. The
+  ozone-free reference plateau (`balance::earth_moist_plateau`), the one
+  checked against Goldblatt et al.'s 282 W/m², holds none by definition
+  (`EARTH_PLATEAU_OZONE`, a `Definition:`): their limit is that of "a
+  pure water atmosphere: neither any background gas nor any greenhouse
+  gas other than water" (p. 4). The plateau also holds Earth's N₂, O₂
+  and CO₂, which theirs does not; the column's test holds that its CO₂
+  (400 ppm to 1 %) and N₂ (one to three Earth's) move it by under 3 %
+  (`the_plateau_ignores_co2_and_nitrogen`; its O₂ is not varied).
+  Measured: Earth's 300 DU lower Earth's air's plateau by 0.354 W/m²
+  (289.710 to 289.356 W/m², the fine column `Profile::PLATEAU`) and the
+  saturated column's by 0.353 (289.718 to 289.365), the drop's sign
+  Goldblatt et al.'s, its size the column's own (no published plateau
+  with ozone was found). A runaway of Earth's air and gravity holding
+  300 DU now takes 289.365 W/m², where before #761 the floor, ozone-free,
+  gave it 289.710 (`a_runaways_ozone_lowers_its_plateau`); round the
+  Sun (`S_rg` about 1.107 S⊕, 1507 W/m²) its runaway albedo rises by
+  4 × 0.345 / 1507, 0.0009. Each ozone-bearing runaway solves one more
+  plateau, Earth's air's under its ozone.
+- **Decision (user, 2026-11-27): the floor at the body's own ozone.**
+  Two other fixes were set aside. Anchoring the floor on Earth's 300 DU
+  would still clamp a body holding more than 300 DU, and the two sides
+  of the comparison would hold different ozone. Dropping the floor for
+  ozone-bearing bodies would give a thick air, which has no plateau of
+  its own (hundreds of bar of CO₂, legacy `Body::plateau`), the low
+  mean of a column still rising over 500 to 640 K (112 to 282 W/m² for
+  the five heavy-test runaways that take the floor today), a runaway
+  albedo bound to a plateau that air does not have.
 - **Measured** (the CERES test's clear column, 288 K, 280 ppm, 1803 ppb
   of methane, 324.2 ppb of N₂O): Earth's 300 DU take 8.366 W/m² of the
   outgoing radiation (8.371 before N₂O's lines), inside 4.185 to
@@ -508,21 +546,17 @@ enough for the rows' end at 80 km where the file runs to 120 km, their
 four digits, and study 34's integration of the file's own number
 densities.
 
-### Calibration 6: Earth's moist plateau without ozone (`EARTH_PLATEAU_OZONE`)
+### Calibration 6: withdrawn (#761)
 
-What: Earth's moist plateau (`balance::earth_moist_plateau`, the
-anchor of every runaway's albedo) holds no ozone, where Earth holds
-300 DU. The plateau and the runaway albedo were checked against the
-Simpson–Nakajima limit without ozone (study 25), and the anchor is kept
-as checked. Measured (a scratch probe, nothing kept): Earth's 300 DU
-lower the plateau by 0.354 W/m², 289.710 to 289.356 W/m², and the
-saturated column's by 0.353 (289.718 to 289.365). A body in a water
-runaway takes its own steam column's plateau where it exceeds Earth's
-(`ClimateBody::plateau`): one whose own ozone lowers its plateau under
-Earth's ozone-free one takes Earth's, up to 0.35 W/m² brighter at
-300 DU, its runaway albedo a little lower. No body holds ozone until
-planet PR 2d-4, and a runaway's steam air rarely holds O₂. Searched
-and not found: a Simpson–Nakajima limit computed with ozone.
+Earth's moist plateau used to hold no ozone as a calibration, the floor
+of every runaway's plateau included, so that a runaway whose own ozone
+lowered its plateau under Earth's ozone-free one took Earth's, up to
+0.35 W/m² too bright at 300 DU. The floor now takes the runaway's own
+ozone. The ozone-free plateau is the reference checked against
+Goldblatt et al. 2013, whose limit holds no gas but water (a
+`Definition:`), and the floor of a runaway without ozone: see "Ozone on the moist plateau"
+above. The number is kept so that the
+calibrations after it keep theirs.
 
 ### Calibration 7: several stars' ozone in the infrared
 
@@ -555,58 +589,61 @@ of the stars' ultraviolet is not modelled.
    doi:10.1029/2020GL091709 (TSIS-1 HSRS, `tsis1_hsrs_1nm.csv`).
 7. Cooke, G. J. et al. 2022, *R. Soc. Open Sci.* 9, 211165,
    doi:10.1098/rsos.211165, arXiv:2102.11675.
-8. Gordon, I. E. et al. 2026, *J. Quant. Spectrosc. Radiat. Transf.* 353,
+8. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013,
+   *Nature Geosci.* 6, 661, doi:10.1038/ngeo1892 (the accepted
+   manuscript in the University of Victoria's repository, read).
+9. Gordon, I. E. et al. 2026, *J. Quant. Spectrosc. Radiat. Transf.* 353,
    109807, doi:10.1016/j.jqsrt.2026.109807 (HITRAN2024; line counts from
    its line-by-line API, <https://hitran.org/lbl/api>, and its CIA files
    and 2024 readme, <https://hitran.org/cia/>, read 2026-11-25).
-9. Gorshelev, V. et al. 2014, *Atmos. Meas. Tech.* 7, 609,
-   doi:10.5194/amt-7-609-2014.
-10. Gregory, B. S., Claire, M. W., Rugheimer, S. 2021, *Earth Planet. Sci.
+10. Gorshelev, V. et al. 2014, *Atmos. Meas. Tech.* 7, 609,
+    doi:10.5194/amt-7-609-2014.
+11. Gregory, B. S., Claire, M. W., Rugheimer, S. 2021, *Earth Planet. Sci.
     Lett.* 561, 116818, doi:10.1016/j.epsl.2021.116818.
-11. Hogan, R. J., Matricardi, M. 2020, *Geosci. Model Dev.* 13, 6501,
+12. Hogan, R. J., Matricardi, M. 2020, *Geosci. Model Dev.* 13, 6501,
     doi:10.5194/gmd-13-6501-2020.
-12. Jaeglé, L. et al. 2011, *Atmos. Chem. Phys.* 11, 3137,
+13. Jaeglé, L. et al. 2011, *Atmos. Chem. Phys.* 11, 3137,
     doi:10.5194/acp-11-3137-2011.
-13. Karman, T. et al. 2019, *Icarus* 328, 160,
+14. Karman, T. et al. 2019, *Icarus* 328, 160,
     doi:10.1016/j.icarus.2019.02.034 (as the HITRAN CIA readme cites it).
-14. Keller-Rudek, H. et al. 2013, *Earth Syst. Sci. Data* 5, 365,
+15. Keller-Rudek, H. et al. 2013, *Earth Syst. Sci. Data* 5, 365,
     doi:10.5194/essd-5-365-2013 (the MPI-Mainz UV/VIS Spectral Atlas, its
     O₃ listing read 2026-11-25).
-15. Kiehl, J. T., Trenberth, K. E. 1997, *Bull. Am. Meteorol. Soc.* 78,
+16. Kiehl, J. T., Trenberth, K. E. 1997, *Bull. Am. Meteorol. Soc.* 78,
     197, doi:10.1175/1520-0477(1997)078<0197:EAGMEB>2.0.CO;2 (Tables 3 and
     4, as read for `radiative-transfer.md`).
-16. Kim, D., Ramanathan, V. 2008, *J. Geophys. Res.* 113, D02203,
+17. Kim, D., Ramanathan, V. 2008, *J. Geophys. Res.* 113, D02203,
     doi:10.1029/2007JD008434.
-17. Kinne, S. 2019, *Tellus B* 71, 1623639,
+18. Kinne, S. 2019, *Tellus B* 71, 1623639,
     doi:10.1080/16000889.2019.1623639 (MACv2).
-18. Kopparapu, R. K. et al. 2013, *ApJ* 765, 131,
+19. Kopparapu, R. K. et al. 2013, *ApJ* 765, 131,
     doi:10.1088/0004-637X/765/2/131.
-19. Kozakis, T., Mendonça, J. M., Buchhave, L. A. 2022, *A&A* 665, A156,
+20. Kozakis, T., Mendonça, J. M., Buchhave, L. A. 2022, *A&A* 665, A156,
     doi:10.1051/0004-6361/202244164, arXiv:2208.09415.
-20. NASA Ozone Watch, "What is a Dobson Unit?" and "Ozone facts",
+21. NASA Ozone Watch, "What is a Dobson Unit?" and "Ozone facts",
     <https://ozonewatch.gsfc.nasa.gov/> (read 2026-11-25).
-21. Rugheimer, S., Kaltenegger, L., Zsom, A., Segura, A., Sasselov, D.
+22. Rugheimer, S., Kaltenegger, L., Zsom, A., Segura, A., Sasselov, D.
     2013, *Astrobiology* 13, 251, doi:10.1089/ast.2012.0888,
     arXiv:1212.2638.
-22. Rugheimer, S., Kaltenegger, L., Segura, A., Linsky, J., Mohanty, S.
+23. Rugheimer, S., Kaltenegger, L., Segura, A., Linsky, J., Mohanty, S.
     2015a, *ApJ* 809, 57, doi:10.1088/0004-637X/809/1/57,
     arXiv:1506.07202.
-23. Rugheimer, S., Segura, A., Kaltenegger, L., Sasselov, D. 2015b, *ApJ*
+24. Rugheimer, S., Segura, A., Kaltenegger, L., Sasselov, D. 2015b, *ApJ*
     806, 137, doi:10.1088/0004-637X/806/1/137, arXiv:1506.07200.
-24. Schmidt, G. A., Ruedy, R. A., Miller, R. L., Lacis, A. A. 2010, *J.
+25. Schmidt, G. A., Ruedy, R. A., Miller, R. L., Lacis, A. A. 2010, *J.
     Geophys. Res.* 115, D20106, doi:10.1029/2010JD014287 (Table 1).
-25. Segura, A. et al. 2005, *Astrobiology* 5, 706,
+26. Segura, A. et al. 2005, *Astrobiology* 5, 706,
     doi:10.1089/ast.2005.5.706, arXiv:astro-ph/0510224.
-26. Serdyuchenko, A., Gorshelev, V., Weber, M., Chehade, W., Burrows, J. P.
+27. Serdyuchenko, A., Gorshelev, V., Weber, M., Chehade, W., Burrows, J. P.
     2014, *Atmos. Meas. Tech.* 7, 625, doi:10.5194/amt-7-625-2014 (data:
     `serdyuchenkogorshelev5digits.dat`, IUP Bremen,
     <https://www.iup.uni-bremen.de/gruppen/molspec/databases/referencespectra/o3spectra2011/index.html>,
     SHA-256 `4dfbf021…f0ce7092`; the page states no licence).
-27. Way, M. J. et al. 2017, *ApJS* 231, 12, doi:10.3847/1538-4365/aa7a06.
-28. WMO 2014, *Scientific Assessment of Ozone Depletion: 2014*, chapter 2.
-29. Yu, H. et al. 2006, *Atmos. Chem. Phys.* 6, 613,
+28. Way, M. J. et al. 2017, *ApJS* 231, 12, doi:10.3847/1538-4365/aa7a06.
+29. WMO 2014, *Scientific Assessment of Ozone Depletion: 2014*, chapter 2.
+30. Yu, H. et al. 2006, *Atmos. Chem. Phys.* 6, 613,
     doi:10.5194/acp-6-613-2006.
-30. Zender, C. S. 1999, *J. Geophys. Res.* 104, 24471,
+31. Zender, C. S. 1999, *J. Geophys. Res.* 104, 24471,
     doi:10.1029/1999JD900797 (abstract).
 
 ## See also

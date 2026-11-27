@@ -7,14 +7,16 @@
 use super::carbon::maximum_greenhouse;
 use super::{ClimateInputs, Numerics};
 use science::balance::PLATEAU_SURFACES;
-use science::balance::{earth_moist_plateau, moist_plateau, runaway_albedo, steam_share};
+use science::balance::{
+    earth_moist_plateau, earth_moist_plateau_under, moist_plateau, runaway_albedo, steam_share,
+};
 use science::outgassing::column_pressure;
 use science::radiation::albedo::{ShortwaveCache, Underneath, shortwave_budget};
 use science::radiation::clouds::cloud_cover;
 use science::radiation::column::{ColumnCache, Profile};
-use science::radiation::gases::PartialPressures;
+use science::radiation::gases::Weights;
 use science::radiation::veils::sulphuric_deck;
-use science::surface::{condense, cover, frost, frost_emissivity, ground_albedo};
+use science::surface::{condensables, condense, cover, frost, frost_emissivity, ground_albedo};
 use science::units::{Bar, Fraction, Kelvin, Kilogram, WattPerSquareMetre};
 
 /// A body whose climate is being solved (legacy `Body`): its inputs, the
@@ -94,21 +96,23 @@ impl<'a> ClimateBody<'a> {
             .collect()
     }
 
-    /// The frost on its ground at `t` under `air`, gas by gas
-    /// ([`frost`] of the condensate [`condense`] leaves of its inventory
-    /// at `t`, with the CO₂ the cold trap froze and its SO₂ frost).
-    pub(crate) fn frost(&mut self, t: Kelvin, air: &PartialPressures) -> PartialPressures {
+    /// The frost on its ground at `t` under `air`, gas by gas, weights
+    /// ([`frost`] of the condensate [`condense`] leaves of its inventory's
+    /// N₂, CH₄ and Ar over `air`'s other gases at `t`, [`condensables`],
+    /// with the CO₂ the cold trap froze and its SO₂ frost).
+    pub(crate) fn frost(&mut self, t: Kelvin, air: &Weights) -> Weights {
         let i = self.inputs;
-        let condensate = condense(&i.air, t).condensate;
+        let condensate = condense(&condensables(air, &i.air), t).condensate;
         frost(&condensate, i.frozen_co2, i.so2_frost, t, air)
     }
 
     /// What lies under its air at `t` under `air`: the ground's albedo
     /// ([`ground_albedo`] of its [`cover`]: its water when it is wet,
-    /// none otherwise, its frost, its obliquity, whether it is locked),
-    /// the water clouds ([`cloud_cover`]) and the sulphuric deck
-    /// ([`sulphuric_deck`]).
-    pub(crate) fn underneath(&mut self, t: Kelvin, air: &PartialPressures) -> Underneath {
+    /// none otherwise, its frost, its obliquity, whether it is locked,
+    /// under its air's pressure), the water clouds ([`cloud_cover`] of its
+    /// vapour) and the sulphuric deck ([`sulphuric_deck`] of its SO₂'s
+    /// partial pressure).
+    pub(crate) fn underneath(&mut self, t: Kelvin, air: &Weights) -> Underneath {
         let water = if self.wet() {
             self.inputs.water
         } else {
@@ -120,26 +124,28 @@ impl<'a> ClimateBody<'a> {
         Underneath {
             ground: ground_albedo(&covered, Bar(air.total())),
             clouds: cloud_cover(t, Bar(air.h2o)),
-            deck: sulphuric_deck(t, Bar(air.so2)),
+            deck: sulphuric_deck(t, Bar(air.partial_pressures().so2)),
         }
     }
 
-    /// Its Bond albedo at `t` under `air`: the [`shortwave_budget`] at
-    /// each star's temperature and metallicity, through the ozone its
+    /// Its Bond albedo at `t` under `air`: the [`shortwave_budget`] of
+    /// its partial pressures at each star's temperature and metallicity,
+    /// through the ozone its
     /// air's O₂ holds under that star ([`super::Light::ozone`]), over the
     /// same [`Underneath`]
     /// ([`ClimateBody::underneath`]), weighted by the stars' flux (#592).
-    pub(crate) fn derived_albedo(&mut self, t: Kelvin, air: &PartialPressures) -> Fraction {
+    pub(crate) fn derived_albedo(&mut self, t: Kelvin, air: &Weights) -> Fraction {
         let under = self.underneath(t, air);
         let weights = self.weights();
         let i = self.inputs;
+        let gases = air.partial_pressures();
         let mean: f64 = i
             .sources
             .iter()
             .zip(weights)
             .map(|(s, w)| {
                 let budget = shortwave_budget(
-                    air,
+                    &gases,
                     s.ozone,
                     t,
                     i.gravity,
@@ -156,31 +162,36 @@ impl<'a> ClimateBody<'a> {
 
     /// The emissivity of its surface at `t` under `air`
     /// ([`frost_emissivity`] of its frost there).
-    pub(crate) fn emissivity_at(&mut self, t: Kelvin, air: &PartialPressures) -> Fraction {
+    pub(crate) fn emissivity_at(&mut self, t: Kelvin, air: &Weights) -> Fraction {
         frost_emissivity(&self.frost(t, air))
     }
 
     /// The moist plateau its runaway albedo binds at its stars' limit
     /// (legacy `Body::plateau`, l.1672): for a body in a water runaway
     /// that keeps water, its own steam column's ([`moist_plateau`] of its
-    /// dry air with its water, on its gravity and the saturated column,
-    /// started from Earth's) where it exceeds Earth's air's
-    /// ([`earth_moist_plateau`]); Earth's air's otherwise. Found once.
-    /// Earth's is ozone-free (`EARTH_PLATEAU_OZONE`), so a body whose own
-    /// ozone lowers its plateau under it takes Earth's: 0.35 W/m² bright
-    /// at 300 DU (`docs/science/ozone.md`, calibration 6).
+    /// dry air with its water and its infrared ozone, on its gravity and
+    /// the saturated column, started from Earth's) where it exceeds
+    /// Earth's air's under the same ozone
+    /// ([`earth_moist_plateau_under`]); Earth's air's, ozone-free
+    /// ([`earth_moist_plateau`]), otherwise, where no runaway reads it.
+    /// Found once. Both sides hold the body's ozone, so the floor keeps
+    /// standing for what Earth's air would send out in its place (a
+    /// thick air has no plateau of its own) without handing back the
+    /// light its ozone holds in (#761, `docs/science/ozone.md`, "Ozone
+    /// on the moist plateau").
     pub(crate) fn plateau(&mut self) -> WattPerSquareMetre {
         if let Some(p) = self.plateau {
             return p;
         }
-        let earth = earth_moist_plateau();
         let i = self.inputs;
         let p = if i.runaway && i.water.0 > 0.0 {
-            let dry = PartialPressures { h2o: 0.0, ..i.air };
+            let ozone = i.longwave_ozone();
+            let earth = earth_moist_plateau_under(ozone, &mut self.columns);
+            let dry = Weights { h2o: 0.0, ..i.air };
             let water = self.water_column();
             let own = moist_plateau(
-                &dry,
-                i.longwave_ozone(),
+                &dry.partial_pressures(),
+                ozone,
                 water,
                 i.gravity,
                 Profile::SATURATED,
@@ -190,7 +201,7 @@ impl<'a> ClimateBody<'a> {
             );
             WattPerSquareMetre(own.0.max(earth.0))
         } else {
-            earth
+            earth_moist_plateau()
         };
         self.plateau = Some(p);
         p
@@ -230,7 +241,7 @@ impl<'a> ClimateBody<'a> {
     /// air a colder surface leaves once its nitrogen and methane
     /// condense) is searched again at each call, as legacy rebuilt the
     /// body on the condensed air (`climate.rs` l.1975-1983).
-    pub(crate) fn greenhouse_co2(&mut self, air: &PartialPressures) -> Bar {
+    pub(crate) fn greenhouse_co2(&mut self, air: &Weights) -> Bar {
         let inventory = self.inputs.air;
         if !self.numerics.greenhouse_once && *air != inventory {
             return maximum_greenhouse(self, air);

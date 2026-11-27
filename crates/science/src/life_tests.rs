@@ -29,7 +29,7 @@ const RATIO_PLACES: f64 = 1e-12;
 
 /// Definition: an air for the oxygen steps, N₂ 0.78, CH₄ 1e-3, no O₂,
 /// CO₂ 4e-4 bar (an early Earth's shape, for the law only).
-const EARLY_AIR: PartialPressures = PartialPressures {
+const EARLY_AIR: Weights = Weights {
     n2: 0.78,
     co2: 4e-4,
     h2o: 0.0,
@@ -99,7 +99,7 @@ fn oxygen_comes_in_two_steps() {
     let oxidising = oxygenate(&EARLY_AIR, Stage::Oxidising);
     assert_eq!(
         oxidising,
-        PartialPressures {
+        Weights {
             ch4: 0.0,
             ..EARLY_AIR
         }
@@ -107,7 +107,7 @@ fn oxygen_comes_in_two_steps() {
     let modern = oxygenate(&EARLY_AIR, Stage::Modern);
     assert_eq!(
         modern,
-        PartialPressures {
+        Weights {
             ch4: 0.0,
             o2: O2_PER_N2 * EARLY_AIR.n2,
             ..EARLY_AIR

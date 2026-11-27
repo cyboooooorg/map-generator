@@ -9,7 +9,7 @@
 
 use super::bare::Bare;
 use super::climate::Rotation;
-use super::climate::partial_pressures;
+use super::climate::weights;
 use super::codes;
 use super::interior::InteriorError;
 use super::settled::{Settled, climate_of};
@@ -119,7 +119,7 @@ fn oxygenated(
 ) -> Result<Bare, InteriorError> {
     let mut bare = bare.clone();
     let surface = bare.surface.as_mut().expect("a climate has a surface");
-    let air = oxygenate(&partial_pressures(&surface.atmosphere), s);
+    let air = oxygenate(&weights(&surface.atmosphere), s);
     let partial = &mut surface.atmosphere.partial;
     let o2_from = if s == Stage::Modern {
         partial[&Gas::N2].node()

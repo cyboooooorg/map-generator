@@ -373,11 +373,14 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give
   yet, so the reference Earth's air holds none. N₂O has its lines in the
   table since #704 but needs a gas of its own and its law (#737); until
   then only the tests' columns hold it.
-- **Weights read as moles (issue #749).** The chain's partial pressures
-  are weights; the column reads `p_i / p` as mole shares, so it would see
-  the law's 673 ppb of methane as 373 ppb (16.04 / 28.96 of it; argon
-  likewise, radiative-transfer.md). Not fixed here; the tests build
-  their airs from mole fractions, so they are not affected.
+- **Weights and moles (issue #749, fixed).** The chain's gases are
+  weights; the column reads `p_i / p` as mole shares. The climate now
+  converts its air at each call (`Weights::partial_pressures`), so the
+  column would see the law's methane at 673 ppb of the moles once 2d-4
+  wires the law, not 373 ppb
+  (16.04 / 28.96 of it; argon likewise, radiative-transfer.md). The
+  column's own tests build their airs from mole fractions and are not
+  affected.
 - **Titan's grey stand-in is gone.** Spectral N₂-N₂ and N₂-CH₄ pairs
   reach 92.3 K without a fit; methane's lines (#704) add 0.004 K, their
   bands lying far on the Wien side of a 93 K Planck curve. What is still

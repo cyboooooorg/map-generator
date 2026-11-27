@@ -206,9 +206,24 @@ contract_enum! {
 }
 
 /// The atmosphere at the surface.
+///
+/// Its gases are weights, not partial pressures: `partial[gas]` is the
+/// gas's mass times the surface gravity over the planet's area,
+/// `m_i g / (4 π R²)`, in bar. Weights add: their sum is
+/// `surface_pressure`. A gas's partial pressure, its share by volume of
+/// that pressure, `p_i = (w_i / M_i) / Σ_j (w_j / M_j) × Σ_j w_j` over the
+/// dry gases (water vapour added on top), depends on the whole air; a
+/// reader that needs it converts the whole air
+/// (`science::radiation::gases::Weights::partial_pressures`, issue #749).
+/// The water vapour's weight is taken as its pressure at the surface, the
+/// column's convention: over a wet surface, the saturation pressure at its
+/// temperature; for a runaway, the steam its air keeps.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Atmosphere {
+    /// The surface pressure, bar: the sum of the gases' weights.
     pub surface_pressure: Traced<Bar>,
+    /// Each gas's weight, bar (see [`Atmosphere`]); the name is the
+    /// contract's, kept since the format reads it.
     pub partial: BTreeMap<Gas, Traced<Bar>>,
 }
 

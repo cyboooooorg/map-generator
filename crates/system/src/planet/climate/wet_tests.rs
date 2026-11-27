@@ -7,12 +7,13 @@ use super::carbon::thermostat;
 use super::fixture::{earth, moved};
 use super::wet::{Kept, boils, collapse_search, collapsed_climate, wet_balance};
 use super::{COLLAPSE_ITERATIONS, COLLAPSE_STEP, COLLAPSE_TOLERANCE, Light, Numerics};
-use science::balance::{EARTH_DRY_AIR, TOLERANCE, absorbed, skin};
+use science::balance::{EARTH_DRY_AIR, TOLERANCE, absorbed, earth_moist_plateau, skin};
+use science::constants::STANDARD_GRAVITY;
 use science::habitable::{OCEAN_MASS, runaway_flux};
 use science::radiation::albedo::{ShortwaveCache, shortwave_budget};
 use science::radiation::column::{Profile, outgoing_longwave};
-use science::radiation::gases::PartialPressures;
-use science::radiation::ozone::ozone_column;
+use science::radiation::gases::{CH4_MOLAR_MASS, CO2_MOLAR_MASS, O2_MOLAR_MASS, Weights};
+use science::radiation::ozone::{EARTH_OZONE_COLUMN, ozone_column};
 use science::surface::{ICE_COVERED_TEMPERATURE, surface_vapour};
 use science::units::{Bar, EarthFlux, Fraction, Kelvin, Kilogram};
 use science::volatiles::co2_saturation_pressure;
@@ -64,7 +65,8 @@ const THICK_CO2: Bar = Bar(10.0);
 /// frosted out"), a test input.
 pub(super) const COLLAPSE_ORBIT: f64 = 1.6;
 
-/// Definition: 0.05 bar of methane, a test input: in Earth's air, some
+/// Definition: 0.05 bar of methane's partial pressure, a test input
+/// (its weight in the air, [`Weights::weight_at`]): in Earth's air, some
 /// 6 mbar of it above the 0.1 bar tropopause, against the 1.3 mbar at
 /// which its stratosphere takes half its most (`CH4_NEAR_IR_HALF_BAR`),
 /// so that the vapour's dilution still moves its share of the light.
@@ -75,13 +77,35 @@ const WARM_METHANE: Bar = Bar(0.05);
 /// under [`TEST_ALBEDO`], just short of its runaway (at 0.65 au).
 const WARM_METHANE_ORBIT: f64 = 0.7;
 
-/// Earth's bare air with today's CO₂, 400 ppm ([`EARTH_DRY_AIR`]), for the
-/// balances of a temperate Earth.
-pub(super) fn modern_air(inputs: &super::ClimateInputs) -> PartialPressures {
-    PartialPressures {
-        co2: EARTH_DRY_AIR.co2,
-        ..inputs.air
-    }
+/// `air` holding the weight of `molar_mass` (kg/mol) whose partial
+/// pressure is `partial` over its other dry gases ([`Weights::weight_at`]),
+/// set by `set`.
+pub(super) fn with_partial(
+    air: Weights,
+    set: fn(&mut Weights, f64),
+    molar_mass: f64,
+    partial: f64,
+) -> Weights {
+    let mut others = air;
+    set(&mut others, 0.0);
+    let mut held = air;
+    set(
+        &mut held,
+        Weights::weight_at(&others, molar_mass, Bar(partial)).0,
+    );
+    held
+}
+
+/// Earth's bare air (weights) with today's CO₂, a partial pressure of
+/// 400 ppm of a bar ([`EARTH_DRY_AIR`]), for the balances of a temperate
+/// Earth.
+pub(super) fn modern_air(inputs: &super::ClimateInputs) -> Weights {
+    with_partial(
+        inputs.air,
+        |w, v| w.co2 = v,
+        CO2_MOLAR_MASS,
+        EARTH_DRY_AIR.co2,
+    )
 }
 
 #[test]
@@ -89,9 +113,9 @@ fn the_albedo_is_the_flux_weighted_budgets() {
     // Earth's air with its O₂, so that each star's light crosses the
     // ozone that star's ultraviolet makes of it.
     let mut inputs = earth();
-    inputs.air.o2 = EARTH_DRY_AIR.o2;
+    inputs.air = with_partial(inputs.air, |w, v| w.o2 = v, O2_MOLAR_MASS, EARTH_DRY_AIR.o2);
     let base = inputs.sources[0];
-    let o2 = Bar(inputs.air.o2);
+    let o2 = Bar(inputs.air.partial_pressures().o2);
     inputs.sources = vec![
         Light {
             flux: EarthFlux(TWO_FLUXES[0]),
@@ -108,16 +132,17 @@ fn the_albedo_is_the_flux_weighted_budgets() {
     ];
     let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
     let water = body.water_column();
-    let air = PartialPressures {
+    let air = Weights {
         h2o: surface_vapour(EARTH_SURFACE, water).0,
         ..inputs.air
     };
     let derived = body.derived_albedo(EARTH_SURFACE, &air).get();
     let under = body.underneath(EARTH_SURFACE, &air);
     let mut cache = ShortwaveCache::default();
+    let gases = air.partial_pressures();
     let mut budget = |star: Kelvin| {
         shortwave_budget(
-            &air,
+            &gases,
             ozone_column(Bar(air.o2), star),
             EARTH_SURFACE,
             inputs.gravity,
@@ -145,7 +170,7 @@ fn a_thick_nitrogen_earth_keeps_a_balance() {
     let inputs = earth();
     let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
     let light = body.starlight(Fraction::new(TEST_ALBEDO).unwrap());
-    let air = PartialPressures {
+    let air = Weights {
         n2: THICK_N2.0,
         ..modern_air(&inputs)
     };
@@ -162,14 +187,17 @@ fn a_wet_methane_balance_is_its_own_airs() {
     // out at least what that air's surface absorbs at the temperature it
     // returns, and less one solver tolerance below.
     let inputs = moved(&earth(), WARM_METHANE_ORBIT);
-    let start = PartialPressures {
-        ch4: WARM_METHANE.0,
-        ..modern_air(&inputs)
-    };
+    let start = with_partial(
+        modern_air(&inputs),
+        |w, v| w.ch4 = v,
+        CH4_MOLAR_MASS,
+        WARM_METHANE.0,
+    );
     let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
     let light = body.starlight(Fraction::new(TEST_ALBEDO).unwrap());
     let e = body.emissivity_at(EARTH_SURFACE, &start);
     let (air, t) = wet_balance(&mut body, light, &start, e).expect("a balance");
+    let air = air.partial_pressures();
     let mut excess = |x: f64| {
         e.get()
             * outgoing_longwave(
@@ -222,18 +250,30 @@ fn the_probe_changes_no_balance() {
     }
 }
 
+/// The CO₂ weight `air`'s surface at `t` keeps: the one whose partial
+/// pressure is CO₂'s saturation over the air's other gases.
+fn co2_kept(air: &Weights, t: Kelvin) -> f64 {
+    let others = Weights { co2: 0.0, ..*air };
+    Weights::weight_at(
+        &others,
+        CO2_MOLAR_MASS,
+        Bar::from(co2_saturation_pressure(t)),
+    )
+    .0
+}
+
 #[test]
 fn a_collapse_keeps_what_the_surface_holds() {
     let inputs = moved(&earth(), FAR_ORBIT);
     let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
     let light = body.starlight(Fraction::new(TEST_ALBEDO).unwrap());
-    let air = PartialPressures {
+    let air = Weights {
         co2: THICK_CO2.0,
         ..inputs.air
     };
     let e = body.emissivity_at(EARTH_SURFACE, &air);
     let c = collapsed_climate(&mut body, light, &air, e);
-    let kept = Bar::from(co2_saturation_pressure(c.temperature)).0;
+    let kept = co2_kept(&c.air, c.temperature);
     assert!(c.iterations > 0, "nothing collapsed: {c:?}");
     assert!(
         c.air.co2 <= kept * (1.0 + COLLAPSE_TOLERANCE),
@@ -248,7 +288,7 @@ fn collapse_iterations_is_converged() {
     // tolerance is held in tier 3 (`collapse_tolerance_is_converged`).
     let inputs = moved(&earth(), COLLAPSE_ORBIT);
     let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
-    let air = PartialPressures {
+    let air = Weights {
         co2: inputs.carbon.0,
         ..inputs.air
     };
@@ -256,7 +296,7 @@ fn collapse_iterations_is_converged() {
     let e = body.emissivity_at(ICE_COVERED_TEMPERATURE, &air);
     let light = body.starlight(albedo);
     let c = collapsed_climate(&mut body, light, &air, e);
-    let kept = Bar::from(co2_saturation_pressure(c.temperature)).0;
+    let kept = co2_kept(&c.air, c.temperature);
     assert!(c.iterations > 0, "nothing collapsed: {c:?}");
     assert!(c.held && c.iterations < COLLAPSE_ITERATIONS, "{c:?}");
     assert!(c.air.co2 <= kept * (1.0 + COLLAPSE_TOLERANCE), "{c:?}");
@@ -287,7 +327,7 @@ const VENUS_ORBIT: f64 = 0.723;
 fn boils_earth(inputs: &ClimateInputs) -> bool {
     boils(
         inputs,
-        &EARTH_DRY_AIR,
+        &EARTH_DRY_AIR.weights(),
         Fraction::new(EARTH_BOND).unwrap(),
         Fraction::new(1.0).unwrap(),
     )
@@ -321,6 +361,28 @@ fn a_runaway_does_not_boil_again() {
     let mut inputs = with_ocean(moved(&earth(), VENUS_ORBIT));
     inputs.runaway = true;
     assert!(!boils_earth(&inputs));
+}
+
+#[test]
+fn a_runaways_ozone_lowers_its_plateau() {
+    // Goldblatt et al. 2013 (Nature Geosci. 6, 661, p. 6 of the accepted
+    // manuscript): the radiation limit "depends on the minimum absorption
+    // cross section in the 10 µm water vapour window; any additional
+    // opacity here would raise the τλ = 1 surface to a higher altitude
+    // that radiates at a lower temperature". Ozone's 9.6 µm band lies in
+    // that window: a runaway of Earth's air and gravity holding Earth's
+    // ozone has a plateau under Earth's ozone-free one, the floor it took
+    // instead before #761.
+    let mut inputs = with_ocean(moved(&earth(), VENUS_ORBIT));
+    inputs.runaway = true;
+    inputs.air = EARTH_DRY_AIR.weights();
+    inputs.gravity = STANDARD_GRAVITY;
+    for light in &mut inputs.sources {
+        light.ozone = EARTH_OZONE_COLUMN;
+    }
+    let plateau = ClimateBody::new(&inputs, Numerics::DEFAULT).plateau().0;
+    let anchor = earth_moist_plateau().0;
+    assert!(plateau < anchor, "{plateau} against the anchor {anchor}");
 }
 
 #[test]
@@ -483,6 +545,57 @@ fn a_falling_gap_closes_on_its_root_by_the_secant() {
     assert!(held, "{c} after {n}");
     assert!((c - 2.2).abs() < 0.01, "{c}");
     assert!(n <= 25, "{n} evaluations");
+}
+
+/// The hump traced round a 3300 K star (#731), as in
+/// `a_falling_gap_closes_on_its_root_by_the_secant`, less a dip (`depth` above
+/// the hump at `middle`, `half` wide, bar): a warm balance, a pocket, on
+/// the falling side. With `φ` growing with the CO₂ (`g' < 1`), the plain
+/// step finds the pocket's upper root.
+fn pocket_gap(c: f64, (extra, middle, half): (f64, f64, f64)) -> f64 {
+    let hump = |c: f64| 0.00605 * (c - 2.2) * (46.0 - c);
+    hump(c) - (hump(middle) + extra) * (-((c - middle) / half).powi(2)).exp()
+}
+
+#[test]
+fn a_collapse_does_not_stop_on_a_pockets_unstable_root() {
+    // Three pockets, each deeper than twice the noise, that a long step
+    // crosses down to its lower, unstable root (where `g` falls with the
+    // CO₂): within the noise above it at 4.6 and 16.5 bar, within the
+    // tolerance below it at 34.0 bar. The search must not stop there, but
+    // at the pocket's upper root, where the plain step stops (#755). The
+    // roots are those of `pocket_gap`, found by a 0.0005-bar scan.
+    let noise = |c: f64| 0.0016 + 0.0097 * c / 45.9;
+    for (pocket, warm, unstable) in [
+        ((0.1, 4.4, 0.8), 4.620, 3.879),
+        ((0.05, 16.2, 3.2), 16.497, 15.501),
+        ((0.2, 33.2, 2.4), 34.034, 32.635),
+    ] {
+        let collapse = |widest: f64| {
+            collapse_search(
+                45.9,
+                |c| Kept {
+                    kept: c - pocket_gap(c, pocket),
+                    noise: noise(c),
+                    state: (),
+                },
+                COLLAPSE_TOLERANCE,
+                COLLAPSE_ITERATIONS * 10,
+                widest,
+            )
+        };
+        let (plain, (), _, _) = collapse(0.0);
+        let (fast, (), n, held) = collapse(COLLAPSE_STEP);
+        assert!((plain - warm).abs() < 0.01, "{pocket:?}: plain {plain}");
+        assert!(
+            (fast - unstable).abs() > 0.1,
+            "{pocket:?}: {fast} on the unstable root"
+        );
+        assert!(
+            held && (fast - warm).abs() < 0.05,
+            "{pocket:?}: {fast} after {n}, not at {warm}"
+        );
+    }
 }
 
 #[test]

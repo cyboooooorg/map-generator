@@ -10,7 +10,7 @@
 //! "Life". The engine draws the life draw from the planet's seed; this
 //! module only reads it.
 
-use crate::radiation::gases::{N2_MOLAR_MASS, O2_MOLAR_MASS, PartialPressures};
+use crate::radiation::gases::{N2_MOLAR_MASS, O2_MOLAR_MASS, Weights};
 use crate::units::Gyr;
 
 /// Source: the oldest generally accepted evidence of life after Earth
@@ -54,8 +54,8 @@ pub const CIPM_O2_SHARE: f64 = 0.209_390;
 /// Definition: the O₂ of a modern living air per bar of its N₂, by
 /// weight: the CIPM shares times the molar masses,
 /// `(O2 share × O2_MOLAR_MASS) / (N2 share × N2_MOLAR_MASS)`, about 0.306.
-/// The chain's partial pressures are weights (a gas's mass share times the
-/// surface pressure), so the mole-fraction ratio, 0.2682, would give the
+/// The chain keeps its gases as weights ([`Weights`]: a gas's mass share
+/// times the surface pressure), so the mole-fraction ratio, 0.2682, would give the
 /// reference Earth 0.200 bar of O₂ instead of 0.228. Earth's air carried
 /// over to another planet by its nitrogen. Page:
 /// `docs/science/planet-atmospheres.md`, "The oxygenated air".
@@ -98,11 +98,11 @@ pub fn stage(water: bool, age: Gyr, draw: f64) -> Stage {
 /// would keep its steady state: a `Definition:` of the model's scope);
 /// and with `O2_PER_N2 × N₂` of O₂ from [`MODERN_OXYGEN_AFTER_GYR`]. The
 /// other gases pass through.
-pub fn oxygenate(air: &PartialPressures, stage: Stage) -> PartialPressures {
+pub fn oxygenate(air: &Weights, stage: Stage) -> Weights {
     match stage {
         Stage::Lifeless | Stage::Anoxic => *air,
-        Stage::Oxidising => PartialPressures { ch4: 0.0, ..*air },
-        Stage::Modern => PartialPressures {
+        Stage::Oxidising => Weights { ch4: 0.0, ..*air },
+        Stage::Modern => Weights {
             ch4: 0.0,
             o2: O2_PER_N2 * air.n2,
             ..*air

@@ -25,7 +25,9 @@ use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, 
 use science::photochemistry::{
     CH4_MOLECULE_MASS, CH4_PER_LYMAN_ALPHA_PHOTON, LYMAN_ALPHA_PHOTON_ENERGY, methane_destroyed,
 };
-use science::radiation::gases::{AR_MOLAR_MASS, CH4_MOLAR_MASS, N2_MOLAR_MASS};
+use science::radiation::gases::{
+    AR_MOLAR_MASS, CH4_MOLAR_MASS, N2_MOLAR_MASS, PartialPressures, Weights,
+};
 use science::units::{Bar, Gyr, Kilogram, Metre, Pascal, SolarMass};
 use science::volatiles::{ICE_CH4, ICE_CO2, ROCK_CO2};
 use timeline::{
@@ -264,6 +266,24 @@ fn partial(a: &Atmosphere, gas: Gas) -> f64 {
     a.partial[&gas].value().0
 }
 
+/// The partial pressures of the air `a`, whose gases are weights
+/// (`Weights::partial_pressures`, issue #749): what a measured share by
+/// volume is compared with.
+fn moles(a: &Atmosphere) -> PartialPressures {
+    let w = |gas: Gas| a.partial.get(&gas).map_or(0.0, |p| p.value().0);
+    Weights {
+        n2: w(Gas::N2),
+        co2: w(Gas::Co2),
+        h2o: w(Gas::H2o),
+        ch4: w(Gas::Ch4),
+        nh3: w(Gas::Nh3),
+        so2: w(Gas::So2),
+        o2: w(Gas::O2),
+        ar: w(Gas::Ar),
+    }
+    .partial_pressures()
+}
+
 /// The surface pressure, bar.
 fn total(a: &Atmosphere) -> f64 {
     a.surface_pressure.value().0
@@ -316,9 +336,10 @@ fn venus_has_ninety_bars_of_co2() {
     let a = planet(&VENUS).air().0;
     let t = total(&a);
     assert!((VENUS_TOTAL.0..=VENUS_TOTAL.1).contains(&t), "{a:?}");
-    assert!(partial(&a, Gas::Co2) / t > VENUS_CO2_SHARE, "{a:?}");
-    let n2 = partial(&a, Gas::N2);
-    assert!((VENUS_N2.0..=VENUS_N2.1).contains(&n2), "{a:?}");
+    // The fact sheet's shares are by volume: the air's partial pressures.
+    let p = moles(&a);
+    assert!(p.co2 / t > VENUS_CO2_SHARE, "{p:?}");
+    assert!((VENUS_N2.0..=VENUS_N2.1).contains(&p.n2), "{p:?}");
 }
 
 #[test]
@@ -337,7 +358,8 @@ fn earths_air_keeps_no_sulphur_dioxide() {
 #[test]
 fn venus_keeps_its_sulphur_dioxide() {
     let a = planet(&VENUS).air().0;
-    let so2 = partial(&a, Gas::So2);
+    // 150 ppm of 92 bar by volume: the SO2's partial pressure.
+    let so2 = moles(&a).so2;
     assert!((VENUS_SO2.0..=VENUS_SO2.1).contains(&so2), "{a:?}");
 }
 
@@ -997,3 +1019,28 @@ fn argon_comes_from_the_mantle_the_heat_reads() {
         "{lid} {plates}"
     );
 }
+
+/// The cold trap holds a cold body's CO2 at its frost pressure: on
+/// Callisto, under CO2's triple point, the trapped CO2's partial
+/// pressure in the air as it stands is the frost pressure at its
+/// equilibrium temperature (`science::surface::cold_trapped`, #749).
+#[test]
+fn the_cold_trap_holds_callistos_co2_at_its_frost_pressure() {
+    let mut callisto = planet(&CALLISTO);
+    let a = callisto.air().0;
+    let t = callisto.trial.sources.equilibrium_k();
+    let frost = science::volatiles::co2_frost_pressure(t)
+        .expect("under CO2's triple point")
+        .0
+        / PASCALS_PER_BAR;
+    let p = moles(&a).co2;
+    assert!(
+        (p / frost - 1.0).abs() < AFTER_THE_TRAP,
+        "{p:e} against {frost:e}"
+    );
+}
+
+/// Definition: how far the trapped CO2's partial pressure may move once
+/// the photochemistry, after the trap, turns the trapped NH3 into N2 and
+/// sets the methane, 1e-6 of it: on Callisto it moves by 5e-7.
+const AFTER_THE_TRAP: f64 = 1e-6;

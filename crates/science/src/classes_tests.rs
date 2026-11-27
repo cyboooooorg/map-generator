@@ -1,7 +1,7 @@
 use super::*;
 use crate::constants::{EARTH_MEAN_RADIUS, STANDARD_GRAVITY};
 use crate::outgassing::{column_mass, column_pressure};
-use crate::radiation::gases::PartialPressures;
+use crate::radiation::gases::Weights;
 use crate::surface::titan_like_air;
 use crate::volatiles::methane_triple_pressure;
 
@@ -35,10 +35,10 @@ fn an_earth_holds_three_point_seven_oceans() {
 #[test]
 fn titan_like_air_reads_the_triple_point_pressure() {
     let triple = methane_triple_pressure().0;
-    let air = |total: f64| PartialPressures {
+    let air = |total: f64| Weights {
         n2: total - SOME_METHANE,
         ch4: SOME_METHANE,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     assert!(titan_like_air(&air(triple * (1.0 + HAIR))));
     assert!(!titan_like_air(&air(triple * (1.0 - HAIR))));

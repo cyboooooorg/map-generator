@@ -1,6 +1,6 @@
 use super::ClimateInputs;
 use super::THAW_STEPS;
-use super::branches::{IcyStart, Solved, frozen_branch, solve, thaw_search};
+use super::branches::{IcyStart, Solved, THAW_FLOOR, frozen_branch, solve, thaw_search};
 use super::fixture::{earth, moved, titan};
 use science::surface::Liquid;
 use science::units::Kilogram;
@@ -246,4 +246,69 @@ fn an_icy_start_that_cycles_at_the_maximum_greenhouse_thaws_below_it() {
     // Frozen at its maximum greenhouse too: frozen for good, at that CO₂.
     let (branch, _) = ends(IcyStart::StaysFrozen, IcyStart::StaysFrozen);
     assert_eq!(branch, Some((SEARCH.1, None)));
+}
+
+/// The frozen branch of a synthetic body whose temperate branch froze
+/// with no CO₂, so that the thaw search starts from [`THAW_FLOOR`] of its
+/// maximum greenhouse ([`SEARCH`]'s high end, where it thaws); its icy
+/// start is `at_floor` there, as [`synthetic`] elsewhere. Also the CO₂ of
+/// every call.
+fn from_the_floor(at_floor: IcyStart) -> (Option<(f64, Option<f64>)>, Vec<f64>) {
+    let floor = SEARCH.1 * THAW_FLOOR;
+    let mut calls = Vec::new();
+    let branch = frozen_branch(
+        &mut calls,
+        0.0,
+        |_| SEARCH.1,
+        |calls, co2| {
+            calls.push(co2);
+            if co2 == floor {
+                at_floor
+            } else {
+                synthetic(co2, false, &mut 0)
+            }
+        },
+        SEARCH_STEPS,
+    );
+    (branch, calls)
+}
+
+#[test]
+fn a_thaw_search_from_its_floor_checks_that_the_floor_stays_frozen() {
+    // The bisection holds only if its low end stays frozen: above the CO₂
+    // the temperate branch froze with, the floor is read once (#758).
+    let floor = SEARCH.1 * THAW_FLOOR;
+    let (branch, calls) = from_the_floor(IcyStart::StaysFrozen);
+    assert_eq!(
+        calls.iter().filter(|&&c| c == floor).count(),
+        1,
+        "{calls:?}"
+    );
+    let (still_frozen, thaw) = branch.expect("a frozen branch");
+    let thaw = thaw.expect("a thaw");
+    assert!(still_frozen < SYNTHETIC_THAW && SYNTHETIC_THAW <= thaw);
+    // Not frozen at the floor: the thaw lies between the frozen CO₂ and the
+    // floor, with no bisection.
+    for at_floor in [IcyStart::Thaws, IcyStart::Cycles] {
+        let (branch, calls) = from_the_floor(at_floor);
+        assert_eq!(branch, Some((0.0, Some(floor))), "{at_floor:?}");
+        assert_eq!(calls, vec![0.0, SEARCH.1, floor], "{at_floor:?}");
+    }
+}
+
+#[test]
+fn a_thaw_search_from_its_frozen_co2_reads_no_floor() {
+    // Above the floor, the low end is the frozen CO₂, already read.
+    let mut calls = Vec::new();
+    frozen_branch(
+        &mut calls,
+        SEARCH.0,
+        |_| SEARCH.1,
+        |calls, co2| {
+            calls.push(co2);
+            synthetic(co2, false, &mut 0)
+        },
+        SEARCH_STEPS,
+    );
+    assert_eq!(calls.len(), 2 + SEARCH_STEPS, "{calls:?}");
 }
