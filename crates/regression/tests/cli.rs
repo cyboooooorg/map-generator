@@ -76,7 +76,9 @@ fn every_timeline_has_one_keyframe_at_the_present() {
 #[test]
 #[ignore = "heavy: draws a system of its own at a fixed present (no reference fixes one); tier 2 checks the keyframe on reference 1"]
 fn a_fixed_present_is_the_star_s_present() {
-    let Command::System(command) = cli(&["--present", "4.5", "--host-mass", "1"]).command;
+    let Command::System(command) = cli(&["--present", "4.5", "--host-mass", "1"]).command else {
+        panic!("the system command");
+    };
     let fixed = report(&command.system.inputs(Seed::new(1))).unwrap();
     for timeline in &fixed.timelines {
         assert_eq!(timeline.present, Gyr(4.5), "{}", timeline.body);
@@ -108,7 +110,10 @@ fn asked_archetypes_are_placed() {
         "earth-like=1",
     ])
     .unwrap()
-    .command;
+    .command
+    else {
+        panic!("the system command");
+    };
     let report = report(&command.system.inputs(Seed::new(3))).unwrap();
     let asked = ArchetypeId(Code::of("earth-like"));
     assert!(

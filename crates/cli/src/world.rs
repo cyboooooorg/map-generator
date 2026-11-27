@@ -1,10 +1,13 @@
-//! The world pipeline: stored inputs to a cached world and its export.
+//! The `world` command: stored inputs to a cached world and its export.
 //!
-//! The timelines come from an injected producer so the pipeline is tested
-//! without running the system engine; the `world` command wires the real
-//! one in.
+//! The pipeline [`run`] takes the timelines from an injected producer so
+//! it is tested without running the system engine; [`command`] wires the
+//! real one in.
 
 use std::path::PathBuf;
+
+use clap::Args;
+use serde::Serialize;
 
 use adapters::{Exported, FsStore, Ramp, export};
 use catalogue::{
@@ -13,17 +16,141 @@ use catalogue::{
 };
 use science::units::Metre;
 use system::{ENGINE_VERSION, Inputs};
-use timeline::{BodyState, Designation, Timeline};
+use timeline::{BodyState, Code, Designation, EngineVersion, Seed, Timeline};
 use world::relief::{self, HEIGHT};
 use world::{FieldId, Grid, World};
 
+use crate::args::{GlobalArgs, SystemArgs};
 use crate::error::CliError;
 
+/// Definition: metres in a kilometre, for `--cell-km`.
+const METRES_PER_KM: f64 = 1000.0;
+
+/// `map-generator world`: the draw's flags, the body, and the export.
+#[derive(Args, Debug)]
+pub struct WorldCommand {
+    #[command(flatten)]
+    pub system: SystemArgs,
+    /// The body: the last part of its designation, `b`, `c`… for the
+    /// planets in order from the star, `A` for the star (refused: it has
+    /// no surface).
+    #[arg(long)]
+    pub body: String,
+    /// The grid's cell size in km, above 0 [default: 15].
+    #[arg(
+        long,
+        value_name = "KM",
+        allow_negative_numbers = true,
+        default_value_t = world::DEFAULT_CELL.0 / METRES_PER_KM,
+        hide_default_value = true,
+        value_parser = parse_cell_km
+    )]
+    pub cell_km: f64,
+    /// The field to project [default: relief.height].
+    #[arg(
+        long,
+        value_name = "CODE",
+        default_value = HEIGHT,
+        hide_default_value = true,
+        value_parser = parse_field
+    )]
+    pub field: FieldId,
+    /// The PNG width in pixels, even and above 0 [default: 2048].
+    #[arg(
+        long,
+        value_name = "PIXELS",
+        default_value_t = 2048,
+        hide_default_value = true
+    )]
+    pub width: u32,
+    /// The directory the world file and the PNG are written to.
+    #[arg(long, value_name = "DIR")]
+    pub out: PathBuf,
+}
+
+/// Parses `--cell-km`: a finite cell size above 0 km.
+pub fn parse_cell_km(text: &str) -> Result<f64, String> {
+    let km = text
+        .parse::<f64>()
+        .map_err(|error| format!("the cell size {text:?} is not a number: {error}"))?;
+    if km.is_finite() && km > 0.0 {
+        Ok(km)
+    } else {
+        Err(format!(
+            "the cell size must be finite and above 0 km, got {text}"
+        ))
+    }
+}
+
+/// Parses `--field`: the shape of a code only; the export refuses a field
+/// the world lacks.
+pub fn parse_field(text: &str) -> Result<FieldId, String> {
+    Code::new(text.to_owned())
+        .map(FieldId)
+        .map_err(|error| format!("{error}"))
+}
+
+/// What the `world` command prints.
+#[derive(Serialize, Debug)]
+struct Summary {
+    system: SystemId,
+    body: Designation,
+    keyframe: u32,
+    /// The grid's subdivision count.
+    grid: u32,
+    /// The system engine the timeline comes from.
+    engine: EngineVersion,
+    /// The map generator that made the world.
+    world_engine: EngineVersion,
+    timelines_cached: bool,
+    world_cached: bool,
+    /// How many cache entries the eviction removed after the run.
+    evicted: usize,
+    world: PathBuf,
+    png: PathBuf,
+}
+
+/// Runs the command with the real system engine and returns the JSON
+/// summary for stdout. `main` resolves the seed first.
+///
+/// # Errors
+///
+/// Those of [`run`], and a summary that cannot be written as JSON.
+pub fn command(
+    command: &WorldCommand,
+    global: &GlobalArgs,
+    seed: Seed,
+) -> Result<String, CliError> {
+    let request = WorldRequest {
+        body: command.body.clone(),
+        cell: Metre(command.cell_km * METRES_PER_KM),
+        field: command.field.clone(),
+        width: command.width,
+        out: command.out.clone(),
+    };
+    let done = run(
+        &global.store(),
+        &command.system.inputs(seed),
+        &request,
+        system::generate,
+    )?;
+    let summary = Summary {
+        system: done.system,
+        body: done.key.body,
+        keyframe: done.key.keyframe,
+        grid: done.key.grid,
+        engine: done.key.engine,
+        world_engine: done.key.world,
+        timelines_cached: done.timelines_cached,
+        world_cached: done.world_cached,
+        evicted: done.evicted.len(),
+        world: done.exported.world,
+        png: done.exported.png,
+    };
+    Ok(serde_json::to_string_pretty(&summary)?)
+}
+
 /// What to build and where to write it.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "called by the world command, pull request B")
-)]
 #[derive(Clone, Debug)]
 pub struct WorldRequest {
     /// The body part of the designation: `b`, `c`… for the planets, `A`
@@ -39,10 +166,6 @@ pub struct WorldRequest {
 }
 
 /// What a run did.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "called by the world command, pull request B")
-)]
 #[derive(Clone, Debug)]
 pub struct WorldRun {
     pub system: SystemId,
@@ -66,10 +189,6 @@ pub struct WorldRun {
 /// producer runs), an odd or zero width, a store, producer, relief or
 /// export failure, or a body that is missing, is a star, or has no
 /// keyframe at its present.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "called by the world command, pull request B")
-)]
 pub fn run<E>(
     store: &FsStore,
     inputs: &Inputs,
@@ -134,7 +253,7 @@ where
             let field = relief::generate(state, timeline.seed, &grid)?;
             let mut world = World::new(grid, key.body, key.keyframe, key.engine, key.world);
             world
-                .insert(FieldId(timeline::Code::of(HEIGHT)), field)
+                .insert(FieldId(Code::of(HEIGHT)), field)
                 .map_err(CliError::World)?;
             WorldCache::put(store, &key, &world)?;
             // The cache stores the fields quantised: export what a later
@@ -191,9 +310,7 @@ mod tests {
     use system::{BodyRequest, INPUTS_SCHEMA, Request};
     use tempfile::TempDir;
     use timeline::fixtures::{earth_like_fixture, leaf};
-    use timeline::{
-        Code, ContractError, Keyframe, Seed, StarPhase, StarState, SystemNumber, Trace,
-    };
+    use timeline::{ContractError, Keyframe, StarPhase, StarState, SystemNumber, Trace};
 
     use super::*;
 
