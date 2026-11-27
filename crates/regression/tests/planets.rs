@@ -269,8 +269,10 @@ fn class_changes_between_draw_and_model_are_pinned() {
 /// Pin (first run, 2026-11-27, macOS; a regression net, not a source):
 /// designation, class, liquid, biosphere, surface temperature in K. The
 /// temperature is within `TEMPERATURE_TOLERANCE_K`; the rest is exact.
-/// The temperatures of the runaway-greenhouse and steam-world rows (up to
-/// 10 334 K) are under study in #775: pinned as the model gives them.
+/// The runaway-greenhouse and steam-world rows (up to 4377 K) are pinned
+/// as the model gives them with the infrared column open past 5000 cm⁻¹
+/// (#783, #781): their surfaces lie within a few K of study 41's
+/// predictions.
 const PLANETS: &[(&str, &str, &str, &str, Option<f64>)] = &[
     ("MGS 17371 b@1", "hot-jupiter", "none", "none", None),
     ("MGS 17371 c@1", "gas-giant", "none", "none", None),
@@ -287,35 +289,35 @@ const PLANETS: &[(&str, &str, &str, &str, Option<f64>)] = &[
         "runaway-greenhouse",
         "none",
         "lifeless",
-        Some(8274.0),
+        Some(3560.0),
     ),
     (
         "MGS 43177 c@6",
         "runaway-greenhouse",
         "none",
         "lifeless",
-        Some(10333.8),
+        Some(4376.4),
     ),
     (
         "MGS 43177 d@6",
         "runaway-greenhouse",
         "none",
         "lifeless",
-        Some(5316.6),
+        Some(2928.4),
     ),
     (
         "MGS 43177 e@6",
         "runaway-greenhouse",
         "none",
         "lifeless",
-        Some(3517.4),
+        Some(2384.3),
     ),
     (
         "MGS 43177 f@6",
         "runaway-greenhouse",
         "none",
         "lifeless",
-        Some(2297.2),
+        Some(1973.5),
     ),
     ("MGS 20230 b@7", "rocky", "water", "lifeless", Some(288.0)),
     ("MGS 20230 c@7", "gas-giant", "none", "none", None),
@@ -326,14 +328,14 @@ const PLANETS: &[(&str, &str, &str, &str, Option<f64>)] = &[
         "runaway-greenhouse",
         "none",
         "lifeless",
-        Some(8760.5),
+        Some(3874.2),
     ),
     (
         "MGS 65909 e@8",
         "steam-world",
         "none",
         "lifeless",
-        Some(5502.6),
+        Some(3113.4),
     ),
     ("MGS 65909 f@8", "gas-giant", "none", "none", None),
 ];
@@ -381,7 +383,7 @@ fn the_reference_planets_are_pinned() {
         match (got.4, want.4) {
             (Some(g), Some(w)) => assert!(
                 (g - w).abs() <= TEMPERATURE_TOLERANCE_K,
-                "{}: {g} K against {w} K",
+                "{}: {g} K against {w} K\npinned table:\n{printed}",
                 got.0
             ),
             (None, None) => {}

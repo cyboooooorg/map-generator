@@ -3347,7 +3347,7 @@ their measured air (see "Test air and Solar System bounds" below):
 | Body | Result | Target | Observed |
 |---|---|---|---|
 | Earth | 288 K, water, regulated, thermostat CO₂ 0.010605 bar by weight, a partial pressure of 6.819e-3 bar, Bond albedo 0.3066 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone in the light and in the infrared (#704), Bond albedo 0.2907 and 289.38 K at 280 ppm (before #749, which keeps the air in weights: 6.910e-3 bar read as a partial pressure, 0.3064, 0.2906 and 289.39 K; before #704 and the clouds' infrared emissivity of #705: 4.071e-3 bar, 0.3071, 0.2914 and 288.18 K; before the N₂ and O₂ pairs of #703: 4.206e-3 bar and 288.02 K; on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
-| Venus | 579.578 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the model's own 579.578 K (printed by the tier-3 `venus_prints_its_temperature`, release, on this branch, #594) is a tier-3 number, not a tier-2 pin | 737 K |
+| Venus | 579.282 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the model's own 579.282 K, its tier-3 output (printed by the tier-3 `venus_prints_its_temperature`, release, on this branch, #594) is a tier-3 number, not a tier-2 pin | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
 | Titan | 92.36 K on the measured air, hydrocarbons; the reference Titan settles at 92.39 K on the chain's own air (92.33 K and 92.62 K before #749, whose chain methane, 2.11 bar by weight, the column read as a partial pressure; 92.64 K and 92.97 K before N₂ condensed in the column, #741; 93.86 K and 94.24 K under methane's grey stand-in, before #703; 104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | its equilibrium temperature, dry, temperate | within 1 K of it | airless |
@@ -3405,7 +3405,7 @@ against an observed 210 K it took as target (the NASA fact sheet gives
 about 214 K, see study 25), Titan 99 K, `titan-like` 93.7 K. Legacy's
 `mars-like` reached 215 K on the distance sweep and 213.3 to 214.1 K
 over seeds 1 to 40, and `venus-like` 552 to 601 K (median 575 K) under
-75 to 98 bar. Venus reaches 577 K (579.578 K in the rewrite's model, #594) under its 85 bar of CO₂ and its Bond
+75 to 98 bar. Venus reaches 577 K (579.28 K, the model's tier-3 output in the rewrite, #594) under its 85 bar of CO₂ and its Bond
 albedo 0.76 (739 K on the grey column, whose CO₂ opacity was calibrated
 on it): the infrared opacity of its H₂SO₄ clouds and its SO₂ are not
 modelled, and the hot bands of the line list above 700 K are unchecked
@@ -4491,7 +4491,7 @@ solar days is zonal for any non-locked rotator, so the flag is
   the fact sheet (decided with the user on 2026-11-24).
 - **Earth** 288 K (fact sheet), **Titan** 93.65 ± 0.25 K (Fulchignoni
   et al. 2005), **Venus** Bond albedo 0.76 ± 0.05 (NASA Venus fact sheet) and no
-  liquid, held in tier 1. The model's own Venus (579.578 K, the
+  liquid, held in tier 1. The model's own Venus (579.282 K, the model's tier-3 output, the
   tier-3 `venus_prints_its_temperature` in release) is not a source and not
   a tier-2 pin: it stays a printed tier-3 number (#594).
 
@@ -4887,7 +4887,7 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | Thick steam (≥ 260 bar) past the limit; 30 % water at 0.7 AU, `a_thick_steam_runaway_settles_past_the_end_of_the_plateau` | 1500 to 2500 K, a steam world | Kasting 1988 (over 1500 K for a full ocean), Goldblatt et al. 2013 (a stable steam state from about 1600 K), Boukrouche et al. 2021 § 4.3 (1835 K under 311 W/m² incoming, 2364 to 2451 K under 1343 W/m², 260 bar) |
 | Turbet's worked example | 1.2 R⊕ ± 5 % on Zeng's 0.750 R⊕ core ("around"; the fit errs by up to about 10 %) | Turbet et al. 2020 § 3.1 |
 | A steam world's radius | over its condensed radius, inside the structures of Turbet's § 2.1 (27 bar to 270 kbar), past § 2.2's 27 kbar | Turbet et al. 2020 § 3.1 (property) |
-| The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; the model's own output on this branch is 1.64297 R⊕ and 1525.70 K (printed by the tier-3 test, release; not a source, not pinned) |
+| The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; the model's own output on this branch is 1.64297 R⊕ and 1468.00 K (printed by the tier-3 test, release; not a source, not pinned) |
 | A wet Venus under an XUV fluence of 1e14 J/m², `thin_steam_over_rock_stays_a_runaway` | a runaway under 220.64 bar of steam, no envelope | Pierrehumbert 2023 § 1 (no surface hides under the critical pressure); legacy `thin_steam_over_rock_stays_a_runaway_greenhouse` |
 | A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
 | F0V (7220 K) at 1.2963 S⊕, a hundredth of the N₂, half Earth's mass, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light over the saturated column's peak (at Earth's mass 291.0 over 289.9 W/m²; at a tenth of the N₂, Earth's argon raises the peak to 292.3, #694), Kasting 1988, Goldblatt et al. 2013. Since the cloud albedo's refit (#705, 0.322) an Earth-mass planet there has a Bond albedo of 0.3515 and absorbs 286.0 W/m², under any peak the N₂ cut gives; half Earth's mass, whose lower gravity lowers the peak, boils at 282.7 W/m² (0.7 Earth masses does not); legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
@@ -5191,7 +5191,7 @@ air an ice world. Titan has 1.4643 bar in the model, on its chain's own air
 (92.39 K).
 
 The case of issue #492 (4.78 M⊕, 12 % water, an M9V star at 0.018 AU)
-is a `steam-world`: over 1e5 bar of steam over a surface at 1525.70 K,
+is a `steam-world`: over 1e5 bar of steam over a surface at 1468.00 K,
 and 1.64297 R⊕ (the model's output, printed by the tier-3 test; the old
 code gave 1679 K and 1.700 R⊕).
 

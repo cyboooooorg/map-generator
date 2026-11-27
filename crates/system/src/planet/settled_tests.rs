@@ -276,9 +276,10 @@ fn settled_draws_then_settles_from_its_snowball_seed() {
     assert_eq!(whole, parts);
 }
 
-// The model's own Venus (579.578 K, printed by this test in release) is
-// not a source: it is the code's output, so it stays a tier-3 number for
-// the documentation and is not pinned in tier 2 (plan 2d-4, D4).
+// The model's own Venus (579.282 K, its tier-3 output, printed by this
+// test in release) is not a source: it is the code's output, so it stays
+// a tier-3 number for the documentation and is not pinned in tier 2
+// (plan 2d-4, D4).
 #[test]
 #[ignore = "heavy: prints Venus's surface temperature, a settled Venus, under 1 s in release"]
 fn venus_prints_its_temperature() {
