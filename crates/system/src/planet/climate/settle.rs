@@ -299,18 +299,19 @@ fn probe_root<M: AlbedoMap>(
     (!attracting(cold, root)).then_some((cold_albedo, cold_pass))
 }
 
-/// The albedo's and the emissivity's own residuals of `map` solved under
-/// `albedo` and `emissivity` into `climate`, K: the radiative equilibrium
-/// of the derived albedo under the emissivity used, and of the derived
-/// emissivity under the albedo used, each less the one used.
+/// The albedo's and the emissivity's own residuals of `map` under
+/// `albedo` and `emissivity`, given what its climate derives (`derive`,
+/// read after the radiative equilibrium used), K: the radiative
+/// equilibrium of the derived albedo under the emissivity used, and of
+/// the derived emissivity under the albedo used, each less the one used.
 fn residuals_of<M: AlbedoMap>(
     map: &mut M,
     albedo: f64,
     emissivity: f64,
-    climate: &M::Climate,
+    derive: impl FnOnce(&mut M) -> (f64, f64),
 ) -> (f64, f64) {
     let used = map.radiative(albedo, emissivity);
-    let (derived, derived_emissivity) = map.derived(climate);
+    let (derived, derived_emissivity) = derive(map);
     (
         map.radiative(derived, emissivity) - used,
         map.radiative(albedo, derived_emissivity) - used,
@@ -319,9 +320,7 @@ fn residuals_of<M: AlbedoMap>(
 
 /// The albedo's and the emissivity's own residuals of `body` solved
 /// under `albedo` and `emissivity` at the temperature `t` with `air`, K:
-/// the radiative equilibrium of the derived albedo under the emissivity
-/// used, and of the derived emissivity under the albedo used, each less
-/// the one used.
+/// those [`albedo_fixed_point`] settles on ([`residuals_of`]).
 pub(crate) fn pair_residuals(
     body: &mut ClimateBody,
     albedo: f64,
@@ -329,13 +328,12 @@ pub(crate) fn pair_residuals(
     t: Kelvin,
     air: &Weights,
 ) -> (f64, f64) {
-    let used = radiative(body, albedo, emissivity);
-    let derived = body.derived_albedo(t, air).get();
-    let derived_emissivity = body.emissivity_at(t, air).get();
-    (
-        radiative(body, derived, emissivity) - used,
-        radiative(body, albedo, derived_emissivity) - used,
-    )
+    residuals_of(body, albedo, emissivity, |body| {
+        (
+            body.derived_albedo(t, air).get(),
+            body.emissivity_at(t, air).get(),
+        )
+    })
 }
 
 /// The equilibrium temperature of a surface that takes `starlight`,
@@ -654,7 +652,8 @@ pub(crate) fn albedo_fixed_point<M: AlbedoMap>(
             };
         }
         if root {
-            let (albedo_off, emissivity_off) = residuals_of(map, albedo, emissivity, &pass);
+            let (albedo_off, emissivity_off) =
+                residuals_of(map, albedo, emissivity, |map| map.derived(&pass));
             if albedo_off.abs() < tolerance && emissivity_off.abs() < tolerance {
                 settled = true;
                 break;
@@ -805,7 +804,7 @@ pub(crate) fn albedo_fixed_point<M: AlbedoMap>(
 /// one used) and the emissivity's (the derived emissivity under the
 /// albedo used) are each under the tolerance too; while the push has
 /// settled and they have not, the plain step moves the pair towards the
-/// derived one ([`pair_residuals`]). The climate keeps the albedo and
+/// derived one ([`residuals_of`]). The climate keeps the albedo and
 /// emissivity it was solved under, so that it reproduces, and they are the
 /// derived ones within that tolerance; it is not a snowball (the frozen
 /// branch is drawn by the caller). It is converged when this fixed point

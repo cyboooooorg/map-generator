@@ -511,26 +511,10 @@ fn the_outer_edge_against_kopparapu_2014() {
 
 /// The outer edge of `inputs`, a body at 1 AU moved out ([`moved`]), AU:
 /// the largest orbit at which it keeps liquid water on its temperate
-/// branch, bisected in [`EDGE_STEPS`] steps within [`EDGE_BRACKET_AU`].
+/// branch ([`outer_edge_of`] round the Sun, whose runaway limit lies
+/// inside [`EDGE_BRACKET_AU`]).
 fn moved_edge_au(inputs: &ClimateInputs, numerics: &Numerics) -> f64 {
-    let wet = |au: f64| {
-        solve_with(&moved(inputs, au), WARM_DRAW, numerics)
-            .settle
-            .liquid
-            == Some(Liquid::Water)
-    };
-    let (mut wet_au, mut dry_au) = EDGE_BRACKET_AU;
-    assert!(wet(wet_au), "frozen at {wet_au} AU");
-    assert!(!wet(dry_au), "wet at {dry_au} AU");
-    for _ in 0..EDGE_STEPS {
-        let mid = 0.5 * (wet_au + dry_au);
-        if wet(mid) {
-            wet_au = mid;
-        } else {
-            dry_au = mid;
-        }
-    }
-    wet_au
+    outer_edge_of(|au, _| moved(inputs, au), SUN, numerics)
 }
 
 #[test]
@@ -1989,15 +1973,16 @@ fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
 /// this one, the edge, and the first orbit past it where the climate
 /// falls onto its frozen branch, ice-covered (under
 /// [`ICE_COVERED_TEMPERATURE`]; scanned by [`SCAN_AU`]), where a collapse
-/// starts at the fold. History of the orbits pinned before #767: 1.321, 1.3276 and
-/// 1.333 AU since #749 (no orbit cycles); 1.265, 1.272 and 1.282 AU
-/// since #704 (the last where the climate cycled); 1.42875, 1.4355 and
-/// 1.44 AU before #703; 1.25, 1.2534 and 1.264 AU after #746
-/// (`docs/science/planet-atmospheres.md`, "A collapse from the fold").
+/// starts at the fold. History of the orbits pinned before #767, oldest first:
+/// 1.42875, 1.4355 and 1.44 AU before #703; 1.25, 1.2534 and 1.264 AU
+/// after #746; 1.265, 1.272 and 1.282 AU after #704 (the last where the
+/// climate cycled); 1.321, 1.3276 and 1.333 AU after #749 (no orbit
+/// cycles) (`docs/science/planet-atmospheres.md`, "A collapse from the
+/// fold").
 const INSIDE_EDGE: f64 = 0.995;
 
 /// Definition: the step of the scans from a methane Earth's outer edge,
-/// 0.001 AU, the step its orbits were probed by since #746 (#767).
+/// 0.001 AU, the step its orbits were probed by since #703 (#767).
 const SCAN_AU: f64 = 0.001;
 
 /// Definition: the most steps of a scan from the edge, 30 (0.03 AU, #767):
@@ -2015,7 +2000,8 @@ const COOL_STAR: Kelvin = COOL_STARS[1];
 
 /// Definition: the frozen climates held round [`COOL_STAR`], 3 (#767):
 /// scanning down from its methane Earth's edge by [`SCAN_AU`], the first
-/// bistable orbits whose icy start settles frozen at the geometric mean of
+/// bistable orbits with a thaw (a frozen branch that some CO₂ it holds
+/// thaws, the branch a thaw search runs on) whose icy start settles frozen at the geometric mean of
 /// the CO₂ it froze with and the most its thaw search leaves frozen, a CO₂
 /// the search passes through frozen. Pinned before #767: 1.3030, 1.3050
 /// and 1.3060 AU with 31.39, 32.24 and 32.50 bar by weight since #749
@@ -2059,12 +2045,24 @@ fn collapse_step_is_converged() {
         ..Numerics::DEFAULT
     };
     let edge = moved_edge_au(&like, &Numerics::DEFAULT);
-    let past = (1..=SCAN_STEPS)
-        .map(|i| edge + SCAN_AU * i as f64)
-        .find(|&au| {
-            let settled = solve_with(&moved(&like, au), WARM_DRAW, &Numerics::DEFAULT).settle;
-            settled.temperature.0 < ICE_COVERED_TEMPERATURE.0
-        });
+    // The scan past the edge prints each orbit, so that a climate PR's
+    // output shows a cycling orbit if one comes back.
+    let mut past = None;
+    for i in 1..=SCAN_STEPS {
+        let au = edge + SCAN_AU * i as f64;
+        let settled = solve_with(&moved(&like, au), WARM_DRAW, &Numerics::DEFAULT).settle;
+        let covered = settled.temperature.0 < ICE_COVERED_TEMPERATURE.0;
+        println!(
+            "  {au:.4} AU: {:.4} K, cycles {}{}",
+            settled.temperature.0,
+            settled.cycles,
+            if covered { ", ice-covered" } else { "" }
+        );
+        if covered {
+            past = Some(au);
+            break;
+        }
+    }
     match past {
         Some(au) => {
             println!("methane Earth round the Sun: edge {edge:.4} AU, ice-covered from {au:.4} AU")
@@ -2108,18 +2106,27 @@ fn collapse_step_is_converged() {
         let inputs = methane_earth_at(au, teff);
         let solved = solve_with(&inputs, WARM_DRAW, &Numerics::DEFAULT);
         let warm = solved.settle;
-        let Some(Bistable {
-            froze,
-            still_frozen,
-            thaw: Some(_),
-            ..
-        }) = solved.bistable
-        else {
-            println!(
-                "  {au:.4} AU: {:.4} K, cycles {}, not bistable",
-                warm.temperature.0, warm.cycles
-            );
-            continue;
+        let (froze, still_frozen) = match solved.bistable {
+            Some(Bistable {
+                froze,
+                still_frozen,
+                thaw: Some(_),
+                ..
+            }) => (froze, still_frozen),
+            Some(_) => {
+                println!(
+                    "  {au:.4} AU: {:.4} K, cycles {}, bistable, never thaws",
+                    warm.temperature.0, warm.cycles
+                );
+                continue;
+            }
+            None => {
+                println!(
+                    "  {au:.4} AU: {:.4} K, cycles {}, not bistable",
+                    warm.temperature.0, warm.cycles
+                );
+                continue;
+            }
         };
         let co2 = Bar((froze.0 * still_frozen.0).sqrt());
         let icy = frozen_at(&mut ClimateBody::new(&inputs, Numerics::DEFAULT), co2);

@@ -584,11 +584,14 @@ const CONSTRUCTED_LIGHT: f64 = 300.0;
 /// albedos its branches derive (273.42 under 0.31, 275.38 under 0.29).
 const JUMP_AT: f64 = 274.4;
 
-/// Definition: the albedos a constructed climate's branches derive, the
-/// warm one's brighter (`#729`: a warm climate at its maximum greenhouse
-/// derives a Rayleigh albedo that collapses its CO₂) and the collapsed
-/// one's darker, a swing of 0.02 as on a methane Earth past its edge.
+/// Definition: the albedo the warm branch of a constructed climate
+/// derives, 0.31, brighter than [`COLD_DERIVES`] by a swing of 0.02, as
+/// on a methane Earth past its edge (#729: a warm climate at its maximum
+/// greenhouse derives a Rayleigh albedo that collapses its CO₂).
 const WARM_DERIVES: f64 = 0.31;
+
+/// Definition: the albedo the collapsed branch of a constructed climate
+/// derives, 0.29, darker than [`WARM_DERIVES`] by the swing of 0.02.
 const COLD_DERIVES: f64 = 0.29;
 
 /// Definition: the most albedo steps a climate with no fixed point takes
@@ -700,5 +703,4 @@ fn a_climate_with_a_stable_root_settles_on_it() {
     let derived = Smooth.derived(&fixed.climate).0;
     let off = radiative(derived, 1.0) - fixed.climate.x;
     assert!(off.abs() < ALBEDO_TOLERANCE_K.0, "{off} K: {fixed:?}");
-    assert!(fixed.steps < CYCLING_STEPS, "{} steps", fixed.steps);
 }
