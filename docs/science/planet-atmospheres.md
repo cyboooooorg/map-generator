@@ -3863,9 +3863,17 @@ maximum greenhouse counts as thawed too. Round the Sun (1.25, 1.2534
 and 1.264 AU) and round a 3300 K star (1.3231, 1.3586 and 1.3657 AU),
 no call of the search cycles, and the plain Earth's never does (#731):
 those climates do not change. The tier-3 test
-`a_snowball_thaws_where_its_icy_start_starts_cycling` holds the 4500 K
-case, and `collapse_step_is_converged` checks that the collapse's step
-does not flip its frozen climates between settling and cycling.
+`a_snowball_thaws_where_its_icy_start_starts_cycling` held the 4500 K
+case until methane's lines (#704, merged with #759 on 2026-11-27):
+with them that methane Earth is no longer bistable up to its edge
+(1.3315 AU), and round a 3300 K star (edge 1.4147 AU) no search from
+0.94 to 0.99 of the edge meets a cycling icy start (1.3298, 1.344,
+1.3581 and 1.3864 AU thaw at 20.9125, 29.5120, 37.5607 and
+51.2875 bar on a warm icy start; 1.393, 1.3975 and 1.4006 AU stay
+frozen to the maximum greenhouse). No cycling thaw was found to hold,
+so the test was dropped; the ends of the search stay tested in tier 1.
+`collapse_step_is_converged` checks that the collapse's step does not
+flip its frozen climates between settling and cycling.
 
 #### Solver constants (rule of #648)
 

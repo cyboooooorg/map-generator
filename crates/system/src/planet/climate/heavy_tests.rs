@@ -2008,9 +2008,12 @@ const STEP_ORBITS: [f64; 3] = [1.265, 1.272, CYCLING_AU];
 /// geometric mean of the CO₂ it froze with and the most its thaw search
 /// leaves frozen (15.96 and 20.91, 20.81 and 37.56, 30.13 and 51.28 bar),
 /// a CO₂ the search passes through frozen: 215.72, 210.37 and 205.46 K.
-/// At the most it leaves frozen, within 0.004 bar of its thaw, the
-/// branch the climate lands on flips with the step (316.1 K at the plain
-/// step at 0.94, 385.0 K at half the step at 0.98). On #731 (main
+/// At the most it leaves frozen, within 0.004 bar of its thaw, an icy
+/// start's branch depends on the step: at 0.94 the plain step lands warm
+/// (316.1 K) where the step rules stay frozen; at 0.98 all three land
+/// warm (385.0 K) since #759, where the solve stores a frozen snowball
+/// (205.47 K). None of these thaw searches meets a cycling icy start
+/// (#759's stop). On #731 (main
 /// a97c1ca1), before #704 and #705, they were 4500 K at 1.2828 AU with
 /// 19.0296 and 19.6173 bar (the second cycled with the old step) and
 /// 3300 K at 1.3586 AU with 45.9 bar; with #704 and #705 those three thaw
@@ -2116,39 +2119,4 @@ fn collapse_step_is_converged() {
             );
         }
     }
-}
-
-/// Definition: a test input placed by a probe, not a fact of any body: a
-/// methane Earth round a 4500 K star at 0.9 of the way from its runaway
-/// orbit to its outer edge, 1.2828 AU (#731), whose icy start cycles
-/// between about 19.40 and 19.64 bar of CO₂ and thaws above (measured on
-/// main f6462ba2). Study 36's methane lines are expected to thaw it.
-const CYCLING_THAW: (Kelvin, f64) = (Kelvin(4500.0), 1.2828);
-
-#[test]
-#[ignore = "heavy: the thaw search of a methane Earth round a 4500 K star, about 60 s"]
-fn a_snowball_thaws_where_its_icy_start_starts_cycling() {
-    let (teff, au) = CYCLING_THAW;
-    let inputs = methane_earth_at(au, teff);
-    let solved = solve(&inputs, COLD_DRAW);
-    let b = solved.bistable.expect("bistable");
-    let thaw = b.thaw.expect("a CO₂ it holds thaws it");
-    let c = &solved.settle;
-    println!(
-        "froze {:.4}, still frozen {:.4}, thaw {:.4} bar, chance {:.5}; snowball {:.3} K, \
-         cycles {}, converged {}",
-        b.froze.0,
-        b.still_frozen.0,
-        thaw.0,
-        b.chance.get(),
-        c.temperature.0,
-        c.cycles,
-        c.converged
-    );
-    // The snowball is a frozen balance, not a cycle's cold side.
-    assert_eq!(solved.state, ClimateState::Snowball, "{solved:?}");
-    assert!(c.converged && !c.cycles && frozen_over(c), "{c:?}");
-    // Its thaw is where its icy start stops holding: it cycles there.
-    let at_thaw = frozen_at(&mut ClimateBody::new(&inputs, Numerics::DEFAULT), thaw);
-    assert!(at_thaw.cycles, "{thaw:?}: {at_thaw:?}");
 }

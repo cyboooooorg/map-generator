@@ -1601,8 +1601,7 @@ The test `earths_clear_sky_column_is_ceres_like_for_like` (tier 1)
 held it there until the user's decision of 2026-11-27 (study 40,
 below), which removed it: the single column's gap is recorded here,
 and the acceptance criteria of track T11 (issue #757) hold it. Before
-#704 it built
-the window from the table: 268.1 − 2.2 + 3.39 (`MINOR_GASES_W_M2`,
+issue #704 it built the window from the table: 268.1 − 2.2 + 3.39 (`MINOR_GASES_W_M2`,
 Hogan & Matricardi's CH₄, N₂O and halocarbons; 3.64 with N₂ and O₂
 before #703) + 1.76 (Myhre et al. 1998's
 $5.35 \ln(389/280)$ for the CO₂ of CERES's years, NOAA), plus ozone from
@@ -1871,9 +1870,9 @@ iterated with a diagonal Newton step until no radiative level gains
 more than 0.002 W/m². It warms the upper stratosphere as the
 observations do (271 K at 1 hPa) and cools the lower one to 202 to
 208 K, 9 to 14 K under the U.S. Standard at 0.03 to 0.2 bar and
-near RFMIP's mean at 0.1 bar. What each stratosphere does to the test's column, W/m²
-(outgoing; then, at fixed temperatures, what ozone, N₂O and methane
-take and what doubling CO₂ takes):
+near RFMIP's mean at 0.1 bar. What each stratosphere does to the
+test's column, W/m² (outgoing; then, at fixed temperatures, what
+ozone, N₂O and methane take and what doubling CO₂ takes):
 
 | Column | Outgoing | O₃ | N₂O | CH₄ | 2×CO₂ |
 | --- | --- | --- | --- | --- | --- |
