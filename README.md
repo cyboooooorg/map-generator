@@ -43,7 +43,7 @@ can be replayed):
 ```bash
 cargo run -q -p map-generator -- system --seed 1
 cargo run -q -p map-generator -- system --seed 1 \
-  --explain /planets/0/orbit/period
+  --explain /planets/0/state/orbit/period
 ```
 
 Flags, output and exit codes: [`crates/cli/README.md`](crates/cli/README.md).

@@ -5,14 +5,14 @@ use serde::Serialize;
 use system::planet::{class_of, model};
 use system::{ArchetypeId, ENGINE_VERSION, Inputs, draw_with};
 use timeline::{
-    BodyState, CauseGraph, Designation, EngineVersion, Keyframe, NodeId, Orbit, PlanetState, Seed,
-    Spin, StellarSources, Timeline, Trace, Traced, TracedFields,
+    BodyState, CauseGraph, Designation, EngineVersion, Keyframe, NodeId, PlanetState, Seed,
+    Timeline, Trace, Traced, TracedFields,
 };
 
 use crate::error::CliError;
 
 /// The version of the report's shape.
-pub const REPORT_SCHEMA: u32 = 1;
+pub const REPORT_SCHEMA: u32 = 2;
 
 /// A drawn system: the inputs to replay it, the star, the planets and
 /// the causes of the planets' fields.
@@ -33,27 +33,24 @@ pub struct SystemReport {
 }
 
 /// What the draw decides of a planet, and the state the planet model
-/// computes from it.
+/// computes from it. The drawn orbit, spin and stellar sources are in
+/// `state` only, which holds the same nodes: one field per node, so that
+/// a code such as `system.draw.period` names one pointer per planet.
 #[derive(Debug, Serialize)]
 pub struct PlanetDraw {
     pub designation: Designation,
     pub seed: Seed,
     pub archetype: Option<ArchetypeId>,
     pub mass: Traced<EarthMass>,
-    pub orbit: Orbit,
-    pub spin: Spin,
-    pub sources: StellarSources,
     /// The planet model's state on the drawn (possibly eccentric) trial:
-    /// its class, climate, liquid and biosphere.
+    /// its orbit, spin, stellar sources, class, climate, liquid and
+    /// biosphere.
     pub state: PlanetState,
 }
 
 impl TracedFields for PlanetDraw {
     fn for_each_node(&mut self, f: &mut dyn FnMut(&mut NodeId)) {
         self.mass.for_each_node(f);
-        self.orbit.for_each_node(f);
-        self.spin.for_each_node(f);
-        self.sources.for_each_node(f);
         self.state.for_each_node(f);
     }
 }
@@ -78,9 +75,6 @@ pub fn report(inputs: &Inputs) -> Result<SystemReport, CliError> {
             seed: placement.seed,
             archetype: placement.trial.archetype,
             mass: placement.trial.mass,
-            orbit: placement.trial.orbit,
-            spin: placement.spin,
-            sources: placement.trial.sources,
             state,
         });
     }

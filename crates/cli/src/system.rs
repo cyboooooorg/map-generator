@@ -14,7 +14,7 @@ pub struct SystemCommand {
     #[command(flatten)]
     pub system: SystemArgs,
     /// Explain one value: a JSON pointer into the output (e.g.
-    /// /planets/0/orbit/period) or a cause code (e.g. system.star.mass).
+    /// /planets/0/state/orbit/period) or a cause code (e.g. system.star.mass).
     #[arg(long)]
     pub explain: Option<String>,
 }
