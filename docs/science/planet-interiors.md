@@ -146,14 +146,16 @@ interpolates log-linearly in mass between the grid masses:
 
 **An asked archetype.** A planet asked as `earth-like` draws none of
 this: its envelope is 0, an input in the trace, as are Earth's core
-(0.325) and bulk water (Marty 2012's 2700 ppm, one ocean at the
-surface). Lammer et al. (2014) keep a nebular envelope round a 1
-$M_\oplus$ core at 1 au in 8 of their 12 cases, but take Earth's lack of
-one ("for the Earth there is no evidence that it was surrounded by a
-dense hydrogen envelope since the past 3.5 Gyr") as the constraint on
-its nebula: the archetype promises that Earth, not a drawn planet of its
-mass. Legacy's other pins of `earth-like` (life, the temperate branch,
-CO₂, N₂, NH₃, radiogenic abundance) are not ported yet (#695).
+(0.325, `EARTH_CORE_MASS_FRACTION`: Wang, Lineweaver & Ireland 2018, as
+Plotnykov & Valencia 2020 quote it, and Zeng et al. 2016, Table 1) and
+bulk water (Marty 2012's 2700 ppm, one ocean at the surface). Lammer et
+al. (2014) keep a nebular envelope round a 1 $M_\oplus$ core at 1 au in
+8 of their 12 cases, but take Earth's lack of one ("for the Earth there
+is no evidence that it was surrounded by a dense hydrogen envelope since
+the past 3.5 Gyr") as the constraint on its nebula: the archetype
+promises that Earth, not a drawn planet of its mass. Legacy's other pins
+of `earth-like` (life, the temperate branch, CO₂, N₂, NH₃, radiogenic
+abundance) are not ported yet (#695).
 
 The grid is by core mass, and the draw reads it at the planet's total
 mass: the two differ by the envelope's share, at most 35 % (the 0.35
@@ -499,7 +501,9 @@ was found for ices III, V and VI beyond Journaux et al.'s parameters.
 | 5 $M_\oplus$, 50 % water, 300 K | 12 175 km (1.911 $R_\oplus$, Zeng et al. 2019) | 12 059.9 km | −0.95 % |
 
 The Earth, Venus, Mars, Mercury and Moon rows use the core mass
-fractions 0.325 (PREM), 0.30 (Skinner et al. 2026, citing Shah et al.
+fractions 0.325 (`EARTH_CORE_MASS_FRACTION`: Wang, Lineweaver &
+Ireland 2018, as Plotnykov & Valencia 2020 quote it; Zeng et al. 2016,
+Table 1), 0.30 (Skinner et al. 2026, citing Shah et al.
 2022), 0.21 (Khan et al. 2023), 0.7136 (Genova et al. 2019) and 0.0168
 (Viswanathan et al. 2019). Ganymede takes the split 0.085 core, 0.46
 rock and 0.455 ice of Rodriguez-Mozos & Moya (2022), along the melting
@@ -2522,8 +2526,15 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      *Annual Review of Astronomy and Astrophysics* 56, 175–221,
      [doi:10.1146/annurev-astro-081817-051853](https://doi.org/10.1146/annurev-astro-081817-051853),
      preprint [arXiv:1801.06117](https://arxiv.org/abs/1801.06117).
+148. Wang, H. S., Lineweaver, C. H. & Ireland, T. R. 2018, *Icarus* 299,
+     460,
+     [doi:10.1016/j.icarus.2017.08.024](https://doi.org/10.1016/j.icarus.2017.08.024):
+     Earth's core mass fraction, 0.325, as Plotnykov & Valencia 2020 quote
+     it ("the Earth (cmf = 0.325 Wang et al. (2018))", with their
+     Figure 4; read in arXiv:2010.06480).
 
-The values, tables and pages read for entries 143 to 147 are in
+Entry 148 was read in Plotnykov & Valencia 2020 (entry 89). The values,
+tables and pages read for entries 143 to 147 are in
 [27-life-and-class-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit)
 and, for Carr & Head 2015,
 [22-surface-water (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/22-surface-water).
