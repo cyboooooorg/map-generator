@@ -81,11 +81,17 @@ const TITAN_SURFACE_TOLERANCE_K: f64 = 0.25;
 
 /// Calibration: how far under Titan's measured surface (less its
 /// uncertainty) the column may settle, K, for the warming it does not
-/// hold: 1.4. Its greenhouse is HITRAN's N₂–N₂, N₂–CH₄ and CH₄–CH₄ pairs
-/// (study 36, `docs/science/longwave-absorbers.md`), which settle the
+/// hold: 1.9. Its greenhouse is HITRAN's N₂–N₂, N₂–CH₄ and CH₄–CH₄ pairs
+/// (study 36, `docs/science/longwave-absorbers.md`), which settled the
 /// sourced column at 92.30 K, 1.35 K under the measured 93.65 K, with no
-/// fitted constant; the user accepted that on 2026-11-25, retiring the
-/// grey stand-in fitted on Titan (`CH4_OPACITY`, `CH4_SATURATION_BAR`).
+/// fitted constant; the user accepted that on 2026-11-25 (the bound was
+/// then 1.4 K), retiring the grey stand-in fitted on Titan
+/// (`CH4_OPACITY`, `CH4_SATURATION_BAR`). Since the column condenses N₂
+/// where its air saturates (issue #741), its dry adiabat saturates from
+/// about 0.65 bar up to the skin, and the column settles at 91.809 K,
+/// 1.841 K under the measurement: the user kept the condensation and
+/// refitted the bound by its rule on 2026-11-27 (study 39,
+/// `docs/science/nitrogen-phases.md`, "Titan's column against Huygens").
 /// The column misses N₂–H₂ pairs (Titan's H₂ is not a gas of the model,
 /// issue #720), methane's own lines (its rotational lines at 70 to
 /// 160 cm⁻¹, Bézard & Vinatier 2019), and the haze's infrared opacity;
@@ -95,12 +101,24 @@ const TITAN_SURFACE_TOLERANCE_K: f64 = 0.25;
 /// review's estimate, derived, issue #744). N₂–CH₄ absorption is linear
 /// in CH₄, so that is likely a large share of the gap. Each adds
 /// absorption, which can only warm a column whose temperature falls with
-/// height, so the test is one-sided: no warmer than the measurement, no
-/// colder than 93.65 − 0.25 − 1.4 = 92.00 K, a margin of 0.3 K under the
-/// column's 92.30 K. The bound is the measured gap rounded up. What was
-/// searched and not found: a split of Titan's greenhouse that gives each
-/// missing term in kelvin (study 36, "What we do not know").
-const TITAN_MISSING_WARMING_K: f64 = 1.4;
+/// height. The gap is not those absorbers alone: the column's
+/// troposphere is 4 to 8 K colder than Huygens's profile between 0.3 and
+/// 0.9 bar (no radiative upper troposphere, no methane latent heat in
+/// its adiabat, a skin 1.4 K under the measured tropopause; issue #750),
+/// and Huygens's profile, shifted on the same column until it balances,
+/// settles 3.1 to 4.2 K under the measured 93.65 K (2.9 to 4.0 K under
+/// the profile's own lowest point, 93.50 K; study 39): against the
+/// column's 1.841 K, the cold troposphere hides 1.2 to 2.3 K of the
+/// missing warming, and would cool the column once fixed. So the test is
+/// one-sided only for the missing absorbers (#720, #744, the haze): no
+/// warmer than the measurement, no colder than 93.65 − 0.25 − 1.9 =
+/// 91.50 K, a margin of 0.31 K under the column's 91.809 K. The bound is
+/// the measured gap rounded up, and is re-fitted by the same rule (not
+/// only re-checked) when #750 lands, since that fix moves the column
+/// colder. What was searched and not found: a split of Titan's
+/// greenhouse that gives each missing term in kelvin (study 36, "What we
+/// do not know").
+const TITAN_MISSING_WARMING_K: f64 = 1.9;
 
 /// Definition: the tolerance of `steam_share(1 bar)` against `1 − e⁻¹`,
 /// the rounding of an exponential.
@@ -271,7 +289,9 @@ fn titans_pairs_hold_its_column_just_under_its_measured_surface() {
     // stratosphere, warmed by its nitrogen and methane pairs alone, sits
     // at most `TITAN_MISSING_WARMING_K` under Titan's measured surface:
     // what it lacks (N₂–H₂ pairs, #720; methane's lines; the haze's
-    // infrared) would warm it.
+    // infrared) would warm it. Its troposphere is too cold aloft (#750),
+    // which hides 1.2 to 2.3 K more of the missing warming: fixing it
+    // cools the column, and the bound is re-fitted then.
     let t = surface_temperature(
         starlight_of(Kelvin(TITAN_EFFECTIVE_K)),
         &TITAN_SURFACE_AIR,

@@ -27,7 +27,8 @@ matter more than the numbers:
   +0.2 K.
 - The **nitrogen and methane pairs** of HITRAN's collision-induced files
   put a spectral Titan at 92.30 K without any fitted constant (measured:
-  93.65 K), and replaced the calibrated grey opacity the column needed
+  93.65 K; 91.81 K since N₂ condenses in its upper troposphere, issue
+  #741), and replaced the calibrated grey opacity the column needed
   before. On
   thick nitrogen airs the pairs grow with the pressure squared: −3.3 W/m²
   at 5 bar.
@@ -187,9 +188,17 @@ do now.
   15.1, `CH4_SATURATION_BAR` 0.01 bar, both calibrations on Titan) is
   gone. The sourced Titan column settles at 92.296 K against the
   measured 93.65 ± 0.25 K (it was 93.60 K with the stand-in). The
-  tier-1 test allows 1.4 K under the measurement, a calibration on the
-  measured gap: its floor is 93.65 − 0.25 − 1.4 = 92.00 K, 0.3 K under
-  the column's 92.30 K. It is for what the column lacks: N₂–H₂ pairs
+  tier-1 test allowed 1.4 K under the measurement, a calibration on the
+  measured gap: its floor was 93.65 − 0.25 − 1.4 = 92.00 K, 0.3 K under
+  the column's 92.30 K. Since N₂ condenses in the column's upper
+  troposphere (issue #741) the column settles at 91.81 K, and the user
+  refitted the bound by the same rule on 2026-11-27: 1.9 K, a floor of
+  91.50 K, 0.31 K under it. Part of the gap is the column's own
+  troposphere, 4 to 8 K colder than Huygens's between 0.3 and 0.9 bar
+  (issue #750), which hides 1.2 to 2.3 K of the missing warming and
+  would cool the column once fixed (study 39,
+  [Nitrogen phases](nitrogen-phases.md#titans-column-against-huygens)),
+  so the bound is one-sided only for the missing absorbers: N₂–H₂ pairs
   (issue #720), methane's own lines, the haze's infrared, and the
   methane of the lower troposphere: the column applies the cold trap's
   mixing ratio (`radiating_methane_bar`) at every level, so it holds

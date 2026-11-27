@@ -303,7 +303,7 @@ const NITROGEN_TRANSITION_K: f64 = 35.61;
 /// Source: Span, Lemmon, Jacobsen, Wagner & Yokozeki 2000 (J. Phys.
 /// Chem. Ref. Data 29, 1361, doi:10.1063/1.1349047), the tables
 /// "Thermodynamic properties of nitrogen on the saturation line as a
-/// function of temperature" (pp. 1405-1406) and "of pressure" (p. 1407,
+/// function of temperature" (pp. 1403-1405) and "of pressure" (p. 1407,
 /// for the normal boiling point): (T in K, p in MPa), computed from
 /// their equation of state.
 const SPAN_TABLE: [(f64, f64); 6] = [
@@ -443,6 +443,145 @@ fn nitrogen_saturation_joins_its_frost() {
     println!(
         "N2 at {t} K: Span {span:.4} bar, Antoine {antoine:.4} bar ({:+.3} %)",
         100.0 * (span / antoine - 1.0)
+    );
+}
+
+/// Source: N2 on its saturation line, Span et al. 2000
+/// (doi:10.1063/1.1349047), the table "Thermodynamic properties of
+/// nitrogen on the saturation line as a function of temperature", p. 1403
+/// of the NIST reprint (read 2026-11-26): `(T K, liquid density mol/dm3,
+/// vapour density mol/dm3, liquid enthalpy J/mol, vapour enthalpy
+/// J/mol)` at the triple point, 70 K and 77 K.
+const SPAN_SATURATED: [(f64, f64, f64, f64, f64); 3] = [
+    (63.151, 30.957, 0.024_07, -4222.6, 1814.7),
+    (70.0, 29.933, 0.067_68, -3837.0, 1991.7),
+    (77.0, 28.832, 0.158_38, -3438.5, 2153.9),
+];
+/// Definition: litres per cubic metre, 1000, to turn the table's mol/dm3
+/// into a molar volume in m3/mol.
+const LITRES_PER_CUBIC_METRE: f64 = 1e3;
+/// Calibration: relative tolerance of N2's liquid curve's slope against
+/// Clapeyron's with [`SPAN_SATURATED`]'s real enthalpy and volume of
+/// vaporisation, 0.1 %. Both come from Span et al. 2000 (the curve is
+/// their vapour-pressure equation, the table their equation of state):
+/// measured within 0.024 % at the three temperatures, so 0.1 % sits a
+/// factor 4 above; no published tolerance between the two was found.
+const NITROGEN_CLAPEYRON_TOLERANCE: f64 = 1e-3;
+/// Definition: joules per thermochemical calorie, 4.184, the calorie of
+/// NBS Circular 500's kcal/mole ("1 cal = 4.1840 abs joule ...;
+/// definition", its introduction).
+const JOULES_PER_CALORIE: f64 = 4.184;
+/// Source: N2's enthalpy of fusion (c, I to liquid) at 63.15 K and 94 mm
+/// Hg, 0.172 kcal/mole (0.7196 kJ/mol), Rossini, F. D. et al. 1952,
+/// "Selected Values of Chemical Thermodynamic Properties", NBS Circular
+/// 500, Series II, Table 18-1, p. 561 (read 2026-11-27, through the NIST
+/// scan <https://nvlpubs.nist.gov/nistpubs/Legacy/circ/nbscircular500.pdf>,
+/// PDF page 569; its references include Giauque & Clayton 1933).
+const NITROGEN_FUSION_KCAL_MOL: f64 = 0.172;
+/// Calibration: relative tolerance of N2's latent heat over its frost at
+/// the triple point against the sublimation enthalpy Span et al.'s
+/// vaporisation and NBS's fusion add up to, 2 %, CO2's tolerance for the
+/// same check ([`LATENT_TOLERANCE`]). The code's heat is the ideal-vapour
+/// slope of the frost's fit, 1.75 % under that sum (measured); 2 % keeps
+/// the check, and fails the liquid's heat read over the frost (9.7 %
+/// under). `docs/science/nitrogen-phases.md`, "What the code does since".
+const NITROGEN_SUBLIMATION_TOLERANCE: f64 = 2e-2;
+/// Definition: the temperatures, K, at which N2's readers over each
+/// condensate are checked against its saturation curve: across the alpha-beta
+/// transition, the frost, the triple point and the liquid, to past the
+/// critical point.
+const NITROGEN_OVER_CHECKS_K: [f64; 9] = [0.5, 20.0, 40.0, 59.25, 63.0, 63.14, 70.0, 120.0, 130.0];
+
+#[test]
+fn nitrogen_latent_heat_is_the_curves_slope() {
+    // Clapeyron, dp/dT = Δh / (T Δv), with the real enthalpy and volume
+    // of vaporisation of Span et al.'s table: the liquid curve's slope,
+    // which the latent heat over liquid is read from, must agree.
+    for (t, rho_l, rho_v, h_l, h_v) in SPAN_SATURATED {
+        let dv = (1.0 / rho_v - 1.0 / rho_l) / LITRES_PER_CUBIC_METRE;
+        let clapeyron = (h_v - h_l) / (t * dv);
+        let latent = nitrogen_latent_j_mol_over(t, Condensate::Liquid);
+        let p = nitrogen_saturation_bar_over(t, Condensate::Liquid) * PASCALS_PER_BAR;
+        let slope = p * latent / (MOLAR_GAS_CONSTANT * t * t);
+        println!(
+            "N2 at {t} K: slope {slope:.1} Pa/K against {clapeyron:.1} ({:+.3} %); ideal-vapour \
+             heat {latent:.1} J/mol against {:.1} ({:+.2} %)",
+            100.0 * (slope / clapeyron - 1.0),
+            h_v - h_l,
+            100.0 * (latent / (h_v - h_l) - 1.0)
+        );
+        assert!(
+            close(slope, clapeyron, NITROGEN_CLAPEYRON_TOLERANCE),
+            "{t} K: {slope} against {clapeyron}"
+        );
+    }
+    // Across the triple point the heat jumps up by fusion's: the frost's
+    // curve is steeper than the liquid's (a solid holds less entropy).
+    // The two fits' jump falls short of the measured fusion (a declared
+    // simplification: each heat is its own curve's slope), but the
+    // frost's heat meets the sublimation enthalpy, vaporisation plus
+    // fusion, at the triple point.
+    let t = NITROGEN_TRIPLE_TEMPERATURE.0;
+    let (frost, liquid) = (
+        nitrogen_latent_j_mol_over(t, Condensate::Ice),
+        nitrogen_latent_j_mol_over(t, Condensate::Liquid),
+    );
+    let fusion = NITROGEN_FUSION_KCAL_MOL * 1e3 * JOULES_PER_CALORIE;
+    let (_, _, _, h_l, h_v) = SPAN_SATURATED[0];
+    let sublimation = h_v - h_l + fusion;
+    println!(
+        "N2 at {t} K: frost {frost:.1} J/mol, liquid {liquid:.1} J/mol, jump {:.1} against \
+         fusion {fusion:.1} J/mol; sublimation {sublimation:.1} J/mol ({:+.2} %)",
+        frost - liquid,
+        100.0 * (frost / sublimation - 1.0)
+    );
+    assert!(frost > liquid, "{frost} <= {liquid}");
+    assert!(
+        close(frost, sublimation, NITROGEN_SUBLIMATION_TOLERANCE),
+        "{frost} against {sublimation}"
+    );
+}
+
+#[test]
+fn nitrogen_reads_either_curve_over_its_condensate() {
+    // A contract test: it checks the readers against the code's own
+    // saturation curve (the same bits over the stable condensate, the
+    // holds past each curve's end), not against a published value.
+    // Over the condensate stable at a temperature, the readers are the
+    // saturation curve itself; over the other, the liquid's curve goes on
+    // a little under the triple point, and the frost's is held at the
+    // triple point above it.
+    for t in NITROGEN_OVER_CHECKS_K.into_iter().chain([f64::NAN]) {
+        let stable = nitrogen_condensate(t);
+        let over = nitrogen_saturation_bar_over(t, stable);
+        let curve = nitrogen_saturation_bar(t);
+        assert_eq!(
+            over.to_bits(),
+            curve.to_bits(),
+            "{t} K: {over} against {curve}"
+        );
+    }
+    let triple = NITROGEN_TRIPLE_TEMPERATURE.0;
+    let held = nitrogen_saturation_bar_over(triple + 1.0, Condensate::Ice);
+    assert_eq!(held, NITROGEN_TRIPLE_PRESSURE.0 / PASCALS_PER_BAR);
+    let frost_heat = nitrogen_latent_j_mol_over(triple, Condensate::Ice);
+    assert_eq!(
+        nitrogen_latent_j_mol_over(triple + 1.0, Condensate::Ice),
+        frost_heat
+    );
+    let under = nitrogen_saturation_bar_over(triple - 0.1, Condensate::Liquid);
+    assert!(
+        under > 0.0 && under < nitrogen_saturation_bar(triple),
+        "{under}"
+    );
+    let critical = NITROGEN_CRITICAL_TEMPERATURE.0;
+    assert_eq!(
+        nitrogen_saturation_bar_over(critical, Condensate::Liquid),
+        f64::INFINITY
+    );
+    assert_eq!(
+        nitrogen_latent_j_mol_over(critical, Condensate::Liquid),
+        0.0
     );
 }
 

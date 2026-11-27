@@ -14,9 +14,13 @@
 //! doi:10.1016/0019-1035(91)90137-I, Appendix B, as Kopparapu et al. 2013,
 //! *ApJ* 765, 131, doi:10.1088/0004-637X/765/2/131, §2, follow it; the
 //! Appendix itself is paywalled and was not read), so that a thick CO₂
-//! air's greenhouse flattens. A skin temperature floors the column (a
-//! stratosphere, where the vapour and the CO₂ keep the mixing ratio of
-//! their cold trap).
+//! air's greenhouse flattens. Where its nitrogen reaches its own
+//! saturation, at any height (over N₂ frost or liquid from the ground up,
+//! or aloft where a cold air's adiabat meets N₂'s curve, as the sourced
+//! Titan's does near 0.65 bar), the air follows N₂'s pseudo-adiabat the
+//! same way (issue #741, studies 38 and 39). A skin
+//! temperature floors the column (a stratosphere, where the vapour, the
+//! CO₂ and the N₂ keep the mixing ratio of their cold trap).
 //!
 //! The radiation is summed bin by bin over the thermal infrared
 //! ([`super::spectrum`]): in each bin the transmission to space of CO₂'s
@@ -45,7 +49,7 @@
 //! is the moist limit a wet surface runs away past.
 //!
 //! The water saturation and its latent heat are IAPWS's
-//! ([`crate::water`]), the CO₂ and methane ones those of
+//! ([`crate::water`]), the CO₂, N₂ and methane ones those of
 //! [`crate::volatiles`]. The memo of the columns already solved and the
 //! single-precision workspace of the sum belong to the caller
 //! ([`ColumnCache`]).
@@ -59,11 +63,13 @@ use super::gases::{
 use super::spectrum::{
     self, BANDS, BINS, DIFFUSIVITY, FastLevel, G, POINTS, TAIL, planck_spectrum,
 };
-use crate::constants::{MOLAR_GAS_CONSTANT, STEFAN_BOLTZMANN};
+use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STEFAN_BOLTZMANN};
 use crate::units::{Kelvin, MetrePerSecondSquared, WattPerSquareMetre};
 use crate::volatiles::{
-    CO2_TRIPLE_TEMPERATURE, co2_condensate, co2_latent_j_mol_over, co2_saturation_bar,
-    co2_saturation_bar_over, methane_saturation_bar,
+    CO2_TRIPLE_TEMPERATURE, NITROGEN_CRITICAL_PRESSURE, NITROGEN_CRITICAL_TEMPERATURE,
+    NITROGEN_TRIPLE_TEMPERATURE, co2_condensate, co2_latent_j_mol_over, co2_saturation_bar,
+    co2_saturation_bar_over, methane_saturation_bar, nitrogen_condensate,
+    nitrogen_latent_j_mol_over, nitrogen_saturation_bar, nitrogen_saturation_bar_over,
 };
 use crate::water::{
     CRITICAL_POINT_TEMPERATURE, Condensate, TRIPLE_POINT_TEMPERATURE, vapour_latent_j_mol_over,
@@ -355,6 +361,13 @@ impl DryAir {
         } else {
             0.0
         };
+        self.with_co2_and_share(vapour_bar, co2_bar, share)
+    }
+
+    /// The gases of a level holding `vapour_bar` of vapour and `co2_bar`
+    /// of CO₂, each other gas at `share` of its surface pressure (the
+    /// methane, of what radiates of it).
+    fn with_co2_and_share(&self, vapour_bar: f64, co2_bar: f64, share: f64) -> PartialPressures {
         PartialPressures {
             n2: self.gases.n2 * share,
             co2: co2_bar,
@@ -376,6 +389,61 @@ impl DryAir {
         if others > 0.0 {
             (g.n2 * N2_HEAT_CAPACITY
                 + g.ch4 * CH4_HEAT_CAPACITY
+                + g.nh3 * NH3_HEAT_CAPACITY
+                + g.so2 * SO2_HEAT_CAPACITY
+                + g.o2 * O2_HEAT_CAPACITY
+                + g.ar * ar_heat_capacity())
+                / others
+        } else {
+            N2_HEAT_CAPACITY
+        }
+    }
+
+    /// The gases that radiate at a level where the dry air has `dry_bar`,
+    /// the vapour `vapour_bar`, the CO₂ `co2_bar` and the N₂ `n2_bar`,
+    /// once N₂'s condensation has thinned it ([`with_column`]): as
+    /// [`DryAir::with_co2`], the gases other than CO₂ and N₂ sharing the
+    /// rest in their surface proportions.
+    fn with_condensed(
+        &self,
+        dry_bar: f64,
+        vapour_bar: f64,
+        co2_bar: f64,
+        n2_bar: f64,
+    ) -> PartialPressures {
+        let others = self.pressure - self.gases.co2 - self.gases.n2;
+        let share = if others > 0.0 {
+            (dry_bar - co2_bar - n2_bar).max(0.0) / others
+        } else {
+            0.0
+        };
+        PartialPressures {
+            n2: n2_bar,
+            ..self.with_co2_and_share(vapour_bar, co2_bar, share)
+        }
+    }
+
+    /// N₂'s share of the dry air at a level whose CO₂ holds `co2_share`
+    /// of it and whose N₂ has not condensed: what [`DryAir::with_co2`]
+    /// gives it.
+    fn n2_share(&self, co2_share: f64) -> f64 {
+        let others = self.pressure - self.gases.co2;
+        if others > 0.0 {
+            self.gases.n2 * (1.0 - co2_share) / others
+        } else {
+            0.0
+        }
+    }
+
+    /// Molar heat capacity, J/(mol·K), of the gases other than N₂ and
+    /// CO₂: the air N₂ condenses out of ([`n2_lapse`]), where CO₂ is
+    /// frozen out (its frost holds 1.4e-4 bar at N₂'s critical point,
+    /// [`co2_saturation_bar`]); nitrogen's when there is none.
+    fn cp_without_n2(&self) -> f64 {
+        let g = &self.gases;
+        let others = g.ch4 + g.nh3 + g.so2 + g.o2 + g.ar;
+        if others > 0.0 {
+            (g.ch4 * CH4_HEAT_CAPACITY
                 + g.nh3 * NH3_HEAT_CAPACITY
                 + g.so2 * SO2_HEAT_CAPACITY
                 + g.o2 * O2_HEAT_CAPACITY
@@ -447,7 +515,7 @@ fn co2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: Co
 ///
 /// The latent heat jumps by fusion's at CO₂'s triple point (216.592 K,
 /// [`CO2_TRIPLE_TEMPERATURE`], Span & Wagner 1996), so a step that
-/// crosses it is split there, as water's is ([`saturated_step`]): liquid
+/// crosses it is split there, as water's is ([`split_step`]): liquid
 /// down to where the step over liquid alone reaches the triple point
 /// (`T` taken linear across the step), frost below. Without the split
 /// the phase of the midpoint decides the whole step, and the column
@@ -456,28 +524,73 @@ fn co2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: Co
 /// 1.3 W/m² over 0.005 K of its surface, and a methane Earth's collapse
 /// past its outer edge stopped on the jump (#703, 1.272 AU).
 fn co2_step(air: &DryAir, temperature_k: f64, pressure_bar: f64, h: f64) -> f64 {
-    let step = |t: f64, from: f64, h: f64, condensate: Condensate| {
-        let half = t - 0.5 * h * co2_lapse(air, t, from, condensate);
-        t - h * co2_lapse(air, half, from * (-0.5 * h).exp(), condensate)
-    };
-    let t = temperature_k;
-    let triple = CO2_TRIPLE_TEMPERATURE;
-    let condensate = co2_condensate(t);
-    if condensate == Condensate::Ice {
-        return step(t, pressure_bar, h, condensate);
-    }
-    let liquid = step(t, pressure_bar, h, condensate);
-    if liquid >= triple {
-        return liquid;
-    }
-    let f = (t - triple) / (t - liquid);
-    let frozen = step(t, pressure_bar, f * h, Condensate::Liquid);
-    step(
-        frozen,
-        pressure_bar * (-f * h).exp(),
-        (1.0 - f) * h,
-        Condensate::Ice,
+    let lapse = |t: f64, p: f64, condensate: Condensate| co2_lapse(air, t, p, condensate);
+    split_step(
+        temperature_k,
+        pressure_bar,
+        h,
+        (CO2_TRIPLE_TEMPERATURE, co2_condensate(temperature_k)),
+        lapse,
     )
+}
+
+/// `d T / d ln p`, K, at `temperature_k` and `pressure_bar` on the moist
+/// pseudo-adiabat of N₂ condensing out of `air` over `condensate`
+/// ([`pseudo_adiabat`] with N₂ the condensable, its curve and latent heat
+/// over that condensate, [`nitrogen_saturation_bar_over`] and
+/// [`nitrogen_latent_j_mol_over`], and the gases other than N₂ and CO₂
+/// the non-condensing part, [`DryAir::cp_without_n2`]): the
+/// pseudo-adiabat CO₂ follows ([`co2_lapse`]) with N₂'s vapour pressure,
+/// as Charnay et al. 2014 (§2) condense nitrogen wherever their air falls
+/// under its saturation temperature. A pure N₂ air follows its
+/// saturation curve, `d T / d ln p = R T² / L` (Pierrehumbert 2010,
+/// §2.7): 4.8 K per e-fold of pressure at 62 K against the dry adiabat's
+/// 17.7 K (study 38, `docs/science/nitrogen-phases.md`).
+fn n2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: Condensate) -> f64 {
+    let t = temperature_k;
+    pseudo_adiabat(
+        t,
+        pressure_bar,
+        nitrogen_saturation_bar_over(t, condensate),
+        nitrogen_latent_j_mol_over(t, condensate),
+        air.cp_without_n2(),
+        N2_HEAT_CAPACITY,
+    )
+}
+
+/// The temperature, K, a step of `h` in `ln p` up N₂'s pseudo-adiabat
+/// reaches from `temperature_k` at `pressure_bar` ([`n2_lapse`]), split at
+/// N₂'s triple point (63.14 K, [`NITROGEN_TRIPLE_TEMPERATURE`], Angus et
+/// al. 1979, where [`crate::volatiles::nitrogen_saturation_pressure`]
+/// switches from the liquid's curve to the frost's) as CO₂'s is
+/// ([`split_step`]): a cold N₂ body sits on that point (its frost and its
+/// liquid both stable under one light, study 38), so its column crosses
+/// it exactly where its climate is decided.
+fn n2_step(air: &DryAir, temperature_k: f64, pressure_bar: f64, h: f64) -> f64 {
+    let lapse = |t: f64, p: f64, condensate: Condensate| n2_lapse(air, t, p, condensate);
+    split_step(
+        temperature_k,
+        pressure_bar,
+        h,
+        (
+            NITROGEN_TRIPLE_TEMPERATURE.0,
+            nitrogen_condensate(temperature_k),
+        ),
+        lapse,
+    )
+}
+
+/// `ln(n2_bar / p_sat)` at `temperature_k`, N₂'s excess over its
+/// saturation ([`nitrogen_saturation_bar`]); from the critical point up,
+/// over the critical pressure, where the liquid's curve ends (Span et al.
+/// 2000), so that it stays finite.
+fn n2_excess(temperature_k: f64, n2_bar: f64) -> f64 {
+    let saturation = if temperature_k >= NITROGEN_CRITICAL_TEMPERATURE.0 {
+        NITROGEN_CRITICAL_PRESSURE.0 / PASCALS_PER_BAR
+    } else {
+        nitrogen_saturation_bar(temperature_k)
+    };
+    (n2_bar / saturation).ln()
 }
 
 /// `d T / d ln p`, K, at `temperature_k` on the dry adiabat of air
@@ -515,8 +628,8 @@ fn water_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: 
 /// where it starts ([`water_lapse`]).
 ///
 /// The latent heat jumps by fusion's at the triple point (273.16 K), so a
-/// step that crosses it is split there, as the step where the vapour
-/// first saturates is: liquid up to where the step over liquid alone
+/// step that crosses it is split there ([`split_step`]), as the step
+/// where the vapour first saturates is: liquid up to where the step over liquid alone
 /// reaches 273.16 K (`T` taken linear across the step), ice above.
 /// Without the split, the phase of the midpoint decides the whole step,
 /// and the column above jumps colder when the surface moves the midpoint
@@ -524,24 +637,53 @@ fn water_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: 
 /// outgoing radiation). The triple point is a `Source:`
 /// ([`TRIPLE_POINT_TEMPERATURE`], IAPWS R10-06(2009), Table 1).
 fn saturated_step(air: &DryAir, temperature_k: f64, pressure_bar: f64, h: f64) -> f64 {
+    let lapse = |t: f64, p: f64, condensate: Condensate| water_lapse(air, t, p, condensate);
+    split_step(
+        temperature_k,
+        pressure_bar,
+        h,
+        (TRIPLE_POINT_TEMPERATURE.0, Condensate::at(temperature_k)),
+        lapse,
+    )
+}
+
+/// The temperature, K, a step of `h` in `ln p` up a condensable's
+/// pseudo-adiabat reaches from `temperature_k` at `pressure_bar`: a
+/// midpoint (second-order Runge–Kutta) step of `lapse` (`d T / d ln p` at
+/// a temperature and a pressure over a condensate) over `stable`, the
+/// condensate stable where it starts, with `triple` the condensable's
+/// triple-point temperature, K.
+///
+/// The latent heat jumps by fusion's at the triple point, so a step that
+/// crosses it is split there: liquid down to where the step over liquid
+/// alone reaches the triple point (`T` taken linear across the step),
+/// frost below. Without the split, the phase of the midpoint decides the
+/// whole step, and the column above jumps when the surface moves the
+/// midpoint across the triple point (water's [`saturated_step`], CO₂'s
+/// [`co2_step`], N₂'s [`n2_step`]).
+fn split_step(
+    temperature_k: f64,
+    pressure_bar: f64,
+    h: f64,
+    (triple, stable): (f64, Condensate),
+    lapse: impl Fn(f64, f64, Condensate) -> f64,
+) -> f64 {
     let step = |t: f64, from: f64, h: f64, condensate: Condensate| {
-        let half = t - 0.5 * h * water_lapse(air, t, from, condensate);
-        t - h * water_lapse(air, half, from * (-0.5 * h).exp(), condensate)
+        let half = t - 0.5 * h * lapse(t, from, condensate);
+        t - h * lapse(half, from * (-0.5 * h).exp(), condensate)
     };
     let t = temperature_k;
-    let triple = TRIPLE_POINT_TEMPERATURE.0;
-    let condensate = Condensate::at(t);
-    if condensate == Condensate::Ice {
-        return step(t, pressure_bar, h, condensate);
+    if stable == Condensate::Ice {
+        return step(t, pressure_bar, h, stable);
     }
-    let liquid = step(t, pressure_bar, h, condensate);
+    let liquid = step(t, pressure_bar, h, stable);
     if liquid >= triple {
         return liquid;
     }
     let f = (t - triple) / (t - liquid);
-    let melted = step(t, pressure_bar, f * h, Condensate::Liquid);
+    let frozen = step(t, pressure_bar, f * h, Condensate::Liquid);
     step(
-        melted,
+        frozen,
         pressure_bar * (-f * h).exp(),
         (1.0 - f) * h,
         Condensate::Ice,
@@ -903,6 +1045,14 @@ fn with_column<R>(
         0.0
     };
     let mut co2_saturated = false;
+    // N₂'s share of the dry air once its condensation has thinned it (as
+    // the CO₂'s, but kept apart until then so that a column whose N₂ never
+    // condenses keeps its gases' bits), and whether the air follows N₂'s
+    // pseudo-adiabat ([`n2_lapse`]): from where its N₂ reaches its
+    // saturation, the air's main gas, it does whatever the vapour and the
+    // CO₂ (frozen out so cold) do.
+    let mut n2_share: Option<f64> = None;
+    let mut n2_saturated = false;
     // The vapour that radiates: in the climate's columns the troposphere's
     // relative humidity falls with the pressure from the surface's
     // ([`relative_humidity`]), the temperature still following the
@@ -929,7 +1079,11 @@ fn with_column<R>(
                 v = v.min(profile * vapour_saturation_bar(t));
             }
         }
-        let level = air.with_co2(p - v, v, co2_share * (p - v));
+        let dry_here = p - v;
+        let level = match n2_share {
+            None => air.with_co2(dry_here, v, co2_share * dry_here),
+            Some(n2) => air.with_condensed(dry_here, v, co2_share * dry_here, n2 * dry_here),
+        };
         temperature[i] = t;
         levels[i] = level;
         if i == n {
@@ -952,7 +1106,9 @@ fn with_column<R>(
         // where it does (the excess `ln(p_CO₂ / p_sat)` taken linear
         // across the step), so that the column moves smoothly with its
         // CO₂.
-        if co2_saturated {
+        if n2_saturated {
+            t = n2_step(&air, t, p_here, h);
+        } else if co2_saturated {
             t = co2_step(&air, t, p_here, h);
         } else {
             let mut next = if saturated {
@@ -1000,9 +1156,28 @@ fn with_column<R>(
                 t = next;
             }
         }
-        // The cold trap: where the air reaches the skin, its vapour and its
-        // CO₂ keep the mixing ratio saturation leaves there, at the
-        // pressure where it does (`t` taken linear across the step), so
+        // The step in which N₂ first saturates is split where it does, as
+        // CO₂'s is (the excess `ln(p_N₂ / p_sat)` taken linear across the
+        // step), the rest taken on N₂'s pseudo-adiabat. Above N₂'s
+        // critical point it does not condense.
+        if !n2_saturated && level.n2 > 0.0 && t < NITROGEN_CRITICAL_TEMPERATURE.0 {
+            let share = n2_share.unwrap_or_else(|| air.n2_share(co2_share));
+            let below = n2_excess(start, level.n2);
+            let above = n2_excess(t, share * p * (1.0 - vapour_share));
+            if above >= 0.0 {
+                let f = if below >= 0.0 {
+                    0.0
+                } else {
+                    below / (below - above)
+                };
+                let crossed = start + f * (t - start);
+                t = n2_step(&air, crossed, p_here * (-f * h).exp(), (1.0 - f) * h);
+                n2_saturated = true;
+            }
+        }
+        // The cold trap: where the air reaches the skin, its vapour, its
+        // CO₂ and its N₂ keep the mixing ratio saturation leaves there, at
+        // the pressure where it does (`t` taken linear across the step), so
         // that it moves smoothly with the grid and the surface.
         let mut trap = p;
         if t <= skin_k {
@@ -1026,6 +1201,13 @@ fn with_column<R>(
         let dry = trap * (1.0 - vapour_share);
         if dry > 0.0 {
             co2_share = co2_share.min(co2_saturation_bar(t) / dry);
+            if t < NITROGEN_CRITICAL_TEMPERATURE.0 {
+                let share = n2_share.unwrap_or_else(|| air.n2_share(co2_share));
+                let most = nitrogen_saturation_bar(t) / dry;
+                if most < share {
+                    n2_share = Some(most);
+                }
+            }
         }
     }
 
