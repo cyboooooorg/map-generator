@@ -96,26 +96,30 @@ pub(crate) const COLLAPSE_TOLERANCE: f64 = 1e-4;
 /// "Solver constants"; `collapse_iterations_is_converged`), but with
 /// #703's pairs a methane Earth just past its outer edge collapses from
 /// 14.2 to about 9.3 bar with a gap of only 0.02 to 0.09 bar, and needs
-/// up to 91 steps at [`COLLAPSE_STEP`], 140 at half of it and 207 with
+/// up to 91 steps at the old [`COLLAPSE_STEP`] (0.005), 140 at half of it and 207 with
 /// the plain step (measured at 1.25 to 1.268 AU); stopped at 100, the
 /// climate kept depended on the step. 300 is the plain step's 207 with
 /// half again as margin.
 pub(crate) const COLLAPSE_ITERATIONS: usize = 300;
 
-/// Calibration: the longest step of a collapse, as a share of its CO₂,
-/// 0.005 (#731): 0.085 bar at 17 bar. A warm balance whose pocket of CO₂
-/// is narrower than one step can be stepped over, where the plain
-/// iteration would stop in it; at half of it a methane Earth's climates
-/// around its outer edge do not move, a convergence test in tier 3
-/// (`collapse_step_is_converged`, at 1.25, 1.2534 and 1.264 AU since
-/// #703's pairs and #746). Measured at the full, half and quarter step
-/// and the plain one: 0.11 K apart at most at 1.268 AU, a converged
-/// climate; 0.08 K on the cycle's cold side at 1.264 AU, 0.33 K at
-/// 1.262 AU. They moved by up to 5.6 K while [`COLLAPSE_ITERATIONS`] cut
-/// the slow collapses short (#747) ("A collapse from the fold (#731)"
-/// in `docs/science/planet-atmospheres.md`).
+/// Calibration: the longest step of a collapse while its gap rises or
+/// stays flat, as a share of its CO₂, 0.05 (#731): 0.85 bar at 17 bar.
+/// Once the gap falls by more than its noise, the step goes to the
+/// secant's zero, with no cap but twice the last step
+/// ([`wet::collapse_search`]). It was 0.005 for
+/// every step until 2026-11-27, which kept a methane Earth's collapses
+/// round cool stars at up to 45 (3300 K) and 85 (4500 K) evaluations
+/// (#731). A warm balance whose
+/// pocket of CO₂ is narrower than one step can be stepped over, where the
+/// plain iteration would stop in it; at half of it a methane Earth's
+/// climates around its outer edge, and its frozen climates round 4500 and
+/// 3300 K stars, move under `ALBEDO_TOLERANCE_K`, and the frozen ones
+/// stay within 0.002 K of the plain step, which holds the falling rule
+/// (it has no constant to halve): a convergence test in tier 3
+/// (`collapse_step_is_converged`) ("A collapse from the fold (#731)" in
+/// `docs/science/planet-atmospheres.md`).
 /// Zero steps the collapse plainly, as legacy did.
-pub(crate) const COLLAPSE_STEP: f64 = 0.005;
+pub(crate) const COLLAPSE_STEP: f64 = 0.05;
 
 /// Calibration: the bisection steps of the thaw search, 13 (legacy
 /// `THAW_STEPS` was 12). Study 25 ("Solver constants"): at 16 steps

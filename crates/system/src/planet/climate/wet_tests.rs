@@ -420,13 +420,22 @@ fn a_collapse_from_the_fold_reaches_the_cold_balance_in_fewer_steps() {
 
 #[test]
 fn a_collapse_stops_at_a_warm_balance_wider_than_its_step() {
-    // A warm balance between 16.53 and 16.67 bar, wider than a step
-    // (0.083 bar there): the plain iteration stops at its upper root, and
-    // so must the search.
-    let dips = [(0.15, 16.6, 0.05)];
+    // A warm balance from 16.515 down to 15.110 bar, wider than a rising
+    // step there (`COLLAPSE_STEP` of the CO₂, 0.83 bar), and away from the
+    // fold: the plain iteration stops at its upper root, and so must the
+    // search.
+    let dips = [(4.0, 15.4, 0.5)];
+    let negative = (0..4000)
+        .map(|i| FOLD - 0.001 * f64::from(i))
+        .filter(|&c| synthetic_gap(c, &dips) < 0.0)
+        .count();
+    assert!(
+        0.001 * negative as f64 > COLLAPSE_STEP * 16.515,
+        "the balance is {negative} thousandths of a bar wide"
+    );
     let (plain, plain_steps) = synthetic_collapse(&dips, 0.0);
     let (fast, fast_steps) = synthetic_collapse(&dips, COLLAPSE_STEP);
-    assert!((plain - 16.67).abs() < 0.01, "{plain}");
+    assert!((plain - 16.525).abs() < 0.01, "{plain}");
     assert!((fast - plain).abs() < 0.01, "{fast} against {plain}");
     // At most within its noise below the root, where it holds.
     assert!(
@@ -437,6 +446,43 @@ fn a_collapse_stops_at_a_warm_balance_wider_than_its_step() {
         fast_steps * 3 < plain_steps,
         "{fast_steps} against {plain_steps}"
     );
+}
+
+#[test]
+fn a_collapse_steps_over_a_warm_balance_narrower_than_its_step() {
+    // A warm balance between 16.53 and 16.67 bar, narrower than a rising
+    // step (0.83 bar there): the plain iteration stops at its upper root,
+    // the search steps over it to the cold balance. This is the limit the
+    // user accepted on 2026-11-27 for the faster collapse (#731).
+    let dips = [(0.15, 16.6, 0.05)];
+    let (plain, _) = synthetic_collapse(&dips, 0.0);
+    let (fast, _) = synthetic_collapse(&dips, COLLAPSE_STEP);
+    assert!((plain - 16.67).abs() < 0.01, "{plain}");
+    assert!((fast - 0.6).abs() < 1e-3, "{fast}");
+}
+
+#[test]
+fn a_falling_gap_closes_on_its_root_by_the_secant() {
+    // A collapse in the shape traced round a 3300 K star (#731): from
+    // 45.9 bar, `g` rises from 0.026 bar to 2.9 bar near 24 bar, then
+    // falls to its root at 2.2 bar. Once `g` falls, the secant's zero is
+    // not capped by `COLLAPSE_STEP`: 21 evaluations, against 49 with the
+    // capped secant and 62 plain (simulated).
+    let gap = |c: f64| 0.00605 * (c - 2.2) * (46.0 - c);
+    let (c, (), n, held) = collapse_search(
+        45.9,
+        |c| Kept {
+            kept: c - gap(c),
+            noise: 0.0016 + 0.0097 * c / 45.9,
+            state: (),
+        },
+        COLLAPSE_TOLERANCE,
+        COLLAPSE_ITERATIONS,
+        COLLAPSE_STEP,
+    );
+    assert!(held, "{c} after {n}");
+    assert!((c - 2.2).abs() < 0.01, "{c}");
+    assert!(n <= 25, "{n} evaluations");
 }
 
 #[test]
@@ -542,5 +588,50 @@ fn a_collapse_stops_where_its_gap_jumps_across_a_root() {
             held && n <= plain && n < COLLAPSE_ITERATIONS,
             "from {start}: {n} steps against {plain}"
         );
+    }
+}
+
+#[test]
+fn a_noisy_rising_gap_keeps_its_steps_under_the_cap() {
+    // A gap that rises slowly from 17 down to 8 bar (0.002 bar a bar),
+    // then falls to its root at 2 bar, with a jitter of 0.003 bar, under
+    // its noise of 0.005 bar: a solve to 0.01 K jumps by about that much.
+    // A jitter that makes `g` dip must not pass for a falling gap: while
+    // the gap rises, a step stays the plain one or at most `COLLAPSE_STEP`
+    // of the CO₂ (#731 review).
+    let gap = |c: f64| {
+        let smooth = if c > 8.0 {
+            0.02 + 0.002 * (17.0 - c)
+        } else {
+            0.038 * (c - 2.0) / 6.0
+        };
+        smooth + 0.003 * (c * 997.0).sin()
+    };
+    let mut evaluated = Vec::new();
+    let (_, (), _, held) = collapse_search(
+        17.0,
+        |c| {
+            evaluated.push((c, gap(c)));
+            Kept {
+                kept: c - gap(c),
+                noise: 0.005,
+                state: (),
+            }
+        },
+        COLLAPSE_TOLERANCE,
+        COLLAPSE_ITERATIONS,
+        COLLAPSE_STEP,
+    );
+    assert!(held);
+    for pair in evaluated.windows(2) {
+        let ((c, g), (next, _)) = (pair[0], pair[1]);
+        if c > 8.5 && next < c {
+            let allowed = g.max(COLLAPSE_STEP * c);
+            assert!(
+                c - next <= allowed * (1.0 + 1e-9),
+                "a step of {:.3} bar from {c:.3} bar, over the {allowed:.3} allowed",
+                c - next
+            );
+        }
     }
 }
