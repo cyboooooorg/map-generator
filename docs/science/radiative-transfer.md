@@ -1172,7 +1172,8 @@ the Bond albedo are there too (change 2b-2).
     humidity and the limit*).
   - *Cloud albedo.* The water clouds reflect 0.322 of the light falling on their
     share of the sky, fitted by bisection so that Earth's Bond albedo is 0.293
-    (Stephens et al. 2015; 0.32233, kept 0.322, gives 0.29286), over the ground
+    (Stephens et al. 2015; 0.32233, kept 0.322, gives 0.29286, the same after
+    #704's lines and the infrared emissivity, checked 2026-11-27), over the ground
     Earth's own cover gives it at 288 K, 0.1445, the 77 % air over 288 K with
     its 300 DU of ozone, the law's cloud cover of 0.682 and the Sun of the table
     of spectra (#705, decided 2026-11-25: over CERES's 0.122 the climate's Earth

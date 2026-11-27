@@ -438,7 +438,10 @@ albedo, 0.293 (Stephens et al. 2015, cited in
 2026-11-25): the climate's own ground, 0.1445 (one ocean at 288 K,
 Earth's obliquity, the ice weighted by sunlight), instead of CERES's
 0.122, and the 300 DU of Earth's O₂. Fit 0.32233, kept 0.322, which gives
-0.29286. It was 0.296 (ground 0.122, no ozone, table Sun). It moves
+0.29286. Re-run on 2026-11-27 once ozone, methane and N₂O absorb in
+the infrared (#704) and the clouds' infrared emissivity is fitted on
+CERES (#705): the same 0.29286, since neither touches the shortwave, so
+the fit stands. It was 0.296 (ground 0.122, no ozone, table Sun). It moves
 the calibrations fitted through the climate's Earth:
 `SNOWBALL_WARM_BAR` 10.2 to 10.1 bar
 ([planet-atmospheres.md](planet-atmospheres.md#calibration-of-snowball_warm_bar-refit)).
