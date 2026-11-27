@@ -244,7 +244,13 @@ runaway greenhouse (see the
 [habitable zone](habitable-zone.md)). The plateau is flat "between 300 and
 1800 K in the 260 bar case, and between 300 and 1050 K in the 10 bar
 case", and rises again past about 1500 K through the 4 µm window
-(Boukrouche et al. 2021; Goldblatt 2015).
+(Boukrouche et al. 2021; Goldblatt 2015). Goldblatt et al.'s 282 W/m²
+is that of "a pure water atmosphere: neither any background gas nor any
+greenhouse gas other than water", and they add that it "depends on the
+minimum absorption cross section in the 10 µm water vapour window; any
+additional opacity here would raise the τλ = 1 surface to a higher
+altitude that radiates at a lower temperature": 1 % of CO₂ lowers it by
+2 W/m², 1 % of NH₃ by 6 (accepted manuscript, pp. 4 and 6).
 
 **Orders of magnitude.** An Earth that absorbs 240 W/m² is about 40 W/m²
 below the plateau. It would need to absorb about 282 W/m², 17 % more light than
@@ -1081,6 +1087,19 @@ the Bond albedo are there too (change 2b-2).
   greenhouse effect", and do not use the Manabe–Wetherald profile (it
   appears only in their reference list). The app attributes the falling
   humidity to Manabe & Wetherald only.
+- **The runaway's plateau and its floor.** A body in a water runaway
+  binds its runaway albedo to its own steam column's plateau
+  (`ClimateBody::plateau`, legacy `Body::plateau`) where it exceeds
+  Earth's air's: a thick air (hundreds of bar of CO₂) has no plateau of
+  its own, and Earth's air's stands in for it. Both are taken under the
+  body's own ozone (`balance::earth_moist_plateau_under`, #761): ozone's
+  9.6 µm band lies in the window that sets the limit, and an ozone-free
+  floor would give an ozone-bearing runaway up to 0.35 W/m² (at 300 DU)
+  its air cannot send out. The plateau checked against Goldblatt et
+  al.'s 282 W/m² (`balance::earth_moist_plateau`, 289.710 W/m²) holds
+  no ozone, as their pure water atmosphere holds none
+  (`EARTH_PLATEAU_OZONE`); Earth's 300 DU lower it to 289.356 W/m². See
+  [ozone.md](ozone.md), "Ozone on the moist plateau".
 - **The ideal-vapour latent heat of CO₂.** The moist CO₂ adiabat takes
   $L = R T^2\,d\ln p/dT$ from the saturation curve, which treats the
   vapour as ideal. CO₂'s vapour is not ideal at its saturation pressures:

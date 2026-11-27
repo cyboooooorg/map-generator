@@ -424,22 +424,25 @@ pub fn moist_plateau(
     plateau
 }
 
-/// Calibration: the ozone column of Earth's moist plateau
-/// ([`earth_moist_plateau`]), none, where Earth holds 300 DU: the
-/// plateau is the anchor the Simpson–Nakajima limit and the runaway's
-/// albedo were checked on (study 25), without ozone, and kept so.
-/// Measured: Earth's 300 DU lower it by 0.354 W/m² (289.710 to
-/// 289.356), the saturated column's by 0.353; a runaway whose own
-/// ozone lowers its plateau under this one takes this one
-/// (`docs/science/ozone.md`, calibration 6).
+/// Source: the ozone column of the plateau checked against the
+/// Simpson–Nakajima limit ([`earth_moist_plateau`],
+/// [`SIMPSON_NAKAJIMA_W_M2`]), none: Goldblatt et al. 2013's 282 W/m²
+/// is that of "a pure water atmosphere: neither any background gas nor
+/// any greenhouse gas other than water" (*Nature Geosci.* 6, 661,
+/// accepted manuscript p. 4). Earth holds 300 DU; a body's runaway
+/// takes its own ozone, and Earth's air's plateau under it
+/// ([`earth_moist_plateau_under`]; `docs/science/ozone.md`, "Ozone on
+/// the moist plateau", #761).
 pub const EARTH_PLATEAU_OZONE: DobsonUnit = DobsonUnit(0.0);
 
 /// The column's own moist plateau on Earth's dry air
-/// ([`EARTH_DRY_AIR`]), with all the water it can hold, on the standard
-/// gravity and the plateau's clear, saturated, fine column
-/// ([`Profile::PLATEAU`]), started from [`SIMPSON_NAKAJIMA_W_M2`]: the
-/// plateau a runaway's albedo binds at its star's limit
-/// ([`runaway_albedo`]). Solved once per process.
+/// ([`EARTH_DRY_AIR`]), with all the water it can hold, without ozone
+/// ([`EARTH_PLATEAU_OZONE`]), on the standard gravity and the plateau's
+/// clear, saturated, fine column ([`Profile::PLATEAU`]), started from
+/// [`SIMPSON_NAKAJIMA_W_M2`]: the plateau checked against that limit,
+/// which a runaway's albedo binds at its star's limit
+/// ([`runaway_albedo`]) when its air holds no ozone. Solved once per
+/// process.
 pub fn earth_moist_plateau() -> WattPerSquareMetre {
     static PLATEAU: OnceLock<WattPerSquareMetre> = OnceLock::new();
     *PLATEAU.get_or_init(|| {
@@ -454,6 +457,36 @@ pub fn earth_moist_plateau() -> WattPerSquareMetre {
             &mut ColumnCache::default(),
         )
     })
+}
+
+/// The moist plateau of Earth's dry air ([`EARTH_DRY_AIR`]) holding
+/// `ozone` in its infrared column, otherwise as [`earth_moist_plateau`]
+/// (all the water it can hold, the standard gravity,
+/// [`Profile::PLATEAU`]), started from it, through `cache`: the floor
+/// of a runaway's own plateau, taken at the runaway's own ozone. Ozone's
+/// 9.6 µm band lies in water's 10 µm window, whose least opacity sets
+/// the limit, so ozone lowers it (Goldblatt et al. 2013, p. 6: "any
+/// additional opacity here would raise the τλ = 1 surface to a higher
+/// altitude that radiates at a lower temperature"); a floor without it
+/// would hand an ozone-bearing runaway a plateau its air cannot send
+/// out (#761). `ozone` of [`EARTH_PLATEAU_OZONE`] or less (none, or a
+/// negative or NaN column read as none) returns [`earth_moist_plateau`]
+/// itself, solved once.
+pub fn earth_moist_plateau_under(ozone: DobsonUnit, cache: &mut ColumnCache) -> WattPerSquareMetre {
+    let anchor = earth_moist_plateau();
+    if ozone.0.is_nan() || ozone.0 <= EARTH_PLATEAU_OZONE.0 {
+        return anchor;
+    }
+    moist_plateau(
+        &EARTH_DRY_AIR,
+        ozone,
+        Bar(f64::INFINITY),
+        STANDARD_GRAVITY,
+        Profile::PLATEAU,
+        &PLATEAU_SURFACES,
+        anchor,
+        cache,
+    )
 }
 
 /// Definition: the least and greatest Bond albedo of a body in a water

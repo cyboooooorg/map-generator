@@ -7,12 +7,13 @@ use super::carbon::thermostat;
 use super::fixture::{earth, moved};
 use super::wet::{Kept, boils, collapse_search, collapsed_climate, wet_balance};
 use super::{COLLAPSE_ITERATIONS, COLLAPSE_STEP, COLLAPSE_TOLERANCE, Light, Numerics};
-use science::balance::{EARTH_DRY_AIR, TOLERANCE, absorbed, skin};
+use science::balance::{EARTH_DRY_AIR, TOLERANCE, absorbed, earth_moist_plateau, skin};
+use science::constants::STANDARD_GRAVITY;
 use science::habitable::{OCEAN_MASS, runaway_flux};
 use science::radiation::albedo::{ShortwaveCache, shortwave_budget};
 use science::radiation::column::{Profile, outgoing_longwave};
 use science::radiation::gases::PartialPressures;
-use science::radiation::ozone::ozone_column;
+use science::radiation::ozone::{EARTH_OZONE_COLUMN, ozone_column};
 use science::surface::{ICE_COVERED_TEMPERATURE, surface_vapour};
 use science::units::{Bar, EarthFlux, Fraction, Kelvin, Kilogram};
 use science::volatiles::co2_saturation_pressure;
@@ -321,6 +322,29 @@ fn a_runaway_does_not_boil_again() {
     let mut inputs = with_ocean(moved(&earth(), VENUS_ORBIT));
     inputs.runaway = true;
     assert!(!boils_earth(&inputs));
+}
+
+#[test]
+fn a_runaways_ozone_lowers_its_plateau() {
+    // Goldblatt et al. 2013 (Nature Geosci. 6, 661, p. 6 of the accepted
+    // manuscript): the radiation limit "depends on the minimum absorption
+    // cross section in the 10 µm water vapour window; any additional
+    // opacity here would raise the τλ = 1 surface to a higher altitude
+    // that radiates at a lower temperature". Ozone's 9.6 µm band lies in
+    // that window: a runaway of Earth's air and gravity holding Earth's
+    // ozone has a plateau under Earth's ozone-free one, the floor it took
+    // instead before #761.
+    let mut inputs = with_ocean(moved(&earth(), VENUS_ORBIT));
+    inputs.runaway = true;
+    inputs.air = EARTH_DRY_AIR;
+    inputs.gravity = STANDARD_GRAVITY;
+    for light in &mut inputs.sources {
+        light.ozone = EARTH_OZONE_COLUMN;
+    }
+    let plateau = ClimateBody::new(&inputs, Numerics::DEFAULT).plateau().0;
+    let anchor = earth_moist_plateau().0;
+    println!("plateau {plateau:.3} W/m² under {EARTH_OZONE_COLUMN:?}, anchor {anchor:.3}");
+    assert!(plateau < anchor, "{plateau} against the anchor {anchor}");
 }
 
 #[test]
