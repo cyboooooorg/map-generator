@@ -167,6 +167,9 @@ fn a_star_without_a_corona_gives_no_xuv() {
         line.present_ratio > 0.0 && line.integrated.0 > 0.0,
         "{line:?}"
     );
+    // The integrand follows the same cut.
+    assert_eq!(h.ratio_at(XUV, Gyr(0.3)), 0.0);
+    assert_eq!(h.ratio_at(LYMAN_ALPHA, Gyr(0.3)), line.present_ratio);
 }
 
 #[test]

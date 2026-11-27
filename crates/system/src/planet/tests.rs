@@ -2,13 +2,15 @@
 
 use super::codes;
 use super::draws::{self, Drawn, LABELS, Labels};
-use super::enveloped::Body;
+use super::enveloped::{Body, Exposed};
 use super::heat::{self, ENVELOPED_MIN_ENVELOPE, ICY_MIN_WATER};
 use super::interior::{Interior, Water, interior};
 use crate::Trial;
 use science::constants::EARTH_MEAN_RADIUS;
 use science::heat::TidalKind;
-use science::units::{AstronomicalUnit, Day, Degree, Dex, EarthMass, Fraction, Gyr, Kelvin};
+use science::units::{
+    AstronomicalUnit, Day, Degree, Dex, EarthMass, EarthRadius, Fraction, Gyr, Kelvin,
+};
 use science::units::{
     EarthFlux, JoulePerSquareMetre, SolarLuminosity, SolarMass, WattPerSquareMetre,
 };
@@ -21,22 +23,25 @@ use timeline::{
 /// 9.80665 m/s^2.
 const STANDARD_GRAVITY: f64 = 9.80665;
 
-/// Source: Marty 2012, bulk Earth water 2700 ppm of the mass (Earth
-/// Planet. Sci. Lett. 313, 56, p. 18).
-const EARTH_WATER_FRACTION: f64 = 2.7e-3;
+/// Source: Marty 2012, bulk Earth water 2700 ppm of the mass
+/// (`science::habitable::EARTH_BULK_WATER_FRACTION`, which the earth-like
+/// archetype imposes too).
+pub(super) const EARTH_WATER_FRACTION: f64 = science::habitable::EARTH_BULK_WATER_FRACTION;
 
 /// Source: Wang et al. 2018 core mass fraction of Earth, as quoted by
-/// Plotnykov & Valencia 2020, 0.325.
-const EARTH_CORE_MASS_FRACTION: f64 = 0.325;
+/// Plotnykov & Valencia 2020, 0.325
+/// (`science::constants::EARTH_CORE_MASS_FRACTION`, which the earth-like
+/// archetype imposes too).
+pub(super) const EARTH_CORE_MASS_FRACTION: f64 = science::constants::EARTH_CORE_MASS_FRACTION;
 
 /// Definition: a water world's water fraction for the tests, 0.5, the
 /// lower bound of Zeng et al. 2019's icy planets (a test choice).
-const WATER_WORLD_FRACTION: f64 = 0.5;
+pub(super) const WATER_WORLD_FRACTION: f64 = 0.5;
 
 /// Definition: 0.4 au around the trial's Sun-like source, an equilibrium
 /// temperature of 255 / sqrt(0.4) = 403 K, above the 355 K where the water
 /// laws end (a test choice).
-const HOT_ORBIT_AU: f64 = 0.4;
+pub(super) const HOT_ORBIT_AU: f64 = 0.4;
 
 /// Definition: sampling tolerance of a share, a median or a moment over
 /// 10 000 draws, several standard errors (about 0.004 for a tail share).
@@ -50,7 +55,7 @@ fn leaf<T: NodeValueOf>(trace: &mut Trace, code: &'static str, value: T) -> Trac
 
 /// Builds a trial of `mass` Earth masses at `au` around one 1 solar-mass
 /// source, with the ice line at 2.7 au.
-fn trial(trace: &mut Trace, seed: u64, mass: f64, au: f64, ecc: f64) -> Trial {
+pub(super) fn trial(trace: &mut Trace, seed: u64, mass: f64, au: f64, ecc: f64) -> Trial {
     let source = StellarSource {
         flux: leaf(trace, "test.flux", EarthFlux(1.0 / (au * au))),
         // Source: 255 K at one Earth flux, the Bond albedo 0.3 of the
@@ -128,8 +133,8 @@ fn the_same_seed_draws_the_same_composition() {
 
 #[test]
 fn the_draw_follows_the_seed_it_is_given_not_the_trials() {
-    // `model` passes the body seed, `class_of` the trial seed: the draw
-    // reads only the seed it is given.
+    // `class_of` and `model` both pass the trial seed: the draw reads
+    // only the seed it is given.
     let mut a = Trace::new();
     let mut b = Trace::new();
     let ta = trial(&mut a, 7, 1.0, 1.0, 0.0);
@@ -164,6 +169,19 @@ fn different_labels_draw_independently() {
         changed.radiogenic_abundance.value()
     );
     assert_ne!(base.water_fraction.value(), changed.water_fraction.value());
+}
+
+#[test]
+fn the_snowball_draw_is_a_seed_draw() {
+    let seed = Seed::new(7);
+    let draw = draws::snowball_draw(seed.derive(LABELS.snowball));
+    assert!(draw > 0.0 && draw < 1.0);
+    assert_eq!(draw, draws::snowball_draw(seed.derive(LABELS.snowball)));
+    assert_ne!(
+        draw,
+        draws::snowball_draw(Seed::new(43).derive(LABELS.snowball))
+    );
+    assert_ne!(draw, draws::snowball_draw(seed.derive(LABELS.water)));
 }
 
 #[test]
@@ -333,6 +351,7 @@ fn an_earth_trial_has_earths_bulk_and_no_water_layer() {
         Some(false),
         0.0,
         None,
+        None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let interior = rocky_of(&body);
@@ -410,6 +429,7 @@ fn a_hot_dry_planet_builds() {
         Some(false),
         0.0,
         None,
+        None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let interior = rocky_of(&body);
@@ -429,6 +449,7 @@ fn a_hot_water_world_keeps_its_water_beyond_the_law() {
         0.0,
         Some(true),
         0.0,
+        None,
         None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -463,6 +484,7 @@ fn a_temperate_water_world_has_a_water_layer() {
         Some(true),
         0.0,
         None,
+        None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let interior = rocky_of(&body);
@@ -494,6 +516,7 @@ fn heat_nodes_point_at_their_inputs() {
         0.1,
         Some(false),
         0.0,
+        None,
         None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -541,6 +564,7 @@ fn a_circular_orbit_has_no_tide() {
         0.0,
         Some(false),
         0.0,
+        None,
         None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -615,7 +639,26 @@ fn a_giant_above_the_tables_cites_the_mass_they_were_read_at() {
     assert!(read.contains(&t.age.node()));
 }
 
-fn derived_from(trace: &Trace, node: timeline::NodeId) -> Vec<timeline::NodeId> {
+/// Every node `node` derives from, itself included, walking the
+/// `Origin::Derived` links back to the leaves.
+pub(super) fn ancestry(
+    trace: &Trace,
+    node: timeline::NodeId,
+) -> std::collections::BTreeSet<timeline::NodeId> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut stack = vec![node];
+    while let Some(id) = stack.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        if let Origin::Derived { from } = &trace.node(id).unwrap().origin {
+            stack.extend(from.iter().copied());
+        }
+    }
+    seen
+}
+
+pub(super) fn derived_from(trace: &Trace, node: timeline::NodeId) -> Vec<timeline::NodeId> {
     match &trace.node(node).unwrap().origin {
         Origin::Derived { from } => from.clone(),
         origin => panic!("{origin:?} is not derived"),
@@ -637,6 +680,7 @@ fn central_pressure_cites_every_input() {
             0.0,
             Some(true),
             0.0,
+            None,
             None,
         );
         let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -660,7 +704,7 @@ fn central_pressure_cites_every_input() {
                     matches!(interior.water, Water::Layer { .. })
                 );
             }
-            Water::InMantle => panic!("a water world"),
+            Water::InMantle | Water::Steam { .. } => panic!("a water world"),
         }
     }
 }
@@ -677,6 +721,7 @@ fn the_mantle_state_is_a_constant() {
         0.0,
         Some(false),
         0.0,
+        None,
         None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -710,6 +755,7 @@ fn water_beyond_the_law_is_not_icy() {
             0.0,
             Some(migrated),
             envelope,
+            None,
             None,
         );
         let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -758,6 +804,7 @@ fn water_beyond_the_law_bulk_is_the_condensed_planet() {
         Some(true),
         0.0,
         None,
+        None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let interior = rocky_of(&body);
@@ -802,7 +849,7 @@ const EARTH_RADIUS_KM: f64 = 6_378.1;
 /// the solar system as Fortney et al. 2007 Table 4 takes it, 4.5 Gyr (study
 /// §1.6); a heavy-element core of 10 M_E, inside Wahl et al. 2017's 7 to
 /// 25 M_E (study §5.3).
-const JUPITER: (f64, f64, f64, f64) = (318.0, 5.2, 4.5, 10.0);
+pub(super) const JUPITER: (f64, f64, f64, f64) = (318.0, 5.2, 4.5, 10.0);
 
 /// Source: Neptune's mass, 17.1 M_E, at 30 au, with a 15 % envelope, the
 /// Lopez & Fortney 2014 column whose radius the study compares (§4).
@@ -822,7 +869,12 @@ fn km(radius: science::units::EarthRadius) -> f64 {
 
 /// A Jupiter trial: 318 M_E at 5.2 au, 4.5 Gyr, heavy mass 10 M_E.
 fn jupiter(trace: &mut Trace) -> (Trial, Drawn) {
-    let (mass, au, age, heavy) = JUPITER;
+    jupiter_at(trace, JUPITER.1)
+}
+
+/// Jupiter's mass, age and heavy mass at `au`.
+pub(super) fn jupiter_at(trace: &mut Trace, au: f64) -> (Trial, Drawn) {
+    let (mass, _, age, heavy) = JUPITER;
     let mut t = trial(trace, 1, mass, au, 0.0);
     t.age = leaf(trace, "test.age", Gyr(age));
     let drawn = Drawn::fixed(
@@ -834,6 +886,7 @@ fn jupiter(trace: &mut Trace) -> (Trial, Drawn) {
         None,
         1.0 - heavy / mass,
         Some(EarthMass(heavy)),
+        None,
     );
     (t, drawn)
 }
@@ -881,21 +934,29 @@ fn a_jupiter_trial() {
     assert_eq!(heat.radiogenic.value().0, 0.0);
 }
 
-#[test]
-fn a_neptune_trial() {
-    let (mass, au, envelope) = NEPTUNE;
-    let mut trace = Trace::new();
-    let t = trial(&mut trace, 1, mass, au, 0.0);
+/// Neptune's mass and envelope at `au`.
+pub(super) fn neptune_at(trace: &mut Trace, au: f64) -> (Trial, Drawn) {
+    let (mass, _, envelope) = NEPTUNE;
+    let t = trial(trace, 1, mass, au, 0.0);
     let drawn = Drawn::fixed(
         &t,
-        &mut trace,
+        trace,
         EARTH_CORE_MASS_FRACTION,
         EARTH_WATER_FRACTION,
         0.0,
         None,
         envelope,
         None,
+        None,
     );
+    (t, drawn)
+}
+
+#[test]
+fn a_neptune_trial() {
+    let mut trace = Trace::new();
+    let (mass, au, envelope) = NEPTUNE;
+    let (t, drawn) = neptune_at(&mut trace, au);
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let ratio = km(*body.bulk().radius.value()) / NEPTUNE_RADIUS_KM;
     let (low, high) = NEPTUNE_RADIUS_RANGE;
@@ -993,6 +1054,7 @@ fn regime_edges_are_finite_and_1_earth_mass_is_continuous() {
             Some(false),
             0.01,
             None,
+            None,
         );
         interior(&t, &drawn, &mut trace)
             .unwrap()
@@ -1024,6 +1086,7 @@ fn the_flux_record_cites_every_source() {
                 0.0,
                 Some(false),
                 0.01,
+                None,
                 None,
             );
             (t, d)
@@ -1067,6 +1130,7 @@ fn a_hot_mini_neptune_bulk_excludes_its_beyond_law_water() {
         Some(true),
         envelope,
         None,
+        None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let Body::MiniNeptune {
@@ -1104,4 +1168,343 @@ fn a_hot_mini_neptune_bulk_excludes_its_beyond_law_water() {
     assert!((bulk.surface_gravity.value().0 / g - 1.0).abs() < 1e-9);
     let rho = kg / (4.0 / 3.0 * std::f64::consts::PI * r.powi(3));
     assert!((bulk.mean_density.value().0 / rho - 1.0).abs() < 1e-9);
+}
+
+#[test]
+fn the_volatile_draw_leaves_the_other_draws_unchanged() {
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 7, 1.0, 1.0, 0.0);
+    let base = draws::draw(t.seed, &t, &mut trace).unwrap();
+    let other = Labels {
+        volatiles: "planet/volatiles-other",
+        ..LABELS
+    };
+    let changed = draws::draw_with(t.seed, &t, &mut trace, &other).unwrap();
+    assert_eq!(
+        base.core_mass_fraction.value(),
+        changed.core_mass_fraction.value()
+    );
+    assert_eq!(base.water_fraction.value(), changed.water_fraction.value());
+    assert_eq!(
+        base.radiogenic_abundance.value(),
+        changed.radiogenic_abundance.value()
+    );
+    assert_eq!(
+        base.envelope_fraction.value(),
+        changed.envelope_fraction.value()
+    );
+    assert_ne!(base.volatiles.co2.value(), changed.volatiles.co2.value());
+    assert_ne!(base.volatiles.nh3.value(), changed.volatiles.nh3.value());
+}
+
+#[test]
+fn the_volatile_scatter_has_its_spread() {
+    /// Definition: seeds of the spread test. At 2 000 draws of a normal of
+    /// sd 0.3 dex, the standard error of the mean is 0.3 / sqrt(2000) =
+    /// 0.0067 dex, that of the sd about 0.3 / sqrt(2 x 1999) = 0.0047 dex.
+    const SEEDS: u64 = 2000;
+    /// Definition: tolerance of the mean and the standard deviation, 0.02
+    /// dex: 3.0 standard errors for the mean, 4.2 for the sd.
+    const TOLERANCE: f64 = 0.02;
+    let mut columns = vec![Vec::new(); 5];
+    for seed in 0..SEEDS {
+        let scatter = draws::volatile_scatter(Seed::new(seed).derive(LABELS.volatiles));
+        for (column, value) in columns.iter_mut().zip(scatter) {
+            column.push(value);
+        }
+    }
+    for column in columns {
+        let n = column.len() as f64;
+        let mean = column.iter().sum::<f64>() / n;
+        let sd = (column.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0)).sqrt();
+        assert!(mean.abs() < TOLERANCE, "mean {mean}");
+        assert!(
+            (sd - science::volatiles::VOLATILE_SPREAD.0).abs() < TOLERANCE,
+            "sd {sd}"
+        );
+    }
+}
+
+#[test]
+fn the_volatile_scatter_is_recorded_as_drawn() {
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 5, 1.0, 1.0, 0.0);
+    let d = draws::draw(t.seed, &t, &mut trace).unwrap();
+    let v = d.volatiles;
+    for (leaf, code) in [
+        (v.co2, codes::VOLATILE_SCATTER_CO2),
+        (v.n2, codes::VOLATILE_SCATTER_N2),
+        (v.s, codes::VOLATILE_SCATTER_S),
+        (v.ch4, codes::VOLATILE_SCATTER_CH4),
+        (v.nh3, codes::VOLATILE_SCATTER_NH3),
+    ] {
+        let node = trace.node(leaf.node()).unwrap();
+        assert_eq!(node.code.as_str(), code);
+        assert_eq!(node.origin, Origin::Leaf(Provenance::Drawn));
+    }
+    let fixed = Drawn::fixed(
+        &t,
+        &mut trace,
+        0.3,
+        0.001,
+        0.0,
+        Some(false),
+        0.0,
+        None,
+        None,
+    );
+    for (leaf, code) in [
+        (fixed.volatiles.co2, codes::VOLATILE_SCATTER_CO2),
+        (fixed.volatiles.nh3, codes::VOLATILE_SCATTER_NH3),
+    ] {
+        assert_eq!(leaf.value().0, 0.0);
+        let node = trace.node(leaf.node()).unwrap();
+        assert_eq!(node.code.as_str(), code);
+        assert_eq!(node.origin, Origin::Leaf(Provenance::Imposed));
+    }
+    for leaf in [fixed.volatiles.n2, fixed.volatiles.s, fixed.volatiles.ch4] {
+        assert_eq!(leaf.value().0, 0.0);
+    }
+}
+
+/// A Solar System body of the legacy reference table
+/// (`legacy-final:crates/mapgen/src/planet/reference.rs`), lit by the
+/// trial's Sun-like source at its semi-major axis.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ReferenceBody {
+    /// Mass, Earth masses.
+    pub mass: f64,
+    /// Iron share of the refractory (iron and rock) mass.
+    pub core_mass_fraction: f64,
+    /// Share of the mass in water.
+    pub water_fraction: f64,
+    /// Semi-major axis, au.
+    pub orbit: f64,
+    /// Orbital eccentricity.
+    pub eccentricity: f64,
+}
+
+/// Source: NASA planetary fact sheet (nssdc.gsfc.nasa.gov/planetary/factsheet):
+/// 0.0553 M_E at 0.387 au, eccentricity 0.2056; a core of about 70 % of the
+/// mass (Hauck et al. 2013, doi:10.1002/jgre.20091, core radius about
+/// 2020 km); dry, as legacy's reference table.
+pub(super) const MERCURY: ReferenceBody = ReferenceBody {
+    mass: 0.0553,
+    core_mass_fraction: 0.70,
+    water_fraction: 0.0,
+    orbit: 0.387,
+    eccentricity: 0.2056,
+};
+
+/// Source: NASA planetary fact sheet: 0.815 M_E at 0.723 au, eccentricity
+/// 0.0068; Earth-like, slightly less iron, core 0.31 (Aitta 2012, Icarus
+/// 218); dry, as legacy's reference table.
+pub(super) const VENUS: ReferenceBody = ReferenceBody {
+    mass: 0.815,
+    core_mass_fraction: 0.31,
+    water_fraction: 0.0,
+    orbit: 0.723,
+    eccentricity: 0.0068,
+};
+
+/// Source: NASA planetary fact sheet: 1 M_E at 1 au, eccentricity 0.0167;
+/// core 0.325 (Zeng, Sasselov & Jacobsen 2016,
+/// doi:10.3847/0004-637X/819/2/127); the bulk water of
+/// [`EARTH_WATER_FRACTION`] (Marty 2012), of which the surface share
+/// (`science::habitable::SURFACE_WATER_SHARE`) is its ocean.
+pub(super) const EARTH: ReferenceBody = ReferenceBody {
+    mass: 1.0,
+    core_mass_fraction: EARTH_CORE_MASS_FRACTION,
+    water_fraction: EARTH_WATER_FRACTION,
+    orbit: 1.0,
+    eccentricity: 0.0167,
+};
+
+/// Source: NASA planetary fact sheet: 0.107 M_E at 1.524 au, eccentricity
+/// 0.0934; a core of about 24 % (Stähler et al. 2021,
+/// doi:10.1126/science.abi7730, core radius about 1830 km); dry, as
+/// legacy's reference table.
+pub(super) const MARS: ReferenceBody = ReferenceBody {
+    mass: 0.107,
+    core_mass_fraction: 0.24,
+    water_fraction: 0.0,
+    orbit: 1.524,
+    eccentricity: 0.0934,
+};
+
+/// Source: Titan, 0.0225 M_E (JPL satellite physical parameters, GM
+/// 8978.1371 km^3/s^2, over the IAU nominal Earth GM 3.986004e14 m^3/s^2:
+/// 0.022524) at Saturn's 9.57 au, eccentricity 0.052 (NASA planetary fact
+/// sheet: 1432.0e6 km over 149.6e6, Saturn's orbit); 45 % water by mass
+/// (Sohl et al. 2003, doi:10.1029/2003JE002044: 50 to 60 wt % rock and
+/// iron, via Mosqueira 2026, arXiv:2610.34081, Table A1). Its core,
+/// 0.20 of the rock, is not sourced: see the field. Study 23 of the Wiki.
+pub(super) const TITAN: ReferenceBody = ReferenceBody {
+    mass: 0.0225,
+    // Definition: legacy's core fraction, kept by analogy as a test
+    // input. The rock is chondritic (Kuskov & Kronrod, COSPAR 2006
+    // abstract: L/LL chondrite, Fe/Si 0.9 to 1.3), but the Si content
+    // that would turn that Fe/Si into an iron share was not read (study
+    // 23, part 6).
+    core_mass_fraction: 0.20,
+    water_fraction: 0.45,
+    orbit: 9.57,
+    eccentricity: 0.052,
+};
+
+/// Source: Callisto, 0.0180 M_E (JPL satellite physical parameters, GM
+/// 7179.2834 km^3/s^2, over the IAU nominal Earth GM: 0.018011) at
+/// Jupiter's 5.20 au, eccentricity 0.049 (NASA planetary fact sheet:
+/// 778.5e6 km over 149.6e6); 50 % water by mass (Kuskov & Kronrod, COSPAR
+/// 2006 abstract: "total amount of H2O in Callisto is found to be 48-55
+/// wt%"). Its core, 0.20 of the rock, is not sourced: see the field.
+/// Study 23 of the Wiki.
+pub(super) const CALLISTO: ReferenceBody = ReferenceBody {
+    mass: 0.0180,
+    // Definition: legacy's core fraction, as [`TITAN`]'s, kept by
+    // analogy as a test input, not derived from a source.
+    core_mass_fraction: 0.20,
+    water_fraction: 0.50,
+    orbit: 5.20,
+    eccentricity: 0.049,
+};
+
+/// Definition: Venus given Earth's bulk water, so Earth's ocean share of
+/// it, a runaway planet that has water to lose (the reference Venus is
+/// dry; a test choice).
+pub(super) const WET_VENUS: ReferenceBody = ReferenceBody {
+    water_fraction: EARTH.water_fraction,
+    ..VENUS
+};
+
+/// The body, heat and water of `t` of composition `drawn`, as the chain
+/// derives them before the regime.
+pub(super) fn derive(
+    trace: &mut Trace,
+    t: &Trial,
+    drawn: &Drawn,
+) -> (Body, timeline::Heat, timeline::Water) {
+    let (body, h, w, _) = derive_surface(trace, t, drawn);
+    (body, h, w)
+}
+
+/// [`derive`], with the surface water the water derives from.
+pub(super) fn derive_surface(
+    trace: &mut Trace,
+    t: &Trial,
+    drawn: &Drawn,
+) -> (
+    Body,
+    timeline::Heat,
+    timeline::Water,
+    Traced<science::units::Kilogram>,
+) {
+    let body = interior(t, drawn, trace).unwrap();
+    let h = heat::heat(
+        t,
+        &body,
+        &drawn.radiogenic_abundance,
+        &drawn.envelope_fraction,
+        trace,
+    )
+    .unwrap();
+    let surface = super::water::surface_water(t, drawn, &body, trace).unwrap();
+    let w = super::water::water(t, &body.exposed(), surface, trace).unwrap();
+    (body, h, w, surface)
+}
+
+/// `t` with its source's XUV fluence replaced by `fluence`, J/m².
+pub(super) fn with_fluence(trace: &mut Trace, t: &Trial, fluence: f64) -> Trial {
+    let mut source = t.sources.primary().clone();
+    source.xuv.fluence = trace
+        .leaf(
+            Code::of("test.xuv-fluence"),
+            JoulePerSquareMetre(fluence),
+            Provenance::Input,
+        )
+        .unwrap();
+    Trial {
+        sources: StellarSources::new(vec![source]).unwrap(),
+        ..t.clone()
+    }
+}
+
+/// The trial of `body` around the trial's Sun-like source, and its
+/// composition set by hand: Earth's radiogenic abundance, no envelope,
+/// not migrated when it formed inside the ice line, no volatile scatter.
+pub(super) fn reference_trial(trace: &mut Trace, body: &ReferenceBody) -> (Trial, Drawn) {
+    let t = trial(trace, 1, body.mass, body.orbit, body.eccentricity);
+    let inside = t.orbit.semi_major_axis.value().0 < t.ice_line.value().0;
+    let drawn = Drawn::fixed(
+        &t,
+        trace,
+        body.core_mass_fraction,
+        body.water_fraction,
+        0.0,
+        inside.then_some(false),
+        0.0,
+        None,
+        None,
+    );
+    (t, drawn)
+}
+
+/// [`reference_trial`]'s composition for a body of `mass` Earth masses at
+/// `au` with a core share `core` and a water share `water`, migrated in
+/// from beyond the ice line when it lies inside it: a water world, whose
+/// water is a layer of its own, all of it at its surface.
+pub(super) fn water_world_trial(
+    trace: &mut Trace,
+    mass: f64,
+    core: f64,
+    water: f64,
+    au: f64,
+) -> (Trial, Drawn) {
+    let t = trial(trace, 1, mass, au, 0.0);
+    let inside = t.orbit.semi_major_axis.value().0 < t.ice_line.value().0;
+    let drawn = Drawn::fixed(
+        &t,
+        trace,
+        core,
+        water,
+        0.0,
+        inside.then_some(true),
+        0.0,
+        None,
+        None,
+    );
+    (t, drawn)
+}
+
+/// Definition: the factor of the larger radius of the exposed body in
+/// the radius tests (shoreline, steam loss), 1.2.
+pub(super) const LARGER_RADIUS: f64 = 1.2;
+
+/// `exposed` with a radius [`LARGER_RADIUS`] times larger, an input leaf
+/// of `trace`.
+pub(super) fn larger_exposed(trace: &mut Trace, exposed: &Exposed) -> Exposed {
+    let radius = trace
+        .leaf(
+            Code::of("test.radius"),
+            EarthRadius(exposed.radius.value().0 * LARGER_RADIUS),
+            Provenance::Input,
+        )
+        .unwrap();
+    Exposed {
+        radius,
+        ..exposed.clone()
+    }
+}
+
+/// `t` with its source's effective temperature replaced by `teff`, as
+/// [`with_fluence`] replaces its fluence.
+pub(super) fn with_star(trace: &mut Trace, t: &Trial, teff: Kelvin) -> Trial {
+    let mut source = t.sources.primary().clone();
+    source.effective_temperature = trace
+        .leaf(Code::of("test.teff-star"), teff, Provenance::Input)
+        .unwrap();
+    Trial {
+        sources: StellarSources::new(vec![source]).unwrap(),
+        ..t.clone()
+    }
 }

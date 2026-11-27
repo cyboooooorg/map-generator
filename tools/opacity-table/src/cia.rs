@@ -1,5 +1,7 @@
-//! HITRAN's CO₂–CO₂ collision-induced absorption (`CO2-CO2_2024.cia`),
-//! binned on 20 cm⁻¹ cells at four temperatures.
+//! HITRAN's collision-induced absorption files, binned on 20 cm⁻¹
+//! cells: CO₂–CO₂ (`CO2-CO2_2024.cia`) at four temperatures
+//! ([`Cia::binned`]), and the nitrogen, oxygen and methane pairs at
+//! every 10 K from 70 to 400 K ([`Cia::interpolated`]).
 //!
 //! HITRAN's `.cia` format (Karman et al. 2019, *Icarus* 328, 160,
 //! doi:10.1016/j.icarus.2019.02.034, section 2): a block per
@@ -164,6 +166,105 @@ impl Cia {
     }
 }
 
+impl Cia {
+    /// The cells of `cell_cm` cm⁻¹ from 0 up to `top_cm`: the start of
+    /// each and its mean coefficient at each of `temperatures`
+    /// (cm⁵/molecule²), the method of study 36's binning (Wiki study 36,
+    /// "Data and cost"), for files whose blocks cover one band at many
+    /// temperatures.
+    ///
+    /// The blocks are grouped into bands: a block joins the first band
+    /// one of whose blocks shares wavenumbers with it, or starts its own.
+    /// In each band, each block's coefficient is averaged over the cell
+    /// (the trapezoid integral of its piecewise linear curve, a negative
+    /// point of the file's noise taken as zero, zero outside the block's
+    /// points); blocks of one band at the same temperature are averaged
+    /// (none of the five pair files has two);
+    /// then the band's means are interpolated linearly in temperature
+    /// between its blocks, held at its coldest and warmest. The bands
+    /// that reach a cell add up. Cells under [`NEGLIGIBLE`] at every
+    /// temperature are left out.
+    pub fn interpolated(
+        &self,
+        cell_cm: f64,
+        top_cm: f64,
+        temperatures: &[f64],
+    ) -> Vec<(f64, Vec<f64>)> {
+        let clamped: Vec<Set> = self
+            .sets
+            .iter()
+            .map(|s| Set {
+                points: s.points.iter().map(|&(nu, k)| (nu, k.max(0.0))).collect(),
+                ..s.clone()
+            })
+            .collect();
+        let mut bands: Vec<Vec<&Set>> = Vec::new();
+        for set in &clamped {
+            let shares = |other: &&Set| {
+                !(set.band_cm.1 < other.band_cm.0 || set.band_cm.0 > other.band_cm.1)
+            };
+            match bands.iter_mut().find(|band| band.iter().any(shares)) {
+                Some(band) => band.push(set),
+                None => bands.push(vec![set]),
+            }
+        }
+        let cells = (top_cm / cell_cm).round() as usize;
+        (0..cells)
+            .filter_map(|c| {
+                let (lo, hi) = (c as f64 * cell_cm, (c + 1) as f64 * cell_cm);
+                let mut values = vec![0.0; temperatures.len()];
+                for band in &bands {
+                    if band.iter().all(|s| s.band_cm.1 < lo || s.band_cm.0 > hi) {
+                        continue;
+                    }
+                    // The band's mean at each of its temperatures, ascending.
+                    let mut by_t: Vec<(f64, f64, usize)> = Vec::new();
+                    for s in band {
+                        let mean = trapezoid_mean(&s.points, false, lo, hi);
+                        match by_t.iter_mut().find(|(t, _, _)| *t == s.temperature_k) {
+                            Some((_, sum, n)) => {
+                                *sum += mean;
+                                *n += 1;
+                            }
+                            None => by_t.push((s.temperature_k, mean, 1)),
+                        }
+                    }
+                    by_t.sort_by(|a, b| a.0.total_cmp(&b.0));
+                    let curve: Vec<(f64, f64)> = by_t
+                        .iter()
+                        .map(|&(t, sum, n)| (t, sum / n as f64))
+                        .collect();
+                    for (value, &t) in values.iter_mut().zip(temperatures) {
+                        *value += interpolate(&curve, t);
+                    }
+                }
+                values
+                    .iter()
+                    .any(|&v| v >= NEGLIGIBLE)
+                    .then_some((lo, values))
+            })
+            .collect()
+    }
+}
+
+/// The value at `t` of the piecewise linear curve through `points` (`t`
+/// ascending), held at its ends.
+fn interpolate(points: &[(f64, f64)], t: f64) -> f64 {
+    let (first, last) = (points[0], points[points.len() - 1]);
+    if t <= first.0 {
+        return first.1;
+    }
+    if t >= last.0 {
+        return last.1;
+    }
+    let w = points
+        .windows(2)
+        .find(|w| w[0].0 <= t && t <= w[1].0)
+        .expect("t is inside the curve");
+    let f = (t - w[0].0) / (w[1].0 - w[0].0);
+    w[0].1 + (w[1].1 - w[0].1) * f
+}
+
 /// The mean over `lo`–`hi` of the piecewise linear curve through
 /// `points` (with a zero at ν = 0 when asked), zero outside them.
 fn trapezoid_mean(points: &[(f64, f64)], zero_at_origin: bool, lo: f64, hi: f64) -> f64 {
@@ -273,6 +374,73 @@ mod tests {
         assert!(cells.iter().all(|c| c.1.iter().all(|&v| v >= 0.0)));
         assert!(cells.iter().any(|c| c.0 == 100.0));
         assert!(cells.iter().all(|c| c.0 < 200.0));
+    }
+
+    /// A flat block at `t` K over `lo`–`hi` cm⁻¹ (points every 1 cm⁻¹)
+    /// of coefficient `k`.
+    fn flat_block(t: f64, (lo, hi): (f64, f64), k: f64) -> Set {
+        Set {
+            temperature_k: t,
+            band_cm: (lo, hi),
+            points: (lo as usize..=hi as usize).map(|n| (n as f64, k)).collect(),
+        }
+    }
+
+    #[test]
+    fn a_band_is_interpolated_in_temperature_and_held_at_its_ends() {
+        let cia = Cia {
+            sets: vec![
+                flat_block(100.0, (0.0, 450.0), 4e-45),
+                flat_block(200.0, (0.0, 550.0), 2e-45),
+            ],
+        };
+        let cells = cia.interpolated(20.0, 600.0, &[70.0, 100.0, 150.0, 200.0, 400.0]);
+        let (_, k) = cells.iter().find(|c| c.0 == 100.0).expect("cell");
+        for (got, want) in k.iter().zip([4e-45, 4e-45, 3e-45, 2e-45, 2e-45]) {
+            assert!((got / want - 1.0).abs() < 1e-12, "{k:?}");
+        }
+        // Past the cold block's end only the warm block holds: the cold
+        // one's zero is interpolated with it.
+        let (_, k) = cells.iter().find(|c| c.0 == 500.0).expect("cell");
+        for (got, want) in k.iter().zip([0.0, 0.0, 1e-45, 2e-45, 2e-45]) {
+            assert!((got - want).abs() < 1e-57, "{k:?}");
+        }
+        assert!(cells.iter().all(|c| c.0 < 560.0));
+    }
+
+    #[test]
+    fn separate_bands_add_and_same_temperatures_average() {
+        // Two bands that share no wavenumber, both reaching the cell
+        // 1840-1860 cm⁻¹, add there; two blocks of one band at the same
+        // temperature average.
+        let cia = Cia {
+            sets: vec![
+                flat_block(200.0, (1300.0, 1849.0), 1e-45),
+                flat_block(300.0, (1850.0, 3000.0), 2e-45),
+                flat_block(300.0, (1850.0, 3000.0), 4e-45),
+            ],
+        };
+        let cells = cia.interpolated(20.0, 5000.0, &[250.0]);
+        let at = |start: f64| cells.iter().find(|c| c.0 == start).expect("cell").1[0];
+        assert!((at(1500.0) / 1e-45 - 1.0).abs() < 1e-12);
+        // The two 300 K blocks average to 3e-45.
+        assert!((at(2200.0) / 3e-45 - 1.0).abs() < 1e-12);
+        // 1840-1849 of the first band (9/20 of the cell, its last point
+        // at 1849) and 1850-1860 of the second (10/20).
+        let edge = at(1840.0);
+        let want = 1e-45 * 9.0 / 20.0 + 3e-45 * 10.0 / 20.0;
+        assert!((edge / want - 1.0).abs() < 1e-12, "{edge}");
+    }
+
+    #[test]
+    fn a_negative_point_counts_as_zero_when_interpolated() {
+        let mut block = flat_block(100.0, (0.0, 100.0), 1e-45);
+        for point in &mut block.points[40..60] {
+            point.1 = -1e-45;
+        }
+        let cells = Cia { sets: vec![block] }.interpolated(20.0, 100.0, &[100.0]);
+        let (_, k) = cells.iter().find(|c| c.0 == 40.0).expect("cell");
+        assert!(k[0] >= 0.0 && k[0] < 1e-45, "{k:?}");
     }
 
     #[test]

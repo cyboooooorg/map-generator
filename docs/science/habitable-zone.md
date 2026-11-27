@@ -33,9 +33,9 @@ A star of luminosity $L$ spreads its light over a sphere. At a distance
 $d$, a planet gets the flux $S$, here in units of what Earth gets ($L$ in
 Sun luminosities, $d$ in astronomical units, AU):
 
-```math
+$$
 S = \frac{L}{d^2}
-```
+$$
 
 **In words.** Twice as far, four times less light.
 
@@ -50,9 +50,9 @@ Bond albedo) and radiates the rest as a black body over its whole surface.
 It settles at the equilibrium temperature $T_\text{eq}$, with $\sigma$ the
 Stefan–Boltzmann constant ($5.67\times10^{-8}$ W m⁻² K⁻⁴):
 
-```math
+$$
 T_\text{eq} = \left(\frac{S\,(1-A)}{4\sigma}\right)^{1/4}
-```
+$$
 
 The 4 is the ratio of the planet's surface to the disc it shows its star.
 
@@ -120,7 +120,8 @@ flowchart LR
 But CO₂ also scatters starlight back to space, "2.5 times better than
 air" (Kopparapu et al. 2013). Past about 8 bar of CO₂, adding more cools
 the planet more than it warms it. That maximum greenhouse sets the outer
-edge at 1.70 AU from the Sun (Kopparapu et al. 2013).
+edge at 1.70 AU from the Sun in their 2013 paper, 1.67 AU in its erratum
+and 1.68 AU in their 2014 fit (see below).
 
 ### The optimistic edges: recent Venus and early Mars
 
@@ -139,7 +140,9 @@ Mars then got 0.75 × 0.43 = 0.32 times Earth's light today, which puts the
 | Maximum greenhouse | 1.67 AU | 1.70 AU |
 | Early Mars | 1.77 AU | 1.77 AU |
 
-Both columns are from Table 1 of Kopparapu et al. (2013). Kopparapu et al.
+Both columns are from Table 1 of Kopparapu et al. (2013). Their erratum
+(ApJ 770, 82, 2013) moves the maximum greenhouse back: it "should be
+1.67 AU, instead of 1.70 AU". Kopparapu et al.
 (2014) then took the 3D runaway limit of Leconte et al. (2013) as the
 conservative inner edge, scaled to every star.
 
@@ -151,12 +154,12 @@ as a fit to the star's effective temperature $T_\text{eff}$, with
 $T_\star = T_\text{eff} - 5780$ K, for 2,600 to 7,200 K. The distance
 follows from $S = L/d^2$:
 
-```math
-S_\text{eff} = S_{\text{eff}\odot} + aT_\star + bT_\star^2 + cT_\star^3
-+ dT_\star^4,
+$$
+S_\text{eff} = S_{\text{eff}\odot} + aT_\star + bT_\star^2 + cT_\star^3 +
+dT_\star^4,
 \qquad
 d = \sqrt{\frac{L/L_\odot}{S_\text{eff}}}\ \text{AU}
-```
+$$
 
 The coefficients for a planet of one Earth mass (Kopparapu et al. 2014,
 Table 1; the $d$ of this table is a coefficient, not the distance):
@@ -167,6 +170,23 @@ Table 1; the $d$ of this table is a coefficient, not the distance):
 | Runaway greenhouse | 1.107 | 1.332e−4 | 1.58e−8 | −8.308e−12 | −1.931e−15 |
 | Maximum greenhouse | 0.356 | 6.171e−5 | 1.698e−9 | −3.198e−12 | −5.575e−16 |
 | Early Mars | 0.32 | 5.547e−5 | 1.526e−9 | −2.874e−12 | −5.011e−16 |
+
+The maximum-greenhouse row puts the Sun's outer edge at 1.676 AU. The
+same row has two earlier versions: Kopparapu et al. (2013, arXiv v2):
+0.3438, 5.8942e−5, 1.6558e−9, −3.0045e−12, −5.2983e−16 (1.70 AU); and
+their erratum's Table 3: 0.3507, 5.9578e−5, 1.6707e−9, −3.0058e−12,
+−5.1925e−16. The 2014 paper says the maximum-greenhouse coefficients
+are "same for all the planetary masses" and does not explain the
+change. The climate of the rewrite uses the 2014 row, like its
+runaway limit (study 25 of the
+[Wiki](https://github.com/cyboooooorg/map-generator/wiki/25-climate-solver-audit)).
+
+The rewrite's climate solver does not reproduce the fit: its outer edge
+sits 22.9 % above it in flux round the Sun (1.513 AU; 0.4367 against
+0.3555 S⊕), 24.0 % above at 4500 K and 19.9 % at 3300 K, measured by a
+heavy test against the 2014 row. Legacy's column put the Sun's edge at
+1.535 AU. The gap is a documented departure, not a bound; issue #595
+holds the search for its cause.
 
 **In words.** A dimmer star's zone is closer in, as the square root of its
 luminosity. A cooler star's zone also sits at a lower flux. Its redder
@@ -266,6 +286,15 @@ The zone lives in [`star.rs`](https://github.com/cyboooooorg/map-generator/blob/
    eccentric orbit change?](eccentric-orbits.md)). The zone position,
    like the climate, uses the mean light over the year, a little more
    than at the semi-major axis.
+
+**The rewrite.** The inner edge is `science::habitable::runaway_flux`,
+the same Kopparapu et al. (2014) fit for one Earth mass and one star,
+clamped to 2,600–7,200 K. A planet runs away
+(`system::planet::water`) when the sum of each source's flux over its
+own limit exceeds 1, so that two stars are never blended into one
+temperature (#592). The outer edge, the maximum greenhouse, comes with
+the climate. How the runaway takes the water: [Planet atmospheres,
+climate and surface](planet-atmospheres.md#runaway-greenhouse-water-kept-and-tectonic-regime).
 
 Trimmed, from `crates/mapgen/src/star.rs`:
 
@@ -403,5 +432,5 @@ every other planet, temperatures in kelvin scale as $S^{1/4}$.
   sets the zone.
 - [What colour would plants be under another star?](plant-colours.md):
   life in the zone of another star.
-- [docs/system-spec.md](../system-spec.md): where each planet type sits
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): where each planet type sits
   in a planetary system.

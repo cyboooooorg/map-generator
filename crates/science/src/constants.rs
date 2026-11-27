@@ -1,7 +1,7 @@
 //! Sourced physical constants.
 
 use crate::units::{
-    Gyr, Kelvin, Kilogram, Metre, MetrePerSecond, MetrePerSecondSquared, Second, Watt,
+    Gyr, Kelvin, Kilogram, Metre, MetrePerSecond, MetrePerSecondSquared, Pascal, Second, Watt,
     WattPerSquareMetre,
 };
 
@@ -11,6 +11,10 @@ pub const ASTRONOMICAL_UNIT: Metre = Metre(149_597_870_700.0);
 /// Definition: standard acceleration of gravity, 9.806 65 m/s2 exactly (CGPM
 /// 1901, 3rd General Conference on Weights and Measures).
 pub const STANDARD_GRAVITY: MetrePerSecondSquared = MetrePerSecondSquared(9.806_65);
+
+/// Definition: one standard atmosphere, 101 325 Pa exactly (10th CGPM,
+/// 1954; BIPM, SI Brochure), the pressure of a normal boiling point.
+pub(crate) const STANDARD_ATMOSPHERE: Pascal = Pascal(101_325.0);
 
 /// Source: Mars's mean surface gravity, 3.73 m/s² (NASA Mars Fact Sheet,
 /// nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html, "Surface gravity
@@ -64,6 +68,13 @@ pub const SOLAR_MASS: Kilogram = Kilogram(SOLAR_MASS_PARAMETER / GRAVITATIONAL_C
 /// [`GRAVITATIONAL_CONSTANT`].
 pub const EARTH_MASS: Kilogram = Kilogram(EARTH_MASS_PARAMETER / GRAVITATIONAL_CONSTANT);
 
+/// Source: Earth's core mass fraction, 0.325 of its mass (Wang,
+/// Lineweaver & Ireland 2018, Icarus 299, 460,
+/// doi:10.1016/j.icarus.2017.08.024, as quoted by Plotnykov & Valencia
+/// 2020, MNRAS 499, 932, arXiv:2010.06480; Zeng, Sasselov & Jacobsen 2016,
+/// doi:10.3847/0004-637X/819/2/127, Table 1).
+pub const EARTH_CORE_MASS_FRACTION: f64 = 0.325;
+
 /// Definition: the day of 86 400 SI seconds (IAU and SI).
 pub const DAY: Second = Second(86_400.0);
 
@@ -87,6 +98,21 @@ pub const BOLTZMANN: f64 = 1.380_649e-23;
 /// Phys. 93, 025010; NIST CODATA value `N_A`).
 pub const AVOGADRO: f64 = 6.022_140_76e23;
 
+/// Source: Loschmidt constant `n0 = p0 / (k T0)` at 273.15 K and
+/// 101.325 kPa, 2.686 780 111e25 m^-3, exact (CODATA 2018, Tiesinga et al.
+/// 2021, Rev. Mod. Phys. 93, 025010; NIST CODATA value `n_0`, read on
+/// physics.nist.gov/cuu/Constants/ as `docs/science/radiative-transfer.md`
+/// cites it).
+pub const LOSCHMIDT: f64 = 2.686_780_111e25;
+
+/// Definition: speed of light in vacuum, 299 792 458 m/s exactly (SI,
+/// 17th CGPM 1983).
+pub const SPEED_OF_LIGHT: f64 = 299_792_458.0;
+
+/// Definition: Planck constant, 6.626 070 15e-34 J s exactly since the SI
+/// redefinition of 2019 (CODATA 2022; NIST CODATA value `h`).
+pub const PLANCK: f64 = 6.626_070_15e-34;
+
 /// Definition: molar gas constant `R = k N_A`, J/(mol K), exact
 /// (CODATA 2018 prints 8.314 462 618... J/(mol K)); the product of
 /// [`BOLTZMANN`] and [`AVOGADRO`] to its last digit.
@@ -100,6 +126,18 @@ pub const SECOND_RADIATION_CONSTANT_CM_K: f64 = 1.438_776_877;
 
 /// Definition: pascals in a bar (exact, SI-accepted unit).
 pub const PASCALS_PER_BAR: f64 = 1e5;
+
+/// Definition: joules in a kiloelectronvolt, a thousand times the
+/// elementary charge 1.602 176 634e-19 C, exact since the SI
+/// redefinition of 2019 (CODATA 2018, Tiesinga et al. 2021, Rev. Mod.
+/// Phys. 93, 025010; NIST CODATA value `e`).
+pub const JOULES_PER_KEV: f64 = 1.602_176_634e-16;
+
+/// Source: the electron's mass energy, 510.998 950 00 keV (CODATA 2018,
+/// Tiesinga et al. 2021, Rev. Mod. Phys. 93, 025010; NIST CODATA value
+/// `m_e c^2`): what each of the two photons of a positron's annihilation
+/// at rest carries.
+pub const ELECTRON_MASS_ENERGY_KEV: f64 = 510.998_95;
 
 /// Definition: degrees in a half turn, so that a degree is pi/180 rad.
 pub const DEGREES_PER_HALF_TURN: f64 = 180.0;

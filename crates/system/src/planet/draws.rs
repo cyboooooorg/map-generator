@@ -1,7 +1,8 @@
 //! The draws of a planet's composition, each from its own sub-seed of the
 //! seed the caller passes (`planet/cmf`, `planet/water`,
-//! `planet/radiogenic`), so that changing one draw never moves another.
-//! `class_of` will pass the trial seed, `model` the body seed.
+//! `planet/radiogenic`, `planet/envelope`, `planet/volatiles`,
+//! `planet/snowball`), so that changing one draw never moves another.
+//! `class_of` and `model` both pass the trial seed.
 //!
 //! Why a planet is a water world is recorded beside its water: a flag
 //! derived from the orbit and the ice line (formed beyond it) and, inside
@@ -15,15 +16,25 @@
 //!
 //! The draw parameters live here, not in `science`: they are properties of
 //! how the engine draws a planet, not laws of physics.
+//!
+//! An asked archetype's composition (`archetype::composition`, the
+//! trial's `archetype`) replaces the draws it sets: the core mass
+//! fraction, the water fraction (with the migration flag an input `false`
+//! inside the ice line) and the envelope fraction become
+//! `Provenance::Input` leaves. Their sub-seeds are still derived and
+//! drawn, so the other draws do not move; `class_of` and `model` read the
+//! same trial, so the same composition.
 
 use super::codes;
 use super::envelope::envelope_fraction;
 use super::interior::InteriorError;
 use crate::Trial;
-use crate::random::uniform;
+use crate::archetype::{self, ArchetypeComposition};
+use crate::random::{normal, uniform};
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
 use science::units::{Dex, EarthMass, Fraction};
+use science::volatiles::VOLATILE_SPREAD;
 use timeline::{Code, Provenance, Seed, Trace, Traced};
 
 /// Source: Elkins-Tanton & Seager 2008, "Coreless Terrestrial Exoplanets"
@@ -81,7 +92,8 @@ const RADIOGENIC_HALF_RANGE_DEX: f64 = 0.5;
 
 /// The composition a trial draws. The core mass fraction, the water
 /// fraction, the migration flag, the radiogenic abundance and, below
-/// 20 M_E, the envelope fraction are drawn leaves of the trace.
+/// 20 M_E, the envelope fraction are drawn leaves of the trace, or input
+/// leaves when the trial's archetype imposes them.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Drawn {
     /// Core mass fraction of the planet without its water: the core is
@@ -109,6 +121,25 @@ pub(crate) struct Drawn {
     /// A gas giant's total heavy-element mass, drawn; `None` below
     /// 20 M_E.
     pub heavy_mass: Option<Traced<EarthMass>>,
+    /// The scatter of each volatile budget around its rule.
+    pub volatiles: VolatileScatter,
+}
+
+/// The scatter of each volatile budget around its rule, dex: log-normal,
+/// `N(0, VOLATILE_SPREAD)` in dex, drawn in the order CO2, N2, S, CH4,
+/// NH3 from one sub-seed (`planet/volatiles`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct VolatileScatter {
+    /// CO2.
+    pub co2: Traced<Dex>,
+    /// N2.
+    pub n2: Traced<Dex>,
+    /// Sulfur.
+    pub s: Traced<Dex>,
+    /// CH4.
+    pub ch4: Traced<Dex>,
+    /// NH3.
+    pub nh3: Traced<Dex>,
 }
 
 impl Drawn {
@@ -141,6 +172,9 @@ pub(crate) struct Labels {
     pub water: &'static str,
     pub radiogenic: &'static str,
     pub envelope: &'static str,
+    pub volatiles: &'static str,
+    pub snowball: &'static str,
+    pub life: &'static str,
 }
 
 /// The labels of the engine.
@@ -149,10 +183,13 @@ pub(crate) const LABELS: Labels = Labels {
     water: "planet/water",
     radiogenic: "planet/radiogenic",
     envelope: "planet/envelope",
+    volatiles: "planet/volatiles",
+    snowball: "planet/snowball",
+    life: "planet/life",
 };
 
 /// Draws the composition of `trial` from `seed` and records it. The
-/// caller chooses the seed: `class_of` the trial's, `model` the body's.
+/// caller chooses the seed: the trial's, for `class_of` and `model` alike.
 pub(crate) fn draw(seed: Seed, trial: &Trial, trace: &mut Trace) -> Result<Drawn, InteriorError> {
     draw_with(seed, trial, trace, &LABELS)
 }
@@ -169,11 +206,33 @@ pub(crate) fn draw_with(
     let water = water_draws(seed.derive(labels.water));
     let radiogenic = radiogenic_abundance(seed.derive(labels.radiogenic));
     let envelope = envelope_fraction(seed.derive(labels.envelope), *trial.mass.value())?;
-    let migrated = (!beyond).then_some(water.migrated);
-    let fraction = if beyond || water.migrated {
-        water.icy
-    } else {
-        water.dry
+    let scatter = volatile_scatter(seed.derive(labels.volatiles));
+    let asked = trial.archetype.as_ref().and_then(archetype::composition);
+    let pick = |asked: Option<f64>, drawn: f64| {
+        asked.map_or((drawn, Provenance::Drawn), |v| (v, Provenance::Input))
+    };
+    let cmf = pick(asked.and_then(|a| a.core_mass_fraction), cmf);
+    let (fraction, migrated) = match asked.and_then(|a: &ArchetypeComposition| a.water_fraction) {
+        // An asked water is held in the mantle: the planet did not migrate.
+        Some(w) => (
+            (w, Provenance::Input),
+            (!beyond).then_some((false, Provenance::Input)),
+        ),
+        None => {
+            let fraction = if beyond || water.migrated {
+                water.icy
+            } else {
+                water.dry
+            };
+            (
+                (fraction, Provenance::Drawn),
+                (!beyond).then_some((water.migrated, Provenance::Drawn)),
+            )
+        }
+    };
+    let envelope = match asked.and_then(|a| a.envelope_fraction) {
+        Some(f) => ((f, Provenance::Input), None),
+        None => ((envelope.fraction, Provenance::Drawn), envelope.heavy_mass),
     };
     record(
         trial,
@@ -183,7 +242,8 @@ pub(crate) fn draw_with(
         fraction,
         migrated,
         radiogenic,
-        (envelope.fraction, envelope.heavy_mass),
+        envelope,
+        (scatter, Provenance::Drawn),
     )
 }
 
@@ -192,31 +252,35 @@ fn formed_beyond_ice_line(trial: &Trial) -> bool {
     trial.orbit.semi_major_axis.value().0 >= trial.ice_line.value().0
 }
 
+/// A value and the provenance of its leaf: drawn, or asked by the
+/// archetype (an input).
+type Leaf<T> = (T, Provenance);
+
 #[expect(clippy::too_many_arguments, reason = "one argument per drawn leaf")]
 fn record(
     trial: &Trial,
     trace: &mut Trace,
     beyond: bool,
-    cmf: f64,
-    water_fraction: f64,
-    migrated: Option<bool>,
+    (cmf, cmf_provenance): Leaf<f64>,
+    (water_fraction, water_provenance): Leaf<f64>,
+    migrated: Option<Leaf<bool>>,
     radiogenic: f64,
-    (envelope, heavy_mass): (f64, Option<EarthMass>),
+    ((envelope, envelope_provenance), heavy_mass): (Leaf<f64>, Option<EarthMass>),
+    (scatter, scatter_provenance): ([f64; 5], Provenance),
 ) -> Result<Drawn, InteriorError> {
     let cmf = Fraction::try_from(cmf).map_err(InteriorError::NotAFraction)?;
     let fraction = Fraction::try_from(water_fraction).map_err(InteriorError::NotAFraction)?;
     let core_mass_fraction =
-        trace.leaf(Code::of(codes::CORE_MASS_FRACTION), cmf, Provenance::Drawn)?;
+        trace.leaf(Code::of(codes::CORE_MASS_FRACTION), cmf, cmf_provenance)?;
     let formed_beyond_ice_line = trace.record(
         Code::of(codes::FORMED_BEYOND_ICE_LINE),
         beyond,
         &[trial.orbit.semi_major_axis.node(), trial.ice_line.node()],
     )?;
     let migrated = migrated
-        .map(|m| trace.leaf(Code::of(codes::MIGRATED), m, Provenance::Drawn))
+        .map(|(m, provenance)| trace.leaf(Code::of(codes::MIGRATED), m, provenance))
         .transpose()?;
-    let water_fraction =
-        trace.leaf(Code::of(codes::WATER_FRACTION), fraction, Provenance::Drawn)?;
+    let water_fraction = trace.leaf(Code::of(codes::WATER_FRACTION), fraction, water_provenance)?;
     let heavy_mass = heavy_mass
         .map(|m| trace.leaf(Code::of(codes::HEAVY_MASS), m, Provenance::Drawn))
         .transpose()?;
@@ -232,8 +296,17 @@ fn record(
         None => trace.leaf(
             Code::of(codes::ENVELOPE_FRACTION),
             envelope,
-            Provenance::Drawn,
+            envelope_provenance,
         )?,
+    };
+    let mut scatter_leaf =
+        |code: &'static str, dex: f64| trace.leaf(Code::of(code), Dex(dex), scatter_provenance);
+    let volatiles = VolatileScatter {
+        co2: scatter_leaf(codes::VOLATILE_SCATTER_CO2, scatter[0])?,
+        n2: scatter_leaf(codes::VOLATILE_SCATTER_N2, scatter[1])?,
+        s: scatter_leaf(codes::VOLATILE_SCATTER_S, scatter[2])?,
+        ch4: scatter_leaf(codes::VOLATILE_SCATTER_CH4, scatter[3])?,
+        nh3: scatter_leaf(codes::VOLATILE_SCATTER_NH3, scatter[4])?,
     };
     Ok(Drawn {
         core_mass_fraction,
@@ -247,6 +320,7 @@ fn record(
         )?,
         envelope_fraction,
         heavy_mass,
+        volatiles,
     })
 }
 
@@ -283,11 +357,40 @@ pub(crate) fn radiogenic_abundance(seed: Seed) -> f64 {
     )
 }
 
+/// The snowball draw: one uniform number in the open interval (0, 1),
+/// which the climate of a bistable planet compares with its snowball
+/// chance (`science::snowball::snowball_chance`): frozen when the draw is
+/// under it. The caller passes `seed.derive(LABELS.snowball)`. It reads
+/// nothing of the trace, so the same planet gets the same answer.
+pub(crate) fn snowball_draw(seed: Seed) -> f64 {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
+    uniform(&mut rng)
+}
+
+/// The life draw: one uniform number in the open interval (0, 1), which
+/// the life stage compares with its chance (`science::life::stage`):
+/// life arose where it could when the draw is under
+/// `science::life::LIFE_CHANCE`. The caller passes
+/// `seed.derive(LABELS.life)`. It reads nothing of the trace, so the same
+/// planet gets the same answer.
+pub(crate) fn life_draw(seed: Seed) -> f64 {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
+    uniform(&mut rng)
+}
+
+/// The volatile scatter, dex, in the order CO2, N2, S, CH4, NH3: each
+/// `N(0, VOLATILE_SPREAD)`, two uniforms per number from one stream.
+pub(crate) fn volatile_scatter(seed: Seed) -> [f64; 5] {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
+    std::array::from_fn(|_| VOLATILE_SPREAD.0 * normal(&mut rng))
+}
+
 #[cfg(test)]
 impl Drawn {
     /// A composition set by hand for `trial`, for a test that needs Earth's
     /// or a given kind of planet; whether it formed beyond the ice line
-    /// still comes from the trial. `migrated` is `None` beyond the ice line.
+    /// still comes from the trial. `migrated` is `None` beyond the ice line;
+    /// a `None` scatter gives 0 dex, imposed.
     #[expect(clippy::too_many_arguments, reason = "one argument per drawn leaf")]
     pub(crate) fn fixed(
         trial: &Trial,
@@ -298,16 +401,18 @@ impl Drawn {
         migrated: Option<bool>,
         envelope_fraction: f64,
         heavy_mass: Option<EarthMass>,
+        scatter: Option<[f64; 5]>,
     ) -> Drawn {
         record(
             trial,
             trace,
             formed_beyond_ice_line(trial),
-            core_mass_fraction,
-            water_fraction,
-            migrated,
+            (core_mass_fraction, Provenance::Drawn),
+            (water_fraction, Provenance::Drawn),
+            migrated.map(|m| (m, Provenance::Drawn)),
             radiogenic_abundance,
-            (envelope_fraction, heavy_mass),
+            ((envelope_fraction, Provenance::Drawn), heavy_mass),
+            scatter.map_or(([0.0; 5], Provenance::Imposed), |s| (s, Provenance::Drawn)),
         )
         .unwrap()
     }

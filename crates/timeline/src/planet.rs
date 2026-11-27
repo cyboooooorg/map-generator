@@ -191,7 +191,8 @@ pub struct Core {
 traced_fields!(Core { state, field });
 
 contract_enum! {
-    /// A gas of an atmosphere.
+    /// A gas of an atmosphere. Argon (`Ar`) is the radiogenic argon-40
+    /// the rock outgasses (study 29, #694).
     Gas {
         N2 => "n2",
         Co2 => "co2",
@@ -200,13 +201,29 @@ contract_enum! {
         Nh3 => "nh3",
         So2 => "so2",
         O2 => "o2",
+        Ar => "ar",
     }
 }
 
 /// The atmosphere at the surface.
+///
+/// Its gases are weights, not partial pressures: `partial[gas]` is the
+/// gas's mass times the surface gravity over the planet's area,
+/// `m_i g / (4 π R²)`, in bar. Weights add: their sum is
+/// `surface_pressure`. A gas's partial pressure, its share by volume of
+/// that pressure, `p_i = (w_i / M_i) / Σ_j (w_j / M_j) × Σ_j w_j` over the
+/// dry gases (water vapour added on top), depends on the whole air; a
+/// reader that needs it converts the whole air
+/// (`science::radiation::gases::Weights::partial_pressures`, issue #749).
+/// The water vapour's weight is taken as its pressure at the surface, the
+/// column's convention: over a wet surface, the saturation pressure at its
+/// temperature; for a runaway, the steam its air keeps.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Atmosphere {
+    /// The surface pressure, bar: the sum of the gases' weights.
     pub surface_pressure: Traced<Bar>,
+    /// Each gas's weight, bar (see [`Atmosphere`]); the name is the
+    /// contract's, kept since the format reads it.
     pub partial: BTreeMap<Gas, Traced<Bar>>,
 }
 
@@ -216,10 +233,15 @@ traced_fields!(Atmosphere {
 });
 
 contract_enum! {
-    /// The global state of the climate.
+    /// The global state of the climate: temperate (the warm branch, or
+    /// a body with no water to freeze), a snowball (frozen over until
+    /// volcanic CO₂ thaws it), frozen for good (a body with water,
+    /// frozen over, which no CO₂ it can hold thaws) or a runaway
+    /// greenhouse.
     ClimateState {
         Temperate => "temperate",
         Snowball => "snowball",
+        Frozen => "frozen",
         Runaway => "runaway",
     }
 }
@@ -266,15 +288,6 @@ traced_fields!(SurfaceLiquid {
     ocean_share
 });
 
-/// Life on the planet.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Life {
-    pub arose: Traced<bool>,
-    pub oxygenated: Traced<bool>,
-}
-
-traced_fields!(Life { arose, oxygenated });
-
 /// What a planet with a solid surface has.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Surface {
@@ -285,7 +298,7 @@ pub struct Surface {
     pub climate: GlobalClimate,
     pub liquid: Option<SurfaceLiquid>,
     pub terrain: Terrain,
-    pub life: Life,
+    pub life: Traced<Biosphere>,
 }
 
 traced_fields!(Surface {
@@ -298,6 +311,16 @@ traced_fields!(Surface {
     terrain,
     life
 });
+
+contract_enum! {
+    /// The air life has made: none, the air it found, CH4 gone, modern O2.
+    Biosphere {
+        Lifeless => "lifeless",
+        Anoxic => "anoxic",
+        Oxidising => "oxidising",
+        Modern => "modern",
+    }
+}
 
 contract_enum! {
     /// Whether the archetype's backward search reached one of its
@@ -390,5 +413,19 @@ mod tests {
         assert_eq!(seen, expected);
         let graph = trace.freeze(&mut vec![orbit]).unwrap();
         assert_eq!(graph.nodes.len(), 4);
+    }
+
+    #[test]
+    fn biosphere_keys_are_kebab_case() {
+        for (stage, key) in [
+            (Biosphere::Lifeless, "lifeless"),
+            (Biosphere::Anoxic, "anoxic"),
+            (Biosphere::Oxidising, "oxidising"),
+            (Biosphere::Modern, "modern"),
+        ] {
+            let json = serde_json::to_string(&stage).unwrap();
+            assert_eq!(json, format!("\"{key}\""));
+            assert_eq!(serde_json::from_str::<Biosphere>(&json).unwrap(), stage);
+        }
     }
 }

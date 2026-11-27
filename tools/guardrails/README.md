@@ -11,8 +11,12 @@ Keeps the workspace in the shape of the
 - **Science constants** (`src/constants.rs`): every numeric `const` or
   `static` of `crates/science` has a doc comment starting with `Source:`,
   `Calibration:` or `Definition:`.
-- **README length** (`src/readme.rs`): the root `README.md` stays under
-  300 lines, each `crates/*/README.md` under 150.
+- **Science pages** (`src/science_pages.rs`): every article of
+  `docs/science/` has a `## Sources` section holding at least one line;
+  a page exempted for now (`EXEMPT`, with why) fails once it has one,
+  so the list only shrinks.
+- **README length** (`src/readme.rs`): the root `README.md` stays at
+  600 lines or fewer, each `crates/*/README.md` at 300 or fewer.
 - **Clippy configurations** (`src/clippy_config.rs`): every
   `clippy.toml` keeps the determinism entries of the root one.
 

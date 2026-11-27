@@ -14,15 +14,19 @@
 //! doi:10.1016/0019-1035(91)90137-I, Appendix B, as Kopparapu et al. 2013,
 //! *ApJ* 765, 131, doi:10.1088/0004-637X/765/2/131, §2, follow it; the
 //! Appendix itself is paywalled and was not read), so that a thick CO₂
-//! air's greenhouse flattens. A skin temperature floors the column (a
-//! stratosphere, where the vapour and the CO₂ keep the mixing ratio of
-//! their cold trap).
+//! air's greenhouse flattens. Where its nitrogen reaches its own
+//! saturation, at any height (over N₂ frost or liquid from the ground up,
+//! or aloft where a cold air's adiabat meets N₂'s curve, as the sourced
+//! Titan's does near 0.65 bar), the air follows N₂'s pseudo-adiabat the
+//! same way (issue #741, studies 38 and 39). A skin
+//! temperature floors the column (a stratosphere, where the vapour, the
+//! CO₂ and the N₂ keep the mixing ratio of their cold trap).
 //!
 //! The radiation is summed bin by bin over the thermal infrared
 //! ([`super::spectrum`]): in each bin the transmission to space of CO₂'s
 //! and water's lines (a correlated-k table, a few g-points per bin), of
-//! their continua, of the CO₂–CO₂ pairs and of methane's grey stand-in,
-//! and the two-stream, non-scattering emission of each layer's mean
+//! their continua and of the collision-induced pairs (CO₂, N₂, O₂ and
+//! methane), and the two-stream, non-scattering emission of each layer's mean
 //! Planck flux with the diffusivity 1.66. Whatever no gas closes stays
 //! open: water's window, the far wings of thin CO₂.
 //!
@@ -45,7 +49,7 @@
 //! is the moist limit a wet surface runs away past.
 //!
 //! The water saturation and its latent heat are IAPWS's
-//! ([`crate::water`]), the CO₂ and methane ones those of
+//! ([`crate::water`]), the CO₂, N₂ and methane ones those of
 //! [`crate::volatiles`]. The memo of the columns already solved and the
 //! single-precision workspace of the sum belong to the caller
 //! ([`ColumnCache`]).
@@ -53,20 +57,66 @@
 use super::clouds::cloud_cover_share;
 use super::fast_math;
 use super::gases::{
-    CH4_HEAT_CAPACITY, CO2_HEAT_CAPACITY, N2_HEAT_CAPACITY, NH3_HEAT_CAPACITY, O2_HEAT_CAPACITY,
-    PartialPressures, SO2_HEAT_CAPACITY,
+    AR_HEAT_CAPACITY, CH4_HEAT_CAPACITY, CO2_HEAT_CAPACITY, N2_HEAT_CAPACITY, NH3_HEAT_CAPACITY,
+    O2_HEAT_CAPACITY, PartialPressures, SO2_HEAT_CAPACITY,
 };
+use super::ozone::OzoneProfile;
 use super::spectrum::{
-    self, BANDS, BINS, DIFFUSIVITY, FastLevel, G, POINTS, TAIL, planck_spectrum,
+    self, BANDS, BINS, DIFFUSIVITY, FastLevel, G, LINE_GASES, LineGas, POINTS, TAIL,
+    planck_spectrum,
 };
-use crate::constants::{MOLAR_GAS_CONSTANT, STEFAN_BOLTZMANN};
-use crate::units::{Kelvin, MetrePerSecondSquared, WattPerSquareMetre};
-use crate::volatiles::{co2_latent_j_mol, co2_saturation_bar, methane_saturation_bar};
-use crate::water::{CRITICAL_POINT_TEMPERATURE, vapour_latent_j_mol, vapour_saturation_bar};
+use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STEFAN_BOLTZMANN};
+use crate::units::{DobsonUnit, Kelvin, MetrePerSecondSquared, WattPerSquareMetre};
+use crate::volatiles::{
+    CO2_TRIPLE_TEMPERATURE, NITROGEN_CRITICAL_PRESSURE, NITROGEN_CRITICAL_TEMPERATURE,
+    NITROGEN_TRIPLE_TEMPERATURE, co2_condensate, co2_latent_j_mol_over, co2_saturation_bar,
+    co2_saturation_bar_over, methane_saturation_bar, nitrogen_condensate,
+    nitrogen_latent_j_mol_over, nitrogen_saturation_bar, nitrogen_saturation_bar_over,
+};
+use crate::water::{
+    CRITICAL_POINT_TEMPERATURE, Condensate, TRIPLE_POINT_TEMPERATURE, vapour_latent_j_mol_over,
+    vapour_saturation_bar, vapour_saturation_bar_over,
+};
+
+#[path = "column_beyond.rs"]
+mod beyond;
 
 #[cfg(test)]
 #[path = "column_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "column_rfmip_tests.rs"]
+mod rfmip_tests;
+
+/// Argon's molar heat capacity as the column reads it,
+/// [`AR_HEAT_CAPACITY`]. Outside `cfg(test)` this is the constant and
+/// the only code path.
+#[cfg(not(test))]
+fn ar_heat_capacity() -> f64 {
+    AR_HEAT_CAPACITY
+}
+
+/// Argon's molar heat capacity as the column reads it, test builds only:
+/// [`AR_HEAT_CAPACITY`], unless a test on this thread set
+/// [`AR_HEAT_CAPACITY_OVERRIDE`] to tell the lapse rate's part of
+/// argon's warming from its broadening's.
+#[cfg(test)]
+fn ar_heat_capacity() -> f64 {
+    AR_HEAT_CAPACITY_OVERRIDE
+        .with(std::cell::Cell::get)
+        .unwrap_or(AR_HEAT_CAPACITY)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Test builds only: a molar heat capacity, J/(mol·K), that the
+    /// column takes for argon instead of [`AR_HEAT_CAPACITY`] on this
+    /// thread while it is set. A test that sets it uses a fresh
+    /// [`ColumnCache`] for each value and clears it after.
+    pub(crate) static AR_HEAT_CAPACITY_OVERRIDE: std::cell::Cell<Option<f64>> =
+        const { std::cell::Cell::new(None) };
+}
 
 /// Definition: water's critical temperature, K ([`CRITICAL_POINT_TEMPERATURE`]):
 /// above it no liquid exists, and the vapour is a gas like the others.
@@ -169,19 +219,35 @@ const TOP_BAR: f64 = 1e-4;
 /// surface pressure, not the sea level's.
 pub(crate) const CLOUD_TOP_SHARE: f64 = 580.0 / 985.5;
 
-/// Source: infrared optical depth of the water clouds: ISCCP's global mean
-/// visible optical thickness, 3.8 (Rossow & Schiffer 1999, §6a and Table
-/// 4), over 2, the empirical ratio of the visible to the infrared optical
-/// thickness ISCCP takes (same paper, §5: `τ_ir = τ / 2.0`); confirmed by
-/// the audit, Wiki study 19.
-const CLOUD_IR_DEPTH: f64 = 3.8 / 2.0;
+/// Calibration: the water clouds' infrared emissivity, fitted so that
+/// Earth's clouds take CERES's longwave cloud effect, 25.7 W/m² (the
+/// clear sky of the same air without its clouds less the all-sky
+/// outgoing radiation, Loeb et al. 2020, *J. Climate* 33, 61,
+/// doi:10.1175/JCLI-D-19-0381.1, Table 3), from the column of CERES's
+/// years: Earth's measured air at 288 K, 389 ppm of CO₂, 1803 ppb of
+/// methane, 324.2 ppb of N₂O and 300 DU of ozone, under CERES's skin
+/// (issue #705, decided by the user on 2026-11-27, after the gases of
+/// #703 and #704). The effect is linear in the emissivity, so the fit
+/// is one ratio: 29.028 W/m² at ISCCP's 0.957 gives 0.8475, rounded up
+/// to 0.848 (25.71 W/m²). ISCCP's mean visible optical thickness, 3.8,
+/// over its `τ_ir = τ / 2` (Rossow & Schiffer 1999, §5, §6a and Table
+/// 4) gave `1 − exp(−1.66 × 1.9)` = 0.957, the emissivity of the mean
+/// optical depth; 0.848 is that of an infrared depth of 1.13. What was
+/// searched and not found: a global mean cloud emissivity for a single
+/// layer, and why ISCCP's clouds in a mean column take more than CERES
+/// measures (Wiki study 32; its candidate, the mean emissivity over a
+/// spread of thin cirrus being under the emissivity of their mean depth,
+/// goes the way of this fit). It is fitted on the single column whose
+/// profile track T11 (issue #757) will change (its stratosphere, its
+/// lapse rate aloft, its cold trap's water), which the clouds' effect
+/// reads, so it is refitted by the same method then.
+/// `docs/science/radiative-transfer.md`, "Clouds in the infrared".
+const CLOUD_EMISSIVITY: f64 = 0.848;
 
-/// The clouds' infrared emissivity for the column's fluxes:
-/// `1 − exp(−D τ_ir)`, with the diffusivity `D` the column's gases take
-/// ([`DIFFUSIVITY`]): 0.957. A cloud is grey in the infrared, and black
-/// past a few optical depths.
+/// The clouds' infrared emissivity for the column's fluxes,
+/// [`CLOUD_EMISSIVITY`]. A cloud is grey in the infrared.
 fn cloud_emissivity() -> f64 {
-    1.0 - (-DIFFUSIVITY * CLOUD_IR_DEPTH).exp()
+    CLOUD_EMISSIVITY
 }
 
 /// Source: pressure, bar, of the tropopause of a thick atmosphere, where
@@ -250,10 +316,6 @@ fn radiating_methane_bar(gases: &PartialPressures, pressure_bar: f64, skin_k: f6
 /// air). The methane whose near-infrared bands take a share of the
 /// starlight before it reaches the troposphere (the anti-greenhouse of
 /// PR 2b-2).
-#[expect(
-    dead_code,
-    reason = "the methane anti-greenhouse of PR 2b-2 reads it; ported with the column"
-)]
 pub(crate) fn stratospheric_methane_bar(gases: &PartialPressures, skin_k: f64) -> f64 {
     let pressure = gases.total();
     if pressure <= 0.0 {
@@ -288,6 +350,7 @@ impl DryAir {
             nh3: gases.nh3.max(0.0),
             so2: gases.so2.max(0.0),
             o2: gases.o2.max(0.0),
+            ar: gases.ar.max(0.0),
         };
         let pressure = g.total();
         let cp = if pressure > 0.0 {
@@ -296,7 +359,8 @@ impl DryAir {
                 + g.ch4 * CH4_HEAT_CAPACITY
                 + g.nh3 * NH3_HEAT_CAPACITY
                 + g.so2 * SO2_HEAT_CAPACITY
-                + g.o2 * O2_HEAT_CAPACITY)
+                + g.o2 * O2_HEAT_CAPACITY
+                + g.ar * ar_heat_capacity())
                 / pressure
         } else {
             N2_HEAT_CAPACITY
@@ -322,6 +386,13 @@ impl DryAir {
         } else {
             0.0
         };
+        self.with_co2_and_share(vapour_bar, co2_bar, share)
+    }
+
+    /// The gases of a level holding `vapour_bar` of vapour and `co2_bar`
+    /// of CO₂, each other gas at `share` of its surface pressure (the
+    /// methane, of what radiates of it).
+    fn with_co2_and_share(&self, vapour_bar: f64, co2_bar: f64, share: f64) -> PartialPressures {
         PartialPressures {
             n2: self.gases.n2 * share,
             co2: co2_bar,
@@ -330,6 +401,7 @@ impl DryAir {
             nh3: self.gases.nh3 * share,
             so2: self.gases.so2 * share,
             o2: self.gases.o2 * share,
+            ar: self.gases.ar * share,
         }
     }
 
@@ -338,13 +410,69 @@ impl DryAir {
     /// none.
     fn cp_without_co2(&self) -> f64 {
         let g = &self.gases;
-        let others = g.n2 + g.ch4 + g.nh3 + g.so2 + g.o2;
+        let others = g.n2 + g.ch4 + g.nh3 + g.so2 + g.o2 + g.ar;
         if others > 0.0 {
             (g.n2 * N2_HEAT_CAPACITY
                 + g.ch4 * CH4_HEAT_CAPACITY
                 + g.nh3 * NH3_HEAT_CAPACITY
                 + g.so2 * SO2_HEAT_CAPACITY
-                + g.o2 * O2_HEAT_CAPACITY)
+                + g.o2 * O2_HEAT_CAPACITY
+                + g.ar * ar_heat_capacity())
+                / others
+        } else {
+            N2_HEAT_CAPACITY
+        }
+    }
+
+    /// The gases that radiate at a level where the dry air has `dry_bar`,
+    /// the vapour `vapour_bar`, the CO₂ `co2_bar` and the N₂ `n2_bar`,
+    /// once N₂'s condensation has thinned it ([`with_column`]): as
+    /// [`DryAir::with_co2`], the gases other than CO₂ and N₂ sharing the
+    /// rest in their surface proportions.
+    fn with_condensed(
+        &self,
+        dry_bar: f64,
+        vapour_bar: f64,
+        co2_bar: f64,
+        n2_bar: f64,
+    ) -> PartialPressures {
+        let others = self.pressure - self.gases.co2 - self.gases.n2;
+        let share = if others > 0.0 {
+            (dry_bar - co2_bar - n2_bar).max(0.0) / others
+        } else {
+            0.0
+        };
+        PartialPressures {
+            n2: n2_bar,
+            ..self.with_co2_and_share(vapour_bar, co2_bar, share)
+        }
+    }
+
+    /// N₂'s share of the dry air at a level whose CO₂ holds `co2_share`
+    /// of it and whose N₂ has not condensed: what [`DryAir::with_co2`]
+    /// gives it.
+    fn n2_share(&self, co2_share: f64) -> f64 {
+        let others = self.pressure - self.gases.co2;
+        if others > 0.0 {
+            self.gases.n2 * (1.0 - co2_share) / others
+        } else {
+            0.0
+        }
+    }
+
+    /// Molar heat capacity, J/(mol·K), of the gases other than N₂ and
+    /// CO₂: the air N₂ condenses out of ([`n2_lapse`]), where CO₂ is
+    /// frozen out (its frost holds 1.4e-4 bar at N₂'s critical point,
+    /// [`co2_saturation_bar`]); nitrogen's when there is none.
+    fn cp_without_n2(&self) -> f64 {
+        let g = &self.gases;
+        let others = g.ch4 + g.nh3 + g.so2 + g.o2 + g.ar;
+        if others > 0.0 {
+            (g.ch4 * CH4_HEAT_CAPACITY
+                + g.nh3 * NH3_HEAT_CAPACITY
+                + g.so2 * SO2_HEAT_CAPACITY
+                + g.o2 * O2_HEAT_CAPACITY
+                + g.ar * ar_heat_capacity())
                 / others
         } else {
             N2_HEAT_CAPACITY
@@ -385,53 +513,206 @@ fn pseudo_adiabat(
 }
 
 /// `d T / d ln p`, K, at `temperature_k` and `pressure_bar` on the moist
-/// pseudo-adiabat of CO₂ condensing out of `air` ([`pseudo_adiabat`] with
-/// CO₂ the condensable, [`co2_latent_j_mol`] its latent heat, and the
-/// other gases and the little water vapour so cold an air holds the
-/// non-condensing part): Kasting 1991, Appendix B, which Kopparapu et al.
-/// 2013 (§2) follow "in the upper troposphere when condensation was
-/// encountered" (the Appendix itself not read: audit, Wiki study 19).
-fn co2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64) -> f64 {
+/// pseudo-adiabat of CO₂ condensing out of `air` over `condensate`
+/// ([`pseudo_adiabat`] with CO₂ the condensable, its curve and latent
+/// heat over that condensate, [`co2_saturation_bar_over`] and
+/// [`co2_latent_j_mol_over`], and the other gases and the little water
+/// vapour so cold an air holds the non-condensing part): Kasting 1991,
+/// Appendix B, which Kopparapu et al. 2013 (§2) follow "in the upper
+/// troposphere when condensation was encountered" (the Appendix itself
+/// not read: audit, Wiki study 19).
+fn co2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: Condensate) -> f64 {
     let t = temperature_k;
     pseudo_adiabat(
         t,
         pressure_bar,
-        co2_saturation_bar(t),
-        co2_latent_j_mol(t),
+        co2_saturation_bar_over(t, condensate),
+        co2_latent_j_mol_over(t, condensate),
         air.cp_without_co2(),
         CO2_HEAT_CAPACITY,
     )
 }
 
-/// `d T / d ln p`, K, at `temperature_k` and `pressure_bar` on water's
-/// moist pseudo-adiabat (`saturated`, [`pseudo_adiabat`] with the IAPWS
-/// saturation and its latent heat, [`vapour_latent_j_mol`]) or on the dry
-/// adiabat of air holding `vapour_share` of vapour (mole fraction).
-fn lapse(
-    air: &DryAir,
-    temperature_k: f64,
-    pressure_bar: f64,
-    saturated: bool,
-    vapour_share: f64,
-) -> f64 {
+/// The temperature, K, a step of `h` in `ln p` up CO₂'s pseudo-adiabat
+/// reaches from `temperature_k` at `pressure_bar`: a midpoint
+/// (second-order Runge–Kutta) step over the condensate stable where it
+/// starts ([`co2_lapse`]).
+///
+/// The latent heat jumps by fusion's at CO₂'s triple point (216.592 K,
+/// [`CO2_TRIPLE_TEMPERATURE`], Span & Wagner 1996), so a step that
+/// crosses it is split there, as water's is ([`split_step`]): liquid
+/// down to where the step over liquid alone reaches the triple point
+/// (`T` taken linear across the step), frost below. Without the split
+/// the phase of the midpoint decides the whole step, and the column
+/// above jumps colder by up to 1 K when the surface moves the midpoint
+/// across 216.592 K: a cold CO₂-rich air's outgoing radiation fell by
+/// 1.3 W/m² over 0.005 K of its surface, and a methane Earth's collapse
+/// past its outer edge stopped on the jump (#703, 1.272 AU).
+fn co2_step(air: &DryAir, temperature_k: f64, pressure_bar: f64, h: f64) -> f64 {
+    let lapse = |t: f64, p: f64, condensate: Condensate| co2_lapse(air, t, p, condensate);
+    split_step(
+        temperature_k,
+        pressure_bar,
+        h,
+        (CO2_TRIPLE_TEMPERATURE, co2_condensate(temperature_k)),
+        lapse,
+    )
+}
+
+/// `d T / d ln p`, K, at `temperature_k` and `pressure_bar` on the moist
+/// pseudo-adiabat of N₂ condensing out of `air` over `condensate`
+/// ([`pseudo_adiabat`] with N₂ the condensable, its curve and latent heat
+/// over that condensate, [`nitrogen_saturation_bar_over`] and
+/// [`nitrogen_latent_j_mol_over`], and the gases other than N₂ and CO₂
+/// the non-condensing part, [`DryAir::cp_without_n2`]): the
+/// pseudo-adiabat CO₂ follows ([`co2_lapse`]) with N₂'s vapour pressure,
+/// as Charnay et al. 2014 (§2) condense nitrogen wherever their air falls
+/// under its saturation temperature. A pure N₂ air follows its
+/// saturation curve, `d T / d ln p = R T² / L` (Pierrehumbert 2010,
+/// §2.7): 4.8 K per e-fold of pressure at 62 K against the dry adiabat's
+/// 17.7 K (study 38, `docs/science/nitrogen-phases.md`).
+fn n2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: Condensate) -> f64 {
     let t = temperature_k;
-    if !saturated && vapour_share <= 0.0 {
+    pseudo_adiabat(
+        t,
+        pressure_bar,
+        nitrogen_saturation_bar_over(t, condensate),
+        nitrogen_latent_j_mol_over(t, condensate),
+        air.cp_without_n2(),
+        N2_HEAT_CAPACITY,
+    )
+}
+
+/// The temperature, K, a step of `h` in `ln p` up N₂'s pseudo-adiabat
+/// reaches from `temperature_k` at `pressure_bar` ([`n2_lapse`]), split at
+/// N₂'s triple point (63.14 K, [`NITROGEN_TRIPLE_TEMPERATURE`], Angus et
+/// al. 1979, where [`crate::volatiles::nitrogen_saturation_pressure`]
+/// switches from the liquid's curve to the frost's) as CO₂'s is
+/// ([`split_step`]): a cold N₂ body sits on that point (its frost and its
+/// liquid both stable under one light, study 38), so its column crosses
+/// it exactly where its climate is decided.
+fn n2_step(air: &DryAir, temperature_k: f64, pressure_bar: f64, h: f64) -> f64 {
+    let lapse = |t: f64, p: f64, condensate: Condensate| n2_lapse(air, t, p, condensate);
+    split_step(
+        temperature_k,
+        pressure_bar,
+        h,
+        (
+            NITROGEN_TRIPLE_TEMPERATURE.0,
+            nitrogen_condensate(temperature_k),
+        ),
+        lapse,
+    )
+}
+
+/// `ln(n2_bar / p_sat)` at `temperature_k`, N₂'s excess over its
+/// saturation ([`nitrogen_saturation_bar`]); from the critical point up,
+/// over the critical pressure, where the liquid's curve ends (Span et al.
+/// 2000), so that it stays finite.
+fn n2_excess(temperature_k: f64, n2_bar: f64) -> f64 {
+    let saturation = if temperature_k >= NITROGEN_CRITICAL_TEMPERATURE.0 {
+        NITROGEN_CRITICAL_PRESSURE.0 / PASCALS_PER_BAR
+    } else {
+        nitrogen_saturation_bar(temperature_k)
+    };
+    (n2_bar / saturation).ln()
+}
+
+/// `d T / d ln p`, K, at `temperature_k` on the dry adiabat of air
+/// holding `vapour_share` of unsaturated vapour (mole fraction). A
+/// saturated step takes water's moist pseudo-adiabat instead
+/// ([`saturated_step`], the one place that chooses its condensate).
+fn lapse(air: &DryAir, temperature_k: f64, vapour_share: f64) -> f64 {
+    let t = temperature_k;
+    if vapour_share <= 0.0 {
         return t * MOLAR_GAS_CONSTANT / air.cp;
     }
-    let cp_v = steam_cp(t);
-    if saturated {
-        pseudo_adiabat(
-            t,
-            pressure_bar,
-            vapour_saturation_bar(t),
-            vapour_latent_j_mol(t),
-            air.cp,
-            cp_v,
-        )
-    } else {
-        let cp = (1.0 - vapour_share) * air.cp + vapour_share * cp_v;
-        t * MOLAR_GAS_CONSTANT / cp
+    let cp = (1.0 - vapour_share) * air.cp + vapour_share * steam_cp(t);
+    t * MOLAR_GAS_CONSTANT / cp
+}
+
+/// `d T / d ln p`, K, at `temperature_k` and `pressure_bar` on water's
+/// moist pseudo-adiabat over `condensate` ([`pseudo_adiabat`] with its
+/// IAPWS curve and latent heat, [`vapour_saturation_bar_over`] and
+/// [`vapour_latent_j_mol_over`]).
+fn water_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: Condensate) -> f64 {
+    let t = temperature_k;
+    pseudo_adiabat(
+        t,
+        pressure_bar,
+        vapour_saturation_bar_over(t, condensate),
+        vapour_latent_j_mol_over(t, condensate),
+        air.cp,
+        steam_cp(t),
+    )
+}
+
+/// The temperature, K, a step of `h` in `ln p` up water's moist
+/// pseudo-adiabat reaches from `temperature_k` at `pressure_bar`: a
+/// midpoint (second-order Runge–Kutta) step over the condensate stable
+/// where it starts ([`water_lapse`]).
+///
+/// The latent heat jumps by fusion's at the triple point (273.16 K), so a
+/// step that crosses it is split there ([`split_step`]), as the step
+/// where the vapour first saturates is: liquid up to where the step over liquid alone
+/// reaches 273.16 K (`T` taken linear across the step), ice above.
+/// Without the split, the phase of the midpoint decides the whole step,
+/// and the column above jumps colder when the surface moves the midpoint
+/// across 273.16 K (study 32: a sawtooth of up to 1.2 W/m² in Earth's
+/// outgoing radiation). The triple point is a `Source:`
+/// ([`TRIPLE_POINT_TEMPERATURE`], IAPWS R10-06(2009), Table 1).
+fn saturated_step(air: &DryAir, temperature_k: f64, pressure_bar: f64, h: f64) -> f64 {
+    let lapse = |t: f64, p: f64, condensate: Condensate| water_lapse(air, t, p, condensate);
+    split_step(
+        temperature_k,
+        pressure_bar,
+        h,
+        (TRIPLE_POINT_TEMPERATURE.0, Condensate::at(temperature_k)),
+        lapse,
+    )
+}
+
+/// The temperature, K, a step of `h` in `ln p` up a condensable's
+/// pseudo-adiabat reaches from `temperature_k` at `pressure_bar`: a
+/// midpoint (second-order Runge–Kutta) step of `lapse` (`d T / d ln p` at
+/// a temperature and a pressure over a condensate) over `stable`, the
+/// condensate stable where it starts, with `triple` the condensable's
+/// triple-point temperature, K.
+///
+/// The latent heat jumps by fusion's at the triple point, so a step that
+/// crosses it is split there: liquid down to where the step over liquid
+/// alone reaches the triple point (`T` taken linear across the step),
+/// frost below. Without the split, the phase of the midpoint decides the
+/// whole step, and the column above jumps when the surface moves the
+/// midpoint across the triple point (water's [`saturated_step`], CO₂'s
+/// [`co2_step`], N₂'s [`n2_step`]).
+fn split_step(
+    temperature_k: f64,
+    pressure_bar: f64,
+    h: f64,
+    (triple, stable): (f64, Condensate),
+    lapse: impl Fn(f64, f64, Condensate) -> f64,
+) -> f64 {
+    let step = |t: f64, from: f64, h: f64, condensate: Condensate| {
+        let half = t - 0.5 * h * lapse(t, from, condensate);
+        t - h * lapse(half, from * (-0.5 * h).exp(), condensate)
+    };
+    let t = temperature_k;
+    if stable == Condensate::Ice {
+        return step(t, pressure_bar, h, stable);
     }
+    let liquid = step(t, pressure_bar, h, stable);
+    if liquid >= triple {
+        return liquid;
+    }
+    let f = (t - triple) / (t - liquid);
+    let frozen = step(t, pressure_bar, f * h, Condensate::Liquid);
+    step(
+        frozen,
+        pressure_bar * (-f * h).exp(),
+        (1.0 - f) * h,
+        Condensate::Ice,
+    )
 }
 
 /// The sky and humidity of a column.
@@ -464,10 +745,16 @@ impl Sky {
 /// Source: the floor of the troposphere's relative humidity profile, as
 /// a share of the surface pressure: `RH_s (Q − 0.02) / (1 − 0.02)`,
 /// Manabe & Wetherald 1967 (*J. Atmos. Sci.* 24, 241,
-/// doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2, eq. 2). The paper
-/// is not open; the profile is confirmed indirectly by climlab's
-/// `ManabeWaterVapor` (`RH_s ((Q − 0.02)/(1 − 0.02))`, "following Manabe
-/// 1967") and by arXiv:2006.03098, as the audit (Wiki study 19) records.
+/// doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2, eq. 2, read in
+/// the scan GFDL hosts, Wiki study 33). They fit the line to observed
+/// hemispheric means of relative humidity (their Fig. 3) and floor the
+/// stratosphere's mixing ratio at 3e-6 g/g (their eq. 3); this column
+/// ends the line at its cold trap instead. Kluft et al. 2019 (*J.
+/// Climate* 32, 8111, doi:10.1175/JCLI-D-18-0774.1, §2b) number the line
+/// 3, which is the paper's stratospheric floor. Below 0 °C the column
+/// refers the humidity to ice; climlab refers it to liquid water and
+/// Kluft et al. to a mix (study 32); the 1967 paper speaks only of "the
+/// saturation vapor pressure of water vapor".
 const HUMIDITY_FLOOR_SHARE: f64 = 0.02;
 
 /// Relative humidity of the troposphere at `share` of the surface
@@ -504,8 +791,7 @@ impl Profile {
     };
 
     /// [`Profile::CLIMATE`] under a clear sky.
-    #[cfg(test)]
-    pub(crate) const CLEAR: Profile = Profile {
+    pub const CLEAR: Profile = Profile {
         sky: Sky::Clear,
         ..Profile::CLIMATE
     };
@@ -556,7 +842,8 @@ impl Profile {
 }
 
 /// Outgoing longwave radiation of a column with surface partial pressures
-/// `gases` (`gases.h2o` the vapour at the surface) over a surface at
+/// `gases` (`gases.h2o` the vapour at the surface) and the ozone column
+/// `ozone` (laid out by [`OzoneProfile`]: none in an air without it) over a surface at
 /// `surface`, whose temperature never falls below `skin` (its
 /// stratosphere, [`skin_temperature`]; 0 K for none), on a body of
 /// surface gravity `gravity`, built as `profile` says. See the module
@@ -579,6 +866,7 @@ impl Profile {
 /// a hit returns the bits a fresh column gives.
 pub fn outgoing_longwave(
     gases: &PartialPressures,
+    ozone: DobsonUnit,
     surface: Kelvin,
     skin: Kelvin,
     gravity: MetrePerSecondSquared,
@@ -594,6 +882,8 @@ pub fn outgoing_longwave(
         gases.nh3,
         gases.so2,
         gases.o2,
+        gases.ar,
+        ozone.0,
         surface_k,
         skin_k,
         gravity.0,
@@ -609,7 +899,7 @@ pub fn outgoing_longwave(
     }
     let scratch = cache.scratch.get_or_insert_with(Scratch::new);
     let column = with_column(gases, surface_k, skin_k, gravity.0, profile, |c| {
-        radiate(c, scratch)
+        radiate(&c.with_ozone(ozone), scratch)
     });
     let olr = match column {
         Some(bands) => bands.iter().sum(),
@@ -623,10 +913,10 @@ pub fn outgoing_longwave(
 /// size (a numerical choice with no source: audit, Wiki study 19).
 const REMEMBERED: usize = 1024;
 
-/// The inputs of a column, as bits: the seven partial pressures, the
-/// surface and skin temperatures, the gravity, and the profile's levels
-/// per decade, top and sky.
-type ColumnKey = [u64; 14];
+/// The inputs of a column, as bits: the eight partial pressures, the
+/// ozone column, the surface and skin temperatures, the gravity, and the
+/// profile's levels per decade, top and sky.
+type ColumnKey = [u64; 16];
 
 /// What [`outgoing_longwave`] keeps between calls, owned by the caller:
 /// the last [`REMEMBERED`] columns and their outgoing radiation, the
@@ -660,7 +950,7 @@ struct Memory {
 impl Memory {
     fn new() -> Box<Self> {
         Box::new(Self {
-            keys: [[0; 14]; REMEMBERED],
+            keys: [[0; 16]; REMEMBERED],
             olr: [0.0; REMEMBERED],
             len: 0,
             next: 0,
@@ -698,7 +988,6 @@ const SHORTWAVE_TOP_SHARE: f64 = 1e-2;
 /// A column's levels, as the shortwave reads them: each level's
 /// temperature and partial pressures from the surface up, and the span in
 /// `ln p` of each layer between two levels.
-#[expect(dead_code, reason = "the shortwave of PR 2b-2 reads it")]
 pub(crate) struct Levels {
     pub(crate) levels: Vec<spectrum::Level>,
     pub(crate) spans: Vec<f64>,
@@ -710,7 +999,6 @@ pub(crate) struct Levels {
 /// the skin it sets, and the air above the tropopause absorbs next to
 /// none of the near infrared that CO₂ and water take). `None` without
 /// air.
-#[expect(dead_code, reason = "the shortwave of PR 2b-2 reads it")]
 pub(crate) fn levels(
     gases: &PartialPressures,
     surface_k: f64,
@@ -774,8 +1062,7 @@ fn with_column<R>(
     let mut vapour_share = vapour / surface_bar;
     let mut t = surface_k;
     let mut p = surface_bar;
-    let (ratio, half_ratio) = ((-step).exp(), (-0.5 * step).exp());
-    let (last_ratio, last_half) = ((-last).exp(), (-0.5 * last).exp());
+    let (ratio, last_ratio) = ((-step).exp(), (-last).exp());
     // CO₂'s share of the dry air: where the air reaches its saturation it
     // condenses, the air follows its pseudo-adiabat ([`co2_lapse`]) and
     // the share falls to what saturation leaves; above the skin it keeps
@@ -786,6 +1073,14 @@ fn with_column<R>(
         0.0
     };
     let mut co2_saturated = false;
+    // N₂'s share of the dry air once its condensation has thinned it (as
+    // the CO₂'s, but kept apart until then so that a column whose N₂ never
+    // condenses keeps its gases' bits), and whether the air follows N₂'s
+    // pseudo-adiabat ([`n2_lapse`]): from where its N₂ reaches its
+    // saturation, the air's main gas, it does whatever the vapour and the
+    // CO₂ (frozen out so cold) do.
+    let mut n2_share: Option<f64> = None;
+    let mut n2_saturated = false;
     // The vapour that radiates: in the climate's columns the troposphere's
     // relative humidity falls with the pressure from the surface's
     // ([`relative_humidity`]), the temperature still following the
@@ -812,19 +1107,22 @@ fn with_column<R>(
                 v = v.min(profile * vapour_saturation_bar(t));
             }
         }
-        let level = air.with_co2(p - v, v, co2_share * (p - v));
+        let dry_here = p - v;
+        let level = match n2_share {
+            None => air.with_co2(dry_here, v, co2_share * dry_here),
+            Some(n2) => air.with_condensed(dry_here, v, co2_share * dry_here, n2 * dry_here),
+        };
         temperature[i] = t;
         levels[i] = level;
         if i == n {
             break;
         }
-        let (h, r, half_r) = if i + 1 == n {
-            (last, last_ratio, last_half)
+        let (h, r) = if i + 1 == n {
+            (last, last_ratio)
         } else {
-            (step, ratio, half_ratio)
+            (step, ratio)
         };
         let p_here = p;
-        let p_mid = p * half_r;
         p *= r;
         if frozen {
             continue;
@@ -836,15 +1134,17 @@ fn with_column<R>(
         // where it does (the excess `ln(p_CO₂ / p_sat)` taken linear
         // across the step), so that the column moves smoothly with its
         // CO₂.
-        let moist = |t: f64, from: f64, h: f64| {
-            let half = t - 0.5 * h * co2_lapse(&air, t, from);
-            t - h * co2_lapse(&air, half, from * (-0.5 * h).exp())
-        };
-        if co2_saturated {
-            t = moist(t, p_here, h);
+        if n2_saturated {
+            t = n2_step(&air, t, p_here, h);
+        } else if co2_saturated {
+            t = co2_step(&air, t, p_here, h);
         } else {
-            let half = t - 0.5 * h * lapse(&air, t, p_here, saturated, vapour_share);
-            let mut next = t - h * lapse(&air, half, p_mid, saturated, vapour_share);
+            let mut next = if saturated {
+                saturated_step(&air, t, p_here, h)
+            } else {
+                let half = t - 0.5 * h * lapse(&air, t, vapour_share);
+                t - h * lapse(&air, half, vapour_share)
+            };
             // The step in which the vapour first saturates is split where
             // it does (the excess `ln(e / e_sat)` taken linear across the
             // step), the rest taken on the moist adiabat: the vapour the
@@ -864,9 +1164,7 @@ fn with_column<R>(
                     let crossed = t + f * (next - t);
                     let from = p_here * (-f * h).exp();
                     let rest = (1.0 - f) * h;
-                    let half = crossed - 0.5 * rest * lapse(&air, crossed, from, true, 0.0);
-                    next =
-                        crossed - rest * lapse(&air, half, from * (-0.5 * rest).exp(), true, 0.0);
+                    next = saturated_step(&air, crossed, from, rest);
                     saturated = true;
                 }
             }
@@ -880,15 +1178,34 @@ fn with_column<R>(
                     below / (below - above)
                 };
                 let crossed = t + f * (next - t);
-                t = moist(crossed, p_here * (-f * h).exp(), (1.0 - f) * h);
+                t = co2_step(&air, crossed, p_here * (-f * h).exp(), (1.0 - f) * h);
                 co2_saturated = true;
             } else {
                 t = next;
             }
         }
-        // The cold trap: where the air reaches the skin, its vapour and its
-        // CO₂ keep the mixing ratio saturation leaves there, at the
-        // pressure where it does (`t` taken linear across the step), so
+        // The step in which N₂ first saturates is split where it does, as
+        // CO₂'s is (the excess `ln(p_N₂ / p_sat)` taken linear across the
+        // step), the rest taken on N₂'s pseudo-adiabat. Above N₂'s
+        // critical point it does not condense.
+        if !n2_saturated && level.n2 > 0.0 && t < NITROGEN_CRITICAL_TEMPERATURE.0 {
+            let share = n2_share.unwrap_or_else(|| air.n2_share(co2_share));
+            let below = n2_excess(start, level.n2);
+            let above = n2_excess(t, share * p * (1.0 - vapour_share));
+            if above >= 0.0 {
+                let f = if below >= 0.0 {
+                    0.0
+                } else {
+                    below / (below - above)
+                };
+                let crossed = start + f * (t - start);
+                t = n2_step(&air, crossed, p_here * (-f * h).exp(), (1.0 - f) * h);
+                n2_saturated = true;
+            }
+        }
+        // The cold trap: where the air reaches the skin, its vapour, its
+        // CO₂ and its N₂ keep the mixing ratio saturation leaves there, at
+        // the pressure where it does (`t` taken linear across the step), so
         // that it moves smoothly with the grid and the surface.
         let mut trap = p;
         if t <= skin_k {
@@ -912,6 +1229,13 @@ fn with_column<R>(
         let dry = trap * (1.0 - vapour_share);
         if dry > 0.0 {
             co2_share = co2_share.min(co2_saturation_bar(t) / dry);
+            if t < NITROGEN_CRITICAL_TEMPERATURE.0 {
+                let share = n2_share.unwrap_or_else(|| air.n2_share(co2_share));
+                let most = nitrogen_saturation_bar(t) / dry;
+                if most < share {
+                    n2_share = Some(most);
+                }
+            }
         }
     }
 
@@ -937,9 +1261,17 @@ fn with_column<R>(
         step,
         last,
         gravity_m_s2,
-        has_co2: gases.co2 > 0.0,
-        has_water: vapour > 0.0,
+        has_lines: [
+            gases.co2 > 0.0,
+            vapour > 0.0,
+            air.radiating_ch4 > 0.0,
+            false,
+            false,
+        ],
+        ozone: OzoneProfile::NONE,
+        n2o: 0.0,
         cloud,
+        ground: None,
     };
     Some(use_column(&column))
 }
@@ -960,8 +1292,39 @@ struct Cloud {
     weight: f64,
 }
 
+/// A grey ground under a column, for the tests that compare the column
+/// with line-by-line codes on measured profiles: its temperature, K, and
+/// its infrared emissivity. The climate's ground is black, at the
+/// temperature of the column's lowest level ([`Column::ground`] `None`).
+///
+/// It sends up `ε B(T_g) + (1 − ε) D` in each band, `D` the air's
+/// radiation down to it, which the column does not sum. `D` is taken as
+/// that of an air at the ground's temperature, `(1 − t) B(T_g)` with `t`
+/// the band's transmission through the whole column: what reaches space
+/// from the ground is then `B(T_g) t (1 − (1 − ε) t)`. An air colder than
+/// the ground sends down less, so the term is an upper bound of the
+/// reflected light (Definition: Kirchhoff's law for a grey surface with
+/// the downward radiation of an isothermal air; the bound's width is
+/// measured in `docs/science/radiative-transfer.md`, "The radiation on
+/// RFMIP's field").
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Clone, Copy, Debug)]
+struct Ground {
+    temperature_k: f64,
+    emissivity: f64,
+}
+
+impl Ground {
+    /// What reaches space of the ground's Planck flux `planck` in a band
+    /// of transmission `seen` to space.
+    fn sent(self, planck: f64, seen: f64) -> f64 {
+        planck * seen * (1.0 - (1.0 - self.emissivity) * seen)
+    }
+}
+
 /// The levels of a column, from the surface up, as its radiation reads
 /// them.
+#[derive(Clone, Copy)]
 struct Column<'a> {
     /// Temperature of each level, K.
     temperature: &'a [f64],
@@ -972,11 +1335,20 @@ struct Column<'a> {
     last: f64,
     /// Surface gravity, m/s².
     gravity_m_s2: f64,
-    /// Whether the column holds CO₂ and water vapour.
-    has_co2: bool,
-    has_water: bool,
+    /// Whether the column holds each gas with lines ([`LineGas::ALL`]).
+    has_lines: [bool; LINE_GASES],
+    /// Its ozone ([`OzoneProfile::NONE`] unless [`Column::with_ozone`]).
+    ozone: OzoneProfile,
+    /// Its N₂O, a mole fraction of the dry air at every level: none in
+    /// any air of the model until N₂O's law (issue #737); the tests set
+    /// it ([`Column::with_n2o`]) to compare with line-by-line codes whose
+    /// air holds it.
+    n2o: f64,
     /// Its water clouds, if any.
     cloud: Option<Cloud>,
+    /// A grey ground of its own ([`Ground`]); `None`, the climate's, is a
+    /// black ground at the lowest level's temperature.
+    ground: Option<Ground>,
 }
 
 impl Column<'_> {
@@ -994,21 +1366,91 @@ impl Column<'_> {
         spectrum::Level {
             temperature_k: self.temperature[i],
             gases: self.levels[i],
+            ozone_bar: self.ozone.bar_at(self.levels[i].total()),
+            n2o_bar: self.n2o * (self.levels[i].total() - self.levels[i].h2o.max(0.0)),
             gravity_m_s2: self.gravity_m_s2,
         }
+    }
+
+    /// This column with `column` of ozone laid out in it
+    /// ([`OzoneProfile::of`], from its surface pressure and its dry air's
+    /// molar mass).
+    fn with_ozone(&self, column: DobsonUnit) -> Column<'_> {
+        let surface = self.levels[0];
+        let dry = spectrum::Level {
+            temperature_k: self.temperature[0],
+            gases: PartialPressures {
+                h2o: 0.0,
+                ..surface
+            },
+            ozone_bar: 0.0,
+            n2o_bar: 0.0,
+            gravity_m_s2: self.gravity_m_s2,
+        };
+        let ozone = OzoneProfile::of(
+            column,
+            surface.total(),
+            dry.molar_mass_kg(),
+            self.gravity_m_s2,
+        );
+        let mut has_lines = self.has_lines;
+        has_lines[LineGas::O3 as usize] = ozone.holds();
+        Column {
+            has_lines,
+            ozone,
+            ..*self
+        }
+    }
+
+    /// This column with `fraction` of N₂O in its dry air at every level
+    /// (a well-mixed gas), for the tests that compare with line-by-line
+    /// codes.
+    #[cfg(test)]
+    fn with_n2o(&self, fraction: f64) -> Column<'_> {
+        let mut has_lines = self.has_lines;
+        has_lines[LineGas::N2o as usize] = fraction > 0.0;
+        Column {
+            has_lines,
+            n2o: fraction.max(0.0),
+            ..*self
+        }
+    }
+
+    /// This column over `ground` instead of a black ground at its lowest
+    /// level's temperature, for the tests that compare with line-by-line
+    /// codes.
+    #[cfg(test)]
+    fn with_ground(&self, ground: Ground) -> Column<'_> {
+        Column {
+            ground: Some(ground),
+            ..*self
+        }
+    }
+
+    /// The Planck flux of its ground in each band, up to `bins`.
+    fn ground_planck(&self, bins: usize, out: &mut [f64; BANDS]) {
+        let t = self.ground.map_or(self.temperature[0], |g| g.temperature_k);
+        spectrum::planck_spectrum_upto(t, bins, out);
+    }
+
+    /// What reaches space of the ground's Planck flux `planck` in a band
+    /// of transmission `seen` ([`Ground::sent`]; all of it, black).
+    fn ground_sent(&self, planck: f64, seen: f64) -> f64 {
+        self.ground.map_or(planck * seen, |g| g.sent(planck, seen))
     }
 }
 
 /// Workspace of [`radiate`]: the absorption at a layer's two levels, the
-/// slant optical depth to space of each g-point of CO₂ and water and of
-/// the smooth part, and their transmissions. Kept in the caller's
-/// [`ColumnCache`]: it is some 100 kB.
+/// slant optical depth to space of each g-point of each gas with lines
+/// and of the smooth part, and their transmissions. Kept in the caller's
+/// [`ColumnCache`]: it is some 200 kB.
 struct Scratch {
     top: FastLevel,
     bottom: FastLevel,
-    co2: Depths,
-    water: Depths,
+    lines: [Depths; LINE_GASES],
     smooth: [f32; BINS],
+    /// The sum past the longwave table's ([`beyond::beyond`]).
+    beyond: beyond::Workspace,
 }
 
 impl Scratch {
@@ -1016,9 +1458,9 @@ impl Scratch {
         Box::new(Self {
             top: FastLevel::default(),
             bottom: FastLevel::default(),
-            co2: Depths::new(),
-            water: Depths::new(),
+            lines: std::array::from_fn(|_| Depths::new()),
             smooth: [0.0; BINS],
+            beyond: beyond::Workspace::new(),
         })
     }
 }
@@ -1102,11 +1544,11 @@ fn summed_bins(temperature: &[f64]) -> usize {
 
 /// Two-stream radiation to space in each band of `column`, summed from the
 /// top down: the layer-mean Planck flux of the band times what the layer
-/// takes of the transmission to space. Within a bin each g-point of CO₂
-/// and of water keeps its own transmission; the bin's is the product of
+/// takes of the transmission to space. Within a bin each g-point of each
+/// gas with lines keeps its own transmission; the bin's is the product of
 /// the gases' weighted sums and the smooth part's (random overlap, see
-/// [`super::spectrum`]). The tail band takes the last bin's absorption, so
-/// its transmission is that bin's. A layer's depth is the logarithmic
+/// [`super::spectrum`]). The tail band, past the longwave table, is
+/// summed on its own ([`beyond::beyond`]). A layer's depth is the logarithmic
 /// mean of the opacities at its two levels times its span. Above the top
 /// the air is uniform ([`spectrum::smooth_above`]). The sum stops where
 /// every bin is opaque ([`OPAQUE`]); the bins a cold column cannot send
@@ -1131,53 +1573,50 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
     let Scratch {
         top,
         bottom,
-        co2,
-        water,
+        lines,
         smooth,
+        beyond,
     } = scratch;
     let n = column.top();
     let weights = spectrum::weights().map(|w| w as f32);
-    let (has_co2, has_water) = (column.has_co2, column.has_water);
+    let has = column.has_lines;
     let bins = summed_bins(column.temperature);
     let m = bins * G;
     let mut seen = [0.0; BINS];
     let mut out = [0.0; BANDS];
     if bins < BINS {
         let mut ground = [0.0; BANDS];
-        planck_spectrum(column.temperature[0], &mut ground);
-        out[bins..].copy_from_slice(&ground[bins..]);
+        column.ground_planck(BINS, &mut ground);
+        for b in bins..BANDS {
+            out[b] = column.ground_sent(ground[b], 1.0);
+        }
     }
     let (mut planck, mut planck_below) = ([0.0; BANDS], [0.0; BANDS]);
     let top_level = column.level(n);
     spectrum::fast_level(&top_level, bins, top);
     spectrum::planck_spectrum_upto(column.temperature[n], bins, &mut planck);
-    if has_co2 {
-        co2.above(&top.co2, m);
-    }
-    if has_water {
-        water.above(&top.water, m);
-    }
-    for (b, (depth, rate)) in smooth.iter_mut().zip(&top.smooth).take(bins).enumerate() {
-        *depth = (DIFFUSIVITY * spectrum::smooth_above(&top_level, f64::from(*rate), b)) as f32;
-    }
-    let through = |b: usize, smooth: &[f32; BINS], co2: &Depths, water: &Depths| {
-        let mut through = fast_math::exp(-smooth[b]);
-        if has_co2 {
-            through *= co2.bin(&weights, b);
+    for (k, gas) in lines.iter_mut().enumerate() {
+        if has[k] {
+            gas.above(&top.lines[k], m);
         }
-        if has_water {
-            through *= water.bin(&weights, b);
+    }
+    for (depth, rate) in smooth.iter_mut().zip(&top.smooth).take(bins) {
+        *depth = (DIFFUSIVITY * spectrum::smooth_above(f64::from(*rate))) as f32;
+    }
+    let through = |b: usize, smooth: &[f32; BINS], lines: &[Depths; LINE_GASES]| {
+        let mut through = fast_math::exp(-smooth[b]);
+        for (gas, has) in lines.iter().zip(has) {
+            if has {
+                through *= gas.bin(&weights, b);
+            }
         }
         f64::from(through)
     };
-    // The tail is summed with the last bin, when every bin is.
+    // The tail is summed on its own when every bin is (`beyond`).
     let tail = bins == BINS;
     for b in 0..bins {
-        seen[b] = through(b, smooth, co2, water);
+        seen[b] = through(b, smooth, lines);
         out[b] = planck[b] * (1.0 - seen[b]);
-    }
-    if tail {
-        out[TAIL] = planck[TAIL] * (1.0 - seen[BINS - 1]);
     }
     // What a cloud top sends out per band, `above_c + seen_c B_c`, once
     // the sum has passed it.
@@ -1199,32 +1638,22 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
             (&bottom.smooth[..bins], &bottom.smooth_ln[..bins]),
             slant,
         );
-        if has_co2 {
-            co2.deepen(
-                (&top.co2, &top.co2_ln),
-                (&bottom.co2, &bottom.co2_ln),
-                slant,
-                m,
-            );
-        }
-        if has_water {
-            water.deepen(
-                (&top.water, &top.water_ln),
-                (&bottom.water, &bottom.water_ln),
-                slant,
-                m,
-            );
+        for (k, gas) in lines.iter_mut().enumerate() {
+            if has[k] {
+                gas.deepen(
+                    (&top.lines[k], &top.lines_ln[k]),
+                    (&bottom.lines[k], &bottom.lines_ln[k]),
+                    slant,
+                    m,
+                );
+            }
         }
         let mut open = false;
-        let last_seen = seen[BINS - 1];
         for b in 0..bins {
-            let below = through(b, smooth, co2, water);
+            let below = through(b, smooth, lines);
             out[b] += 0.5 * (planck[b] + planck_below[b]) * (seen[b] - below);
             seen[b] = below;
             open |= below > OPAQUE;
-        }
-        if tail {
-            out[TAIL] += 0.5 * (planck[TAIL] + planck_below[TAIL]) * (last_seen - seen[BINS - 1]);
         }
         if let Some(cloud) = at_cloud {
             let x = cloud.up;
@@ -1234,47 +1663,64 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
                 let seen_c = mid(seen[b], seen_above[b]);
                 sent[b] = mid(out[b], above[b]) + seen_c * mid(planck_below[b], planck[b]);
             }
-            if tail {
-                let seen_c = mid(seen[BINS - 1], seen_above[BINS - 1]);
-                sent[TAIL] =
-                    mid(out[TAIL], above[TAIL]) + seen_c * mid(planck_below[TAIL], planck[TAIL]);
-            }
             cloud_top = Some(sent);
         }
         std::mem::swap(top, bottom);
         std::mem::swap(&mut planck, &mut planck_below);
         if !open {
-            return under_clouds(out, column.cloud, cloud_top, bins, tail);
+            return with_tail(
+                under_clouds(out, column.cloud, cloud_top, bins),
+                column,
+                tail,
+                beyond,
+            );
         }
     }
-    // `planck` is now the surface's, at `temperature[0]`.
+    // `planck` is now the lowest level's, at `temperature[0]`: the
+    // climate's black ground; a grey one has its own.
+    if column.ground.is_some() {
+        column.ground_planck(bins, &mut planck);
+    }
     for b in 0..bins {
-        out[b] += planck[b] * seen[b];
+        out[b] += column.ground_sent(planck[b], seen[b]);
     }
+    with_tail(
+        under_clouds(out, column.cloud, cloud_top, bins),
+        column,
+        tail,
+        beyond,
+    )
+}
+
+/// `out` with its tail band summed past the longwave table
+/// ([`beyond::beyond`], in the workspace `ws`) when `tail` (every bin
+/// summed); otherwise its tail stays the clear ground's that [`radiate`]
+/// set.
+fn with_tail(
+    mut out: [f64; BANDS],
+    column: &Column,
+    tail: bool,
+    ws: &mut beyond::Workspace,
+) -> [f64; BANDS] {
     if tail {
-        out[TAIL] += planck[TAIL] * seen[BINS - 1];
+        out[TAIL] = beyond::beyond(column, ws);
     }
-    under_clouds(out, column.cloud, cloud_top, bins, tail)
+    out
 }
 
 /// The clear column's radiation `out` per band, with `cloud`'s share of
 /// the sky sending out what its top does (`sent`, once the sum has
-/// passed it; see [`radiate`]) over the first `bins` bins, and the tail
-/// with them when `tail`.
+/// passed it; see [`radiate`]) over the first `bins` bins.
 fn under_clouds(
     mut out: [f64; BANDS],
     cloud: Option<Cloud>,
     sent: Option<[f64; BANDS]>,
     bins: usize,
-    tail: bool,
 ) -> [f64; BANDS] {
     if let (Some(cloud), Some(sent)) = (cloud, sent) {
         let blend = |clear: f64, sent: f64| clear - cloud.weight * (clear - sent);
         for b in 0..bins {
             out[b] = blend(out[b], sent[b]);
-        }
-        if tail {
-            out[TAIL] = blend(out[TAIL], sent[TAIL]);
         }
     }
     out
@@ -1326,34 +1772,33 @@ fn log_mean_f32(a: f32, ln_a: f32, b: f32, ln_b: f32) -> f32 {
 }
 
 /// The double-precision sum that [`radiate`] stands for, band by band
-/// with `spectrum::reference::absorption_spectrum`, over every band and
-/// level.
+/// with `spectrum::reference::absorption_spectrum`, over every bin and
+/// level; the tail is [`radiate`]'s own ([`beyond::beyond`], in double
+/// precision already).
 #[cfg(test)]
 fn radiate_reference(column: &Column) -> [f64; BANDS] {
     use spectrum::reference::{Spectrum, absorption_spectrum, depth_above, log_mean};
     let n = column.top();
-    let (has_co2, has_water) = (column.has_co2, column.has_water);
+    let has = column.has_lines;
     let w = spectrum::weights();
     let mut rate = Spectrum::default();
     let mut rate_below = Spectrum::default();
     let mut through_g = Spectrum::default();
-    let Spectrum { co2, water, smooth } = &mut through_g;
+    let Spectrum { lines, smooth } = &mut through_g;
     let (mut planck, mut planck_below) = ([0.0; BANDS], [0.0; BANDS]);
     let mut seen = [0.0; BANDS];
     absorption_spectrum(&column.level(n), &mut rate);
-    depth_above(&column.level(n), &rate, &mut rate_below);
+    depth_above(&rate, &mut rate_below);
     planck_spectrum(column.temperature[n], &mut planck);
     let mut out = [0.0; BANDS];
     for k in 0..BANDS {
         let mut through = (-DIFFUSIVITY * rate_below.smooth[k]).exp();
         smooth[k] = through;
-        if has_co2 {
-            co2[k] = rate_below.co2[k].map(|d| (-DIFFUSIVITY * d).exp());
-            through *= dot(w, &co2[k]);
-        }
-        if has_water {
-            water[k] = rate_below.water[k].map(|d| (-DIFFUSIVITY * d).exp());
-            through *= dot(w, &water[k]);
+        for (g, gas) in lines.iter_mut().enumerate() {
+            if has[g] {
+                gas[k] = rate_below.lines[g][k].map(|d| (-DIFFUSIVITY * d).exp());
+                through *= dot(w, &gas[k]);
+            }
         }
         seen[k] = through;
         out[k] = planck[k] * (1.0 - through);
@@ -1367,11 +1812,11 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
         for k in 0..BANDS {
             smooth[k] *= (-DIFFUSIVITY * log_mean(rate.smooth[k], rate_below.smooth[k]) * h).exp();
             let mut below = smooth[k];
-            if has_co2 {
-                below *= layer(w, &mut co2[k], &rate.co2[k], &rate_below.co2[k], h);
-            }
-            if has_water {
-                below *= layer(w, &mut water[k], &rate.water[k], &rate_below.water[k], h);
+            for (g, gas) in lines.iter_mut().enumerate() {
+                if has[g] {
+                    let (top, bottom) = (&rate.lines[g][k], &rate_below.lines[g][k]);
+                    below *= layer(w, &mut gas[k], top, bottom, h);
+                }
             }
             out[k] += 0.5 * (planck[k] + planck_below[k]) * (seen[k] - below);
             seen[k] = below;
@@ -1388,10 +1833,18 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
         std::mem::swap(&mut rate, &mut rate_below);
         std::mem::swap(&mut planck, &mut planck_below);
     }
-    for k in 0..BANDS {
-        out[k] += planck[k] * seen[k];
+    if column.ground.is_some() {
+        column.ground_planck(BINS, &mut planck);
     }
-    under_clouds(out, column.cloud, cloud_top, BINS, true)
+    for k in 0..BINS {
+        out[k] += column.ground_sent(planck[k], seen[k]);
+    }
+    with_tail(
+        under_clouds(out, column.cloud, cloud_top, BINS),
+        column,
+        true,
+        &mut beyond::Workspace::new(),
+    )
 }
 
 /// One gas through one layer of `span` in `ln p`: each g-point's
@@ -1411,4 +1864,77 @@ fn layer(w: &[f64; G], seen: &mut [f64; G], top: &[f64; G], bottom: &[f64; G], s
 #[cfg(test)]
 fn dot(a: &[f64; G], b: &[f64; G]) -> f64 {
     a.iter().zip(b).map(|(a, b)| a * b).sum()
+}
+
+/// The air's radiation down to the ground of `column` in each band,
+/// W/m², and each band's transmission through the whole column: the
+/// double-precision sum of [`radiate_reference`] (the same depths, the
+/// same random overlap) taken from the ground up, the air above the top
+/// at the top's temperature. The column's sum to space does not hold it;
+/// the test that measures how far [`Ground::sent`]'s bound is from the
+/// light the air sends down reads it.
+#[cfg(test)]
+fn ground_downward(column: &Column) -> ([f64; BANDS], [f64; BANDS]) {
+    use spectrum::reference::{Spectrum, absorption_spectrum, depth_above, log_mean};
+    let n = column.top();
+    let has = column.has_lines;
+    let w = spectrum::weights();
+    let rates: Vec<Box<Spectrum>> = (0..=n)
+        .map(|i| {
+            let mut rate = Box::<Spectrum>::default();
+            absorption_spectrum(&column.level(i), &mut rate);
+            rate
+        })
+        .collect();
+    // The depth from the ground up, per band, gas and g-point.
+    let mut depth = Box::<Spectrum>::default();
+    let through = |depth: &Spectrum, k: usize| {
+        let mut t = (-DIFFUSIVITY * depth.smooth[k]).exp();
+        for (g, gas) in depth.lines.iter().enumerate() {
+            if has[g] {
+                t *= dot(w, &gas[k].map(|d| (-DIFFUSIVITY * d).exp()));
+            }
+        }
+        t
+    };
+    let (mut planck, mut planck_above) = ([0.0; BANDS], [0.0; BANDS]);
+    planck_spectrum(column.temperature[0], &mut planck);
+    let mut below = [1.0; BANDS];
+    let mut down = [0.0; BANDS];
+    for i in 0..n {
+        let h = column.span(i);
+        let (lower, upper) = (&rates[i], &rates[i + 1]);
+        for k in 0..BANDS {
+            depth.smooth[k] += log_mean(lower.smooth[k], upper.smooth[k]) * h;
+            for g in 0..LINE_GASES {
+                for j in 0..G {
+                    depth.lines[g][k][j] +=
+                        log_mean(lower.lines[g][k][j], upper.lines[g][k][j]) * h;
+                }
+            }
+        }
+        planck_spectrum(column.temperature[i + 1], &mut planck_above);
+        for k in 0..BANDS {
+            let t = through(&depth, k);
+            down[k] += 0.5 * (planck[k] + planck_above[k]) * (below[k] - t);
+            below[k] = t;
+        }
+        std::mem::swap(&mut planck, &mut planck_above);
+    }
+    let mut above = Box::<Spectrum>::default();
+    depth_above(&rates[n], &mut above);
+    for k in 0..BANDS {
+        depth.smooth[k] += above.smooth[k];
+        for g in 0..LINE_GASES {
+            for j in 0..G {
+                depth.lines[g][k][j] += above.lines[g][k][j];
+            }
+        }
+    }
+    let mut total = [0.0; BANDS];
+    for k in 0..BANDS {
+        total[k] = through(&depth, k);
+        down[k] += planck[k] * (below[k] - total[k]);
+    }
+    (down, total)
 }

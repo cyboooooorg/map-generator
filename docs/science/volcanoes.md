@@ -23,9 +23,9 @@ line up in arcs, scattered like random points rather than evenly spaced.
 Grosse & Kervyn (2018) measured 158 shield volcanoes on 90 m elevation
 models. Their height over their basal width,
 
-```math
+$$
 a = \frac{H}{W_B},
-```
+$$
 
 lies mostly between 0.01 and 0.1, their mean flank slopes between 1° and
 15°, their volumes between 0.1 and more than 1000 km³. Above about 12° and
@@ -46,9 +46,9 @@ volcanoes on the MOLA altimetry: their relief runs from 1.0 km to almost
 22 km. Scaled to Earth's gravity by $1/g$ (Mars's 3.73 m/s² against the
 standard 9.80665),
 
-```math
+$$
 H_\text{max} \approx 22\ \text{km} \times \frac{3.73}{9.81} \approx 8.4\ \text{km},
-```
+$$
 
 **In words.** The tallest volcano known, carried to Earth's gravity,
 would stand about 8 km high.
@@ -61,9 +61,9 @@ conduction through the plates. Io loses about 2.5 W/m², some 40 times
 Earth's flux, almost all of it through volcanism: a heat pipe (Moore &
 Webb 2013).
 
-```math
+$$
 F = \frac{Q}{4 \pi R^2}
-```
+$$
 
 **In words.** The flux $F$ is the planet's heat $Q$ (radiogenic, tidal
 and secular) spread over its surface of radius $R$.
@@ -99,12 +99,15 @@ trenches of plate worlds. A cold planet has none away from its arcs.
 
 The rewrite (`science::relief`, `world::relief`; the values and their
 sources are in the [relief
-study](../superpowers/studies/2026-11-22-relief/volcanoes.md)):
+study](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-22-relief/volcanoes.md)):
 
 1. **Intensity.** The heat flux $F$ above, from the planet's keyframe,
    sets a volcanic intensity from 0 to 1 along a declared curve through
-   two anchors: Earth's flux, 0.087 W/m², and a heat pipe's, 2.5 W/m²,
-   where it reaches 1.
+   two anchors: Earth's flux, 0.087 W/m², and Io's, 2.5 W/m²
+   (`FULL_VOLCANISM_FLUX`), where volcanism is total and it reaches 1.
+   The regime calls a planet a heat pipe from 1 W/m² already
+   (`HEAT_PIPE_ONSET_FLUX`, see [plate tectonics](plate-tectonics.md)):
+   between the two a heat pipe reads an intensity under 1.
 2. **Isolated cones.** Cones on a lattice over the whole surface,
    present in a share of the cells that grows with the intensity. No
    volcanic province (a plain of lava flows) is drawn yet.
@@ -119,7 +122,7 @@ study](../superpowers/studies/2026-11-22-relief/volcanoes.md)):
 ### Where it departs from the science
 
 Calibrations, each with its search in the [relief
-study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list):
+study](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-22-relief/README.md#final-calibration-list):
 
 - **The intensity curve** between its anchors, and Earth's value on it.
 - **How cone sizes are drawn** inside the published ranges.
@@ -170,8 +173,8 @@ fewer volcanoes than its flux says.
 
 - [Relief study (W2) (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/20-relief-study):
   where the relief's numbers come from, and how W2 departs.
-- The [relief study](../superpowers/studies/2026-11-22-relief/README.md)
+- The [relief study](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-22-relief/README.md)
   of the rewrite: every value, its source and the calibration list.
 - [Why are mountains lower on heavier planets?](mountains-and-gravity.md)
   and [Do all rocky planets have plate tectonics?](plate-tectonics.md)
-- The [world relief design](../superpowers/specs/2026-11-21-world-relief-design.md).
+- The [world relief design](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/specs/2026-11-21-world-relief-design.md).

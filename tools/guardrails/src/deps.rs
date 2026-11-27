@@ -25,6 +25,8 @@ pub fn allowed() -> BTreeMap<&'static str, BTreeSet<&'static str>> {
     let set = |names: &[&'static str]| names.iter().copied().collect::<BTreeSet<_>>();
     let mut every_engine_and_adapters = set(&engines);
     every_engine_and_adapters.insert("adapters");
+    let mut regression = every_engine_and_adapters.clone();
+    regression.insert("map-generator");
     BTreeMap::from([
         ("science", set(&[])),
         ("timeline", set(&["science"])),
@@ -33,9 +35,13 @@ pub fn allowed() -> BTreeMap<&'static str, BTreeSet<&'static str>> {
         ("catalogue", set(&["system", "timeline", "science"])),
         ("adapters", set(&engines)),
         ("map-generator", every_engine_and_adapters.clone()),
-        ("regression", every_engine_and_adapters),
+        // Test-only: the tier-2 tests run the CLI's library (`dispatch`).
+        ("regression", regression),
         ("guardrails", set(&[])),
         ("opacity-table", set(&[])),
+        ("stellar-spectra", set(&[])),
+        ("rfmip-shortwave", set(&[])),
+        ("figures", set(&["science"])),
     ])
 }
 

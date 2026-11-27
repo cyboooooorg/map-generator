@@ -23,11 +23,11 @@ A body held together only by its own gravity is torn apart by the planet's
 tides inside a distance called the Roche limit. For a planet of radius $R$
 and density $\rho_p$, and a body of density $\rho_m$ (Murray & Dermott 1999):
 
-```math
+$$
 d_\text{fluid} \approx 2.44\,R\left(\frac{\rho_p}{\rho_m}\right)^{1/3}
 \qquad
 d_\text{rigid} \approx 1.26\,R\left(\frac{\rho_p}{\rho_m}\right)^{1/3}
-```
+$$
 
 **In words.** The *fluid* limit is for a loose pile with no strength, like a
 clump of ring particles. The *rigid* limit is for a solid body that its
@@ -48,9 +48,9 @@ A moon of mass $m$ at a distance $a$ from a planet of mass $M$ holds on to
 particles only within its Roche lobe. Its long semi-axis, pointing at the
 planet, is the Hill radius (Porco et al. 2007):
 
-```math
+$$
 r_H = a\left(\frac{m}{3M}\right)^{1/3}
-```
+$$
 
 **In words.** The closer to the planet, the smaller the region a moon of a
 given mass controls. A particle that settles on the moon but sticks out of
@@ -63,11 +63,11 @@ Roche lobe.
 A moon fills its lobe exactly when its mean density equals the *critical
 density* at its distance (Porco et al. 2007, eq. 1 and 2):
 
-```math
+$$
 \rho_\text{crit} = \frac{3M}{\gamma\,a^3},
 \qquad
 \gamma = \frac{2\pi\ln\!\left(2+\sqrt{3}\right)}{3\sqrt{3}} \approx 1.59
-```
+$$
 
 $\gamma a^3$ is the volume of the lobe, a shape with axes in the ratio
 3 : 2 : 2.
@@ -103,11 +103,11 @@ The final long semi-axis $a$ of a moon grown from a core of radius $R_c$ and
 density $\rho_c$, with a mantle of accreted particles of density $\rho_m$,
 follows from its mass (Porco et al. 2007, eq. 3):
 
-```math
+$$
 \frac{a}{R_c} = \left(\frac{4\pi}{3\gamma}\,
 \frac{\rho_c - \rho_m}{\rho_\text{crit} - \rho_m}\right)^{1/3}
 \qquad (\rho_m < \rho_\text{crit})
-```
+$$
 
 **In words.** The final size is set by the core, not by how much ring
 material lies around. A loose mantle is lighter than the critical density,
@@ -332,5 +332,5 @@ the smaller they are (`irregular` in the same file).
 
 - [14-rings (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/14-rings): the study behind the
   app's rings and ring moons, with more sources.
-- [docs/system-spec.md](../system-spec.md): ring moons as bodies of a
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): ring moons as bodies of a
   system.

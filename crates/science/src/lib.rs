@@ -5,17 +5,30 @@
 //! belong to the engines. Every constant cites its source (see the crate
 //! README). The laws arrive with the pull requests that use them.
 
+pub mod balance;
+pub mod classes;
 pub mod constants;
+pub mod dynamo;
 pub mod envelope;
 pub mod eos;
+pub mod escape;
 pub mod giants;
+pub mod habitable;
 pub mod heat;
 pub mod hydrogen;
+pub mod life;
+pub mod life_gases;
 pub mod orbit;
+pub mod outgassing;
+pub mod photochemistry;
 pub mod radiation;
 pub mod relief;
+pub mod snowball;
+pub mod steam;
 pub mod stellar;
 pub mod structure;
+pub mod surface;
+pub mod tectonics;
 pub mod units;
 pub mod volatiles;
 pub mod water;

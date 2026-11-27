@@ -7,9 +7,8 @@ or an identifier lives in an engine; nothing here draws at random.
 
 Every constant has a doc comment starting with `Source:` (a citation),
 `Calibration:` (what it was fitted against, and how) or `Definition:` (an exact
-definition or a unit conversion). A test fails otherwise. Physics is ported from
-the tag `legacy-final` with its citation and its tests, never rewritten from
-memory.
+definition or a unit conversion); a test fails otherwise. Physics is ported from
+the tag `legacy-final` with its citation and tests, never rewritten from memory.
 
 ## Units
 
@@ -50,13 +49,12 @@ lower, split at 23.83 GPa), `ice_vii()` (Seager et al. 2007), and for water:
 - `water_on_melting_curve()`, for colder bodies (Zeng and Sasselov 2013):
   ice Ih, III, V, VI, VII, switching at the IAPWS 2011 triple points.
 
-`science::water` holds the laws (`liquid_pressure`, `ice_ih_density`, the
-melting, saturation and sublimation pressures, the ice VI / ice VII
-boundary), each checked against its IAPWS table; values, sources and ranges
-are on [What are planets made of?](../../docs/science/planet-interiors.md#from-layers-to-radius).
+`science::water` holds the laws (`liquid_pressure`, `ice_ih_density`, the melting,
+saturation and sublimation pressures, the ice VI / VII boundary), each checked
+against its IAPWS table; values and ranges: [What are planets made of?](../../docs/science/planet-interiors.md#from-layers-to-radius).
 Limits: the laws are cold (no thermal pressure), the mantle has no
-transition-zone phases (-7.5 % / +3.5 % against PREM at 23.83 GPa), ices III,
-V and VI are 0 K curves, and water has nothing above 355 K.
+transition-zone phases (-7.5 % / +3.5 % at 23.83 GPa), ices III, V and VI are
+0 K curves, and water has nothing above 355 K.
 
 ## Hydrostatic structure
 
@@ -88,22 +86,23 @@ let earth = integrate(&layers, Pascal(1e5)).expect("Earth integrates");
 println!("R = {} m, C/MR^2 = {}", earth.radius.0, earth.moment_of_inertia);
 ```
 
-Against measured values (table on the page above): Earth R -0.29 %, C/MR^2 -0.24
-%; Venus, Mars, Mercury, the Moon, Ganymede and 5 M⊕ super-Earths (Zeng et al.)
-within 2 %. Titan's C/MR^2 is not reproduced. The core alloy, fitted to PREM
-(364 GPa), is used to 7.85 TPa: converged, not validated.
+Against measured values (table on the page above): Earth R -0.29 %, C/MR^2
+-0.24 %; the other bodies within 2 %, Titan's C/MR^2 not reproduced. The core
+alloy (PREM, 364 GPa) is used to 7.85 TPa: converged, not validated.
 
 ## Internal heat
 
 `science::heat`: `radiogenic`, `secular` and `tidal` power, and
 `k2_over_q(TidalKind)` (rocky, icy, enveloped; the system engine picks the
 kind). Radiogenic power comes from the abundances of U, Th and K and the Dye
-2012 half-lives; secular cooling scales Earth's 26.5 TW by the silicate mass;
+2012 half-lives and heats (K-40's half-life is DDEP 2025's, which the air's
+argon shares, `potassium_40_decayed`, and potassium's heat per kilogram is
+derived from DDEP 2025's decay data); secular cooling scales Earth's 26.4 TW
+by the silicate mass;
 tidal heat is Peale, Cassen and Reynolds (1979). The `Calibration:` constants (U
 and Th abundances, cooling time and mass exponent, rocky and icy k2/Q) say what
 was searched and not found; the page [The heat
-inside](../../docs/science/planet-interiors.md#the-heat-inside) lists them under
-"Where it departs from the science".
+inside](../../docs/science/planet-interiors.md#the-heat-inside) lists them.
 
 ## Stars, light and orbits
 
@@ -114,6 +113,21 @@ M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`; see
 star's XUV and Lyman α history; see [XUV
 fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
 `science::orbit`: Kepler, flux, ice line, Roche period, Hill spacing floors.
+`science::outgassing` also makes the air's argon (`radiogenic_argon`,
+`argon_degassed_share`).
+`science::{escape, dynamo, outgassing, volatiles, habitable, tectonics,
+photochemistry, snowball}`: [planet atmospheres](../../docs/science/planet-atmospheres.md).
+`science::life_gases`: `modern_methane` (the methane a `Modern` biosphere
+keeps, from Earth's flux, the lifetime under the stars and the gravity),
+`methane_lifetime`, `methane_host_factor`; see [life
+gases](../../docs/science/life-gases.md).
+`science::life`: `stage` (life from `LIFE_MIN_GYR`, by `LIFE_CHANCE`, then
+`Anoxic`, `Oxidising`, `Modern`) and `oxygenate` (no methane, then O₂ at
+`O2_PER_N2` of the N₂ by weight and `modern_methane` under the stars on
+the gravity); see [Life](../../docs/science/planet-atmospheres.md#life).
+`science::classes`: the class thresholds (`HOT_GIANT_MAX_PERIOD`,
+`SUPER_EARTH_MIN_RADIUS`, `DENSE_AIR_BAR`, `ICE_WORLD_MIN_OCEANS`) and
+`basin_capacity_oceans`; see [Classes](../../docs/science/planet-interiors.md#classes).
 
 ## Giants and envelopes
 
@@ -122,9 +136,15 @@ and `core_bounds` read the Fortney et al. 2007 tables; `ice_rock_core_radius`
 is their Eq. 7. `science::envelope`: `envelope_thickness` is Lopez & Fortney
 2014 (1 to 20 M⊕, 1e-4 to 0.2 of H/He, 20 mbar) minus their core; the 1 M⊕ and
 1e-4 rules are calibrated. `science::hydrogen`: `polytrope_radius_at` places
-the 100 GPa metallic boundary of a giant. Data: [GIANTS.md](data/GIANTS.md);
+the 100 GPa metallic boundary of a giant. `science::steam`: a runaway's
+steam envelope, Turbet et al. 2020's Eqs. 2 and 3 (`envelope`,
+`base_pressure`, `steam_temperature`; the thickness cap is calibrated),
+the steam world line (`hides_surface`), and the hottest surface of the
+published steam profiles (`PUBLISHED_SURFACE_TOP`, 4300 K, and
+`past_published_profiles`). Data: [GIANTS.md](data/GIANTS.md);
 laws, tests and calibrations: [Mini-Neptunes](../../docs/science/planet-interiors.md#mini-neptunes-and-their-envelopes),
-[Giants](../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary).
+[Giants](../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary),
+[Steam](../../docs/science/planet-atmospheres.md#boiling-and-the-steam-envelope-of-the-rewrite-study-26).
 
 ## Relief
 
@@ -135,13 +155,58 @@ study](../../docs/superpowers/studies/2026-11-22-relief/README.md). Laws:
 [mountains and gravity](../../docs/science/mountains-and-gravity.md),
 [plate tectonics](../../docs/science/plate-tectonics.md), [volcanoes](../../docs/science/volcanoes.md).
 
+## Surface
+
+`science::surface`: `cover` and `ground_albedo` (ocean, land, ice, frost),
+`RELATIVE_HUMIDITY`, and `liquid`, `frost`, `melting` (the freezing of methane
+and nitrogen seas included), all on an air of `Weights`; `surface::condense`:
+`condense` keeps in the air the weight whose partial pressure a gas's
+saturation allows at a temperature (nitrogen, methane and argon, in rounds
+since each raises the others' shares) and returns the condensate;
+`condensables` puts an inventory's three condensing gases over an air's
+others; `cold_trapped` caps an air's CO₂ and NH₃ at their frost pressures
+(the chain's cold trap). Values:
+[planet atmospheres](../../docs/science/planet-atmospheres.md#climate-and-surface-liquid).
+
+## Radiative balance
+
+`science::balance`: the radiative balance of one column (`surface_temperature`
+and its root finders, up to the ceiling of `second_law_ceiling`, the
+hottest lighting star's effective temperature), the moist plateau of
+Earth's air and the runaway albedo. `science::snowball`:
+`SNOWBALL_WARM_BAR` and the snowball chance. The solver that uses them is
+`system::planet::climate`.
+
 ## Radiation
 
-`science::radiation::column`: `outgoing_longwave` (a column's infrared, from
-its gases: lines of `data/opacity.bin`, continua, clouds; the caller owns the
-`ColumnCache`) and `skin_temperature`; `radiation::clouds::cloud_cover`;
-`science::volatiles`: CO₂ and methane saturation. Shortwave comes later. See
-[OPACITY.md](data/OPACITY.md), [radiative transfer](../../docs/science/radiative-transfer.md).
+`science::radiation::column`: `outgoing_longwave` (a column's infrared: the
+lines of CO₂, water, methane, ozone and N₂O from `data/opacity.bin`, the ozone
+column laid out on Earth's AFGL shape, continua, pairs, clouds; past
+5000 cm⁻¹ CO₂'s and water's lines and continua from `data/shortwave.bin` to
+0.7 µm and Rayleigh scattering past it; the caller owns the `ColumnCache`) and
+`skin_temperature`; `radiation::clouds::cloud_cover`; `science::volatiles`: CO₂,
+methane, nitrogen and argon saturation. Shortwave: `albedo::shortwave_budget`
+(Bond albedo and absorbed light, for a star's temperature and metallicity; the
+caller owns the `ShortwaveCache`), `starlight` (the star's spectrum, from
+`data/stellar-spectra.tsv`), `shortwave` (`data/shortwave.bin`), `ozone`
+(`ozone_column`, an oxygen air's ozone under its star, and its
+cross-sections from `data/ozone.tsv`), `rayleigh`,
+`veils`, `methane::stratospheric_share`.
+`radiation::gases::PartialPressures` holds the eight gases of a column (N₂,
+CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar) as partial pressures, shares of the moles
+times the pressure; argon absorbs nothing, weighs, scatters, has a monatomic
+heat capacity and broadens the lines as air does. `radiation::gases::Weights`
+holds the same gases as weights (`m g / 4πR²`, what the system keeps):
+`Weights::partial_pressures` reads them as partial pressures,
+`PartialPressures::weights` turns a measured air by volume into weights, and
+`Weights::weight_at` gives the weight of a gas whose partial pressure is a
+cap over the other gases (issue #749, [planet
+atmospheres](../../docs/science/planet-atmospheres.md), "Weights and partial
+pressures").
+See [OPACITY.md](data/OPACITY.md), [SPECTRA.md](data/SPECTRA.md),
+[RFMIP.md](data/RFMIP.md) (the field the shortwave is tested on), [radiative
+transfer](../../docs/science/radiative-transfer.md), [stellar
+spectra](../../docs/science/stellar-spectra.md).
 
 ## Dependencies
 

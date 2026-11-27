@@ -43,7 +43,7 @@ can be replayed):
 ```bash
 cargo run -q -p map-generator -- system --seed 1
 cargo run -q -p map-generator -- system --seed 1 \
-  --explain /planets/0/orbit/period
+  --explain /timelines/1/keyframes/0/state/planet/orbit/period
 ```
 
 Flags, output and exit codes: [`crates/cli/README.md`](crates/cli/README.md).
@@ -51,11 +51,14 @@ The tasks check the workspace:
 
 | Task | What it does |
 | --- | --- |
-| `mise run ci` | Everything the pipeline runs but the front-end: format, clippy, tiers 1 and 2 with their budgets, markdownlint |
+| `mise run ci` | Everything the pipeline runs but the front-end: format, clippy, workflows, tiers 1 and 2 with their budgets, markdownlint, `docs:check` |
 | `mise run test:tier1` | Unit tests and architecture guardrails (budget 2 min) |
 | `mise run test:tier2` | Regression tests on shared reference systems (budget 8 min) |
 | `mise run test:heavy` | Tier 3: full-size worlds, oracle, censuses (release, no budget) |
 | `mise run fmt` | Format the code |
+| `mise run docs:build` | Build the science book (`docs/science`) into `target/book` |
+| `mise run docs:figures` | Redraw the book's SVG figures (`-- --check` only compares) |
+| `mise run docs:check` | Check the book: figures up to date, pages listed, equations that render on GitHub, build, links |
 | `mise run web:check` | Type-check and test the front-end |
 
 Options after `--` go to nextest, for example
@@ -82,13 +85,17 @@ Dependencies point inwards only; `tools/guardrails` checks it.
 | [`cli`](crates/cli/README.md) | The `map-generator` command, composition root |
 | [`regression`](crates/regression/README.md) | Tier-2 tests on shared reference systems |
 | [`tools/guardrails`](tools/guardrails/README.md) | Architecture checks and test budgets |
+| [`tools/figures`](tools/figures/README.md) | Offline drawer of the science book's SVG figures |
 | `tools/opacity-table` | Offline builder of the climate's opacity tables from HITRAN |
+| [`tools/stellar-spectra`](tools/stellar-spectra/README.md) | Offline builder of the shortwave's table of stellar spectra |
+| [`tools/rfmip-shortwave`](tools/rfmip-shortwave/README.md) | Offline builder of the RFMIP clear-sky field the shortwave is tested on |
 
 ## Documentation
 
 - Design and plans: `docs/superpowers/specs/`, `docs/superpowers/plans/`.
 - Science reference: `docs/science/`, one page per model with its
-  sources (rewritten to the new rules as each law is ported).
+  sources (rewritten to the new rules as each law is ported), published
+  at <https://cyboooooorg.github.io/map-generator/>.
 - Studies written before decisions: the
   [Wiki](https://github.com/cyboooooorg/map-generator/wiki).
 - Backlog: the repository's issues, label `backlog`, roadmap #427.

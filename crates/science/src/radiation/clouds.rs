@@ -47,7 +47,8 @@ pub fn cloud_cover(surface: Kelvin, h2o: Bar) -> Fraction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::radiation::test_points::{EARTH_SURFACE_K, MANABE_HUMIDITY};
+    use crate::radiation::test_points::EARTH_SURFACE_K;
+    use crate::surface::RELATIVE_HUMIDITY;
 
     /// Source: Stubenrauch et al. 2013 (GEWEX assessment), Earth's cloud
     /// cover 0.68 +- 0.03.
@@ -65,7 +66,7 @@ mod tests {
     /// validation.
     #[test]
     fn earth_is_two_thirds_cloudy() {
-        let vapour = MANABE_HUMIDITY * vapour_saturation_bar(EARTH_SURFACE_K);
+        let vapour = RELATIVE_HUMIDITY * vapour_saturation_bar(EARTH_SURFACE_K);
         let cover = cloud_cover(Kelvin(EARTH_SURFACE_K), Bar(vapour)).get();
         println!("Earth's cloud cover at 288 K: {cover:.4}");
         assert!(EARTH_COVER_RANGE.contains(&cover), "{cover}");
@@ -73,7 +74,7 @@ mod tests {
 
     #[test]
     fn cloud_cover_depends_on_more_than_vapour() {
-        let vapour = MANABE_HUMIDITY * vapour_saturation_bar(EARTH_SURFACE_K);
+        let vapour = RELATIVE_HUMIDITY * vapour_saturation_bar(EARTH_SURFACE_K);
         let cool = cloud_cover_share(EARTH_SURFACE_K, vapour);
         let warm = cloud_cover_share(320.0, vapour);
         assert!(warm < cool - 0.01, "{warm} vs {cool}");

@@ -1,5 +1,13 @@
 //! The cause codes of the planet's composition, interior and heat:
 //! dotted lowercase, one constant per node, read with `Code::of`.
+//!
+//! The air's gases, `planet.air.*` and `planet.climate.air.*`, are
+//! weights: a gas's mass times the gravity over the planet's area,
+//! `m_i g / (4 π R²)`, in bar (`science::radiation::gases::Weights`).
+//! Their sum is the surface pressure (water vapour included); a gas's
+//! weight is not its partial pressure, its share by volume of that
+//! pressure, which each law reads from the whole air at the moment it
+//! reads it (issue #749).
 
 /// Core mass fraction of the planet without its water, drawn.
 pub(crate) const CORE_MASS_FRACTION: &str = "planet.core-mass-fraction";
@@ -61,6 +69,33 @@ pub(crate) const TABLE_MASS_USED: &str = "planet.table-mass-used";
 pub(crate) const BOLOMETRIC_FLUX: &str = "planet.bolometric-flux";
 /// Mass of a mini-Neptune's hydrogen-helium envelope, `f M`.
 pub(crate) const ENVELOPE_MASS: &str = "planet.envelope.mass";
+/// The largest envelope mass fraction a mini-Neptune keeps after the
+/// boil-off, read in Tang, Fortney & Murray-Clay 2024's Table 2
+/// (`science::escape::boil_off_ceiling`) at its mass without the envelope
+/// and its bolometric flux. Recorded only when it cuts the envelope.
+pub(crate) const BOIL_OFF_CEILING: &str = "planet.envelope.boil-off-ceiling";
+/// Envelope mass fraction of a mini-Neptune once the boil-off has cut it
+/// to its ceiling, from the drawn fraction and the ceiling. Recorded only
+/// when the ceiling cuts it.
+pub(crate) const ENVELOPE_AFTER_BOIL_OFF: &str = "planet.envelope.after-boil-off";
+/// Mass of a mini-Neptune once the boil-off has cut its envelope:
+/// `M_c / (1 - c)`, its mass without the envelope under the fraction left.
+pub(crate) const MASS_AFTER_BOIL_OFF: &str = "planet.mass.after-boil-off";
+/// Mass of the envelope the boil-off took: the trial's mass less the mass
+/// after the boil-off. Recorded only when it is not zero.
+pub(crate) const ENVELOPE_BOILED_OFF: &str = "planet.envelope.boiled-off";
+/// Mass of the envelope lost to the XUV light of the stars over the
+/// planet's age, energy-limited (Owen & Wu 2017, eq. 19) on the radius
+/// and mass of the body the boil-off left, capped by the envelope `f M`.
+/// Recorded only when it is not zero.
+pub(crate) const ENVELOPE_LOST: &str = "planet.envelope.lost";
+/// Envelope mass fraction of the planet once the escape has taken its
+/// share: `(f M - lost) / (M - lost)` for a mini-Neptune, 0 below
+/// `science::escape::MIN_ENVELOPE`; `1 - Mz / M'` for a giant.
+pub(crate) const ENVELOPE_KEPT_FRACTION: &str = "planet.envelope.kept-fraction";
+/// Mass of the planet once the escape has taken its share: `M - lost`, or
+/// `M - f M` for a mini-Neptune stripped of its whole envelope.
+pub(crate) const MASS_KEPT: &str = "planet.mass.kept";
 /// Thickness of a mini-Neptune's envelope, read in the Lopez & Fortney 2014
 /// tables, added to the radius of its core.
 pub(crate) const ENVELOPE_THICKNESS: &str = "planet.envelope.thickness";
@@ -105,9 +140,350 @@ pub(crate) const LAYER_STATE: &str = "planet.layer.state";
 /// it. Not a thermal state:
 /// the core's comes with the temperatures of a later pull request.
 pub(crate) const LAYER_STATE_BY_PRESSURE: &str = "planet.layer.state-by-pressure";
+/// Mass of a steam world with its steam envelope: the whole mass of the
+/// body it was made from (the bulk's plus a water beyond the laws), which
+/// the steam, the water the planet kept, makes up with its rock.
+pub(crate) const MASS_WITH_STEAM: &str = "planet.mass.with-steam";
+/// Temperature of a steam envelope, Turbet et al. 2020 Eq. 3
+/// (`science::steam::envelope`), from the core's shells, the steam and
+/// the fluxes of the sources.
+pub(crate) const STEAM_TEMPERATURE: &str = "planet.steam.temperature";
+/// Thickness of a steam envelope up to the transit radius, Turbet et al.
+/// 2020 Eq. 2 (`science::steam::envelope`), from the same inputs.
+pub(crate) const STEAM_THICKNESS: &str = "planet.steam.thickness";
+/// Radius of a steam world: its core's radius plus the steam's thickness.
+pub(crate) const RADIUS_STEAM: &str = "planet.radius.steam";
 /// Radiogenic heating power.
 pub(crate) const HEAT_RADIOGENIC: &str = "planet.heat.radiogenic";
 /// Tidal heating power.
 pub(crate) const HEAT_TIDAL: &str = "planet.heat.tidal";
 /// Secular cooling power.
 pub(crate) const HEAT_SECULAR: &str = "planet.heat.secular";
+/// Scatter of the CO2 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_CO2: &str = "planet.volatiles.scatter.co2";
+/// Scatter of the N2 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_N2: &str = "planet.volatiles.scatter.n2";
+/// Scatter of the sulfur budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_S: &str = "planet.volatiles.scatter.s";
+/// Scatter of the CH4 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_CH4: &str = "planet.volatiles.scatter.ch4";
+/// Scatter of the NH3 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_NH3: &str = "planet.volatiles.scatter.nh3";
+/// Whether the planet's water ran away by insolation: the sum over its
+/// stars of each flux over the runaway greenhouse limit at that star's
+/// effective temperature exceeds 1 (#592). Derived from every source's
+/// flux and temperature.
+pub(crate) const WATER_RUNAWAY: &str = "planet.water.runaway";
+/// Water at the surface of a planet whose water is bound in its mantle:
+/// `science::habitable::SURFACE_WATER_SHARE` of its bulk water
+/// `w (1 - f) M`, derived from the mass and the two fractions. A water
+/// world's surface water is its water layer (or its water beyond the
+/// laws), already recorded: no node of this code then.
+pub(crate) const WATER_SURFACE: &str = "planet.water.surface";
+/// Water lost as steam in a runaway: 9 kg of water for each kg of hydrogen
+/// the energy-limited escape takes at the whole mass (the bulk's plus a
+/// water beyond the laws), capped by the surface water. Recorded only in
+/// a runaway.
+pub(crate) const WATER_STEAM_LOST: &str = "planet.water.steam-lost";
+/// Water the planet keeps at its surface: its surface water, less the
+/// steam lost in a runaway.
+pub(crate) const WATER_INVENTORY: &str = "planet.water.inventory";
+/// Whether the climate boiled the ocean: false, imposed, before the
+/// climate (`water`); derived from the boil loop's verdict once settled
+/// (`water::boiled`, `settled`).
+pub(crate) const WATER_BOILED: &str = "planet.water.boiled";
+/// Mass of the planet once the steam is gone: its mass less the surface
+/// water lost, `M - (surface - kept)`; the mantle's water stays.
+pub(crate) const MASS_AFTER_STEAM: &str = "planet.mass.after-steam";
+/// Water mass fraction of the planet once the steam is gone: the water
+/// left, `w M - (surface - kept)`, over the mass after the steam.
+pub(crate) const WATER_KEPT_FRACTION: &str = "planet.water.kept-fraction";
+/// Tectonic regime: heat pipe, stagnant lid, plates or episodic, from the
+/// internal heat flux, the mass and the water kept.
+pub(crate) const REGIME: &str = "planet.regime";
+/// Volcanic intensity the snowball chance reads, from 0 to 1: the law of
+/// `science::relief::volcanoes` at the internal heat flux, scaled by
+/// `LID_SHARE / MOBILE_SHARE` under a stagnant lid. Derived from the
+/// three heat sources, the radius and the regime.
+pub(crate) const SURFACE_VOLCANISM: &str = "planet.surface.volcanism";
+/// Cooling time of the iron core through the mantle, `ρ c r_c d / (3 k
+/// Nu)`, from the core's mass and outer radius, the planet's radius and
+/// the regime's Nusselt number (`science::dynamo::cooling_time`).
+pub(crate) const CORE_COOLING_TIME: &str = "planet.core.cooling-time";
+/// State of the iron core: none (no iron shell or no core mass), liquid,
+/// or frozen past `science::dynamo::CORE_FROZEN` cooling times.
+pub(crate) const CORE_STATE: &str = "planet.core.state";
+/// Whether a dynamo runs in the core, from its cooling time, the age and
+/// the regime (plates keep the thermal dynamo running).
+pub(crate) const CORE_DYNAMO: &str = "planet.core.dynamo";
+/// Surface equatorial dipole field of the core's dynamo; 0 T without one.
+pub(crate) const CORE_FIELD: &str = "planet.core.field";
+/// Midplane temperature of the disc the planet's ice formed in, from its
+/// semi-major axis and its host's luminosity
+/// (`science::volatiles::disc_temperature`).
+pub(crate) const VOLATILE_DISC_TEMPERATURE: &str = "planet.volatiles.disc-temperature";
+/// Whether the planet's ice trapped N2 when it formed: a disc colder than
+/// `science::volatiles::NITROGEN_TRAPPING_TEMPERATURE`.
+pub(crate) const VOLATILE_ICE_TRAPS_N2: &str = "planet.volatiles.ice-traps-n2";
+/// Weight of N2 the interior brought up: the inventory at
+/// formation times its scatter (the ice's N2 only where it trapped some),
+/// plus the N2 of the NH3 the interior decomposed
+/// (`science::outgassing::decomposed`), times the regime's share, the
+/// share the water lets through and, under plates, what subduction
+/// leaves.
+pub(crate) const AIR_OUTGASSED_N2: &str = "planet.air.outgassed.n2";
+/// Weight of CO2 the interior brought up (see
+/// [`AIR_OUTGASSED_N2`]).
+pub(crate) const AIR_OUTGASSED_CO2: &str = "planet.air.outgassed.co2";
+/// Weight of water vapour before the escape: a runaway's whole
+/// water inventory, 0 bar otherwise (the oceans hold it).
+pub(crate) const AIR_OUTGASSED_H2O: &str = "planet.air.outgassed.h2o";
+/// Weight of CH4 the interior brought up (see
+/// [`AIR_OUTGASSED_N2`]).
+pub(crate) const AIR_OUTGASSED_CH4: &str = "planet.air.outgassed.ch4";
+/// Weight of NH3 the interior brought up: the NH3 left once
+/// the share the interior decomposes has come up as N2
+/// (`science::outgassing::decomposed`), then as [`AIR_OUTGASSED_N2`].
+pub(crate) const AIR_OUTGASSED_NH3: &str = "planet.air.outgassed.nh3";
+/// Weight of SO2 the interior brought up: its sulphur as SO2,
+/// the share that stays in the air, then as [`AIR_OUTGASSED_N2`].
+pub(crate) const AIR_OUTGASSED_SO2: &str = "planet.air.outgassed.so2";
+/// Weight of O2 outgassed: 0 bar, imposed (life makes it).
+pub(crate) const AIR_OUTGASSED_O2: &str = "planet.air.outgassed.o2";
+/// Weight of Ar-40 outgassed: the argon the mantle's potassium
+/// made over the age (`science::outgassing::radiogenic_argon`, from the
+/// mantle's mass and the radiogenic abundance), times the share it
+/// degasses under the regime (`argon_degassed_share`, less under a
+/// stagnant or episodic lid) and the share the water lets through.
+pub(crate) const AIR_OUTGASSED_AR: &str = "planet.air.outgassed.ar";
+/// Share of its air the planet keeps on the cosmic shoreline, from its
+/// escape velocity (the whole mass, the bulk's plus a water beyond the
+/// laws, and the bulk radius), the XUV fluence of its stars and its
+/// dynamo.
+pub(crate) const AIR_SHORELINE_KEPT: &str = "planet.air.shoreline-kept";
+/// Share of the SO2 the air keeps against its wash-out: wet or oxidising,
+/// a day and a half's worth; dry, in proportion to its column.
+pub(crate) const AIR_SO2_KEPT: &str = "planet.air.so2-kept";
+/// Weight of N2 the cosmic shoreline kept: the outgassed one
+/// times the shoreline's share.
+pub(crate) const AIR_KEPT_N2: &str = "planet.air.kept.n2";
+/// Weight of CO2 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_CO2: &str = "planet.air.kept.co2";
+/// Weight of water vapour the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_H2O: &str = "planet.air.kept.h2o";
+/// Weight of CH4 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_CH4: &str = "planet.air.kept.ch4";
+/// Weight of NH3 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_NH3: &str = "planet.air.kept.nh3";
+/// Weight of SO2 in the air: the outgassed one times the
+/// shoreline's share and the share the wash-out leaves; the air's, no
+/// later step changing it.
+pub(crate) const AIR_KEPT_SO2: &str = "planet.air.kept.so2";
+/// Weight of O2 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_O2: &str = "planet.air.kept.o2";
+/// Weight of Ar the cosmic shoreline kept (see [`AIR_KEPT_N2`]);
+/// the air's, no later step changing it.
+pub(crate) const AIR_KEPT_AR: &str = "planet.air.kept.ar";
+/// Weight of CH4 the stars' ultraviolet leaves of the kept one
+/// (`science::photochemistry::methane_left`), from the surface gravity,
+/// each star's flux and history (its mass, the metallicity and the age).
+pub(crate) const AIR_PHOTOLYSED_CH4: &str = "planet.air.photolysed.ch4";
+/// Whether the air is reducing, Titan's: methane left by the photolysis
+/// and an equilibrium temperature cold enough for it to survive
+/// (`science::photochemistry::reducing`); always false when the chain
+/// does not hold a reducing air's CO2 back. A reducing air outgasses no
+/// CO2 ([`AIR_OUTGASSED_CO2`] is then 0 and derives from it).
+pub(crate) const AIR_REDUCING: &str = "planet.air.reducing";
+/// Weight of CO2 the cold trap leaves as gas: the kept one, capped at
+/// the weight whose partial pressure, over the rest of the air as it
+/// stands, is the CO2 frost pressure at the equilibrium temperature below
+/// CO2's triple point (`science::volatiles::co2_frost_pressure`).
+pub(crate) const AIR_TRAPPED_CO2: &str = "planet.air.trapped.co2";
+/// Weight of NH3 the cold trap leaves as gas (see
+/// [`AIR_TRAPPED_CO2`], `science::volatiles::ammonia_frost_pressure`).
+pub(crate) const AIR_TRAPPED_NH3: &str = "planet.air.trapped.nh3";
+/// CO2 the cold trap froze out, bar: the photolysed CO2 (the photolysis
+/// leaves it as kept) less the trapped one. Legacy books all of it as a
+/// frost, which overstates it on small icy bodies (#590).
+pub(crate) const AIR_FROZEN_CO2: &str = "planet.air.frozen-co2";
+/// Weight of N2 once the photochemistry has run: the kept N2
+/// plus the N2 the trapped NH3 leaves once photolysed
+/// (`science::photochemistry::nitrogen_from_ammonia`).
+pub(crate) const AIR_PHOTOCHEMISTRY_N2: &str = "planet.air.photochemistry.n2";
+/// Weight of NH3 once the photochemistry has run: 0 bar, all of
+/// the trapped NH3 photolysed to N2.
+pub(crate) const AIR_PHOTOCHEMISTRY_NH3: &str = "planet.air.photochemistry.nh3";
+/// Weight of CH4 once the photochemistry has run: the photolysed
+/// CH4 where it survives the OH of water vapour, under the equilibrium
+/// temperature of `science::photochemistry::METHANE_SURVIVES`; 0 bar
+/// above it.
+pub(crate) const AIR_PHOTOCHEMISTRY_CH4: &str = "planet.air.photochemistry.ch4";
+/// Surface pressure: the sum of the weights.
+pub(crate) const AIR_PRESSURE: &str = "planet.air.pressure";
+
+/// The gases of the air, each with the code of its outgassed weight and
+/// of its weight the shoreline kept, in the contract's order.
+pub(crate) const AIR_GASES: [(timeline::Gas, &str, &str); 8] = [
+    (timeline::Gas::N2, AIR_OUTGASSED_N2, AIR_KEPT_N2),
+    (timeline::Gas::Co2, AIR_OUTGASSED_CO2, AIR_KEPT_CO2),
+    (timeline::Gas::H2o, AIR_OUTGASSED_H2O, AIR_KEPT_H2O),
+    (timeline::Gas::Ch4, AIR_OUTGASSED_CH4, AIR_KEPT_CH4),
+    (timeline::Gas::Nh3, AIR_OUTGASSED_NH3, AIR_KEPT_NH3),
+    (timeline::Gas::So2, AIR_OUTGASSED_SO2, AIR_KEPT_SO2),
+    (timeline::Gas::O2, AIR_OUTGASSED_O2, AIR_KEPT_O2),
+    (timeline::Gas::Ar, AIR_OUTGASSED_AR, AIR_KEPT_AR),
+];
+
+/// Surface temperature the climate settles at, from the light of every
+/// star, the air, the water, the heat, the body, the rotation and the
+/// state.
+pub(crate) const CLIMATE_SURFACE_TEMPERATURE: &str = "planet.climate.surface-temperature";
+/// Whether the surface temperature lies past the hottest published steam
+/// profile (`science::steam::past_published_profiles`, Turbet et al.
+/// 2020's 4300 K): an extrapolation of the column, from the temperature
+/// (study 41, issue #775).
+pub(crate) const CLIMATE_PAST_PUBLISHED_PROFILES: &str = "planet.climate.past-published-profiles";
+/// Equilibrium temperature of the light the surface took: from the Bond
+/// albedo and the flux of every star.
+pub(crate) const CLIMATE_EQUILIBRIUM: &str = "planet.climate.equilibrium";
+/// Bond albedo the surface absorbed its light under, settled with the
+/// temperature.
+pub(crate) const CLIMATE_BOND_ALBEDO: &str = "planet.climate.bond-albedo";
+/// Ozone column the air's O2 holds under one star's light, which that
+/// light crosses in the Bond albedo: from the bare air's O2 and the
+/// star's effective temperature. One per star, recorded when positive.
+pub(crate) const CLIMATE_OZONE_COLUMN: &str = "planet.climate.ozone-column";
+/// Emissivity the surface radiated under (the frosts' on its ground),
+/// settled with the temperature.
+pub(crate) const CLIMATE_EMISSIVITY: &str = "planet.climate.emissivity";
+/// Whether the carbonate thermostat holds the temperature.
+pub(crate) const CLIMATE_REGULATED: &str = "planet.climate.regulated";
+/// Whether the fixed points of the albedo and of the condensation
+/// settled within the solver's tolerance, and every collapse of CO₂
+/// within its own (none stopped at its step cap).
+pub(crate) const CLIMATE_CONVERGED: &str = "planet.climate.converged";
+/// Whether the albedo's fixed point has none: the climate jumps between
+/// a warm and a colder side and cycles (#729); the temperature is the
+/// colder side's.
+pub(crate) const CLIMATE_CYCLES: &str = "planet.climate.cycles";
+/// The state the climate is found in: temperate, snowball, frozen or
+/// runaway. Derived from the inputs and, on a bistable body, from the
+/// snowball chance and its draw.
+pub(crate) const CLIMATE_STATE: &str = "planet.climate.state";
+/// CO2 the temperate branch of a bistable body holds, with which it also
+/// freezes.
+pub(crate) const CLIMATE_FROZE_CO2: &str = "planet.climate.froze-co2";
+/// Whether some CO2 the bistable body can hold thaws its frozen branch
+/// (or leaves its icy start cycling, with no frozen balance: #731).
+/// A flag, because a thaw out of reach has no finite CO2 to record.
+pub(crate) const CLIMATE_THAWS: &str = "planet.climate.thaws";
+/// The least CO2 known to thaw the frozen branch, or at which its icy
+/// start first cycles (#731); recorded only when [`CLIMATE_THAWS`] is
+/// true.
+pub(crate) const CLIMATE_THAW_CO2: &str = "planet.climate.thaw-co2";
+/// The share of its history a bistable body spends frozen: from the
+/// thaw (when it has one), the CO2 it froze with and the volcanism.
+pub(crate) const CLIMATE_SNOWBALL_CHANCE: &str = "planet.climate.snowball-chance";
+/// The snowball draw, uniform in (0, 1), from the `planet/snowball`
+/// sub-seed; recorded only for a bistable body.
+pub(crate) const CLIMATE_SNOWBALL_DRAW: &str = "planet.climate.snowball-draw";
+/// Whether the climate's air is a Titan's (`science::surface::titan_like_air`):
+/// recorded for a reducing body only, the test of the reducing-air
+/// fallback.
+pub(crate) const CLIMATE_TITAN_LIKE: &str = "planet.climate.titan-like";
+/// Whether the water the climate kept boils: no wet balance exists under
+/// its light, its air and its heat, its thermostat holding it or not. A
+/// flag.
+pub(crate) const CLIMATE_BOILS: &str = "planet.climate.boils";
+/// Whether a runaway's steam hides its surface: a runaway whose steam is
+/// supercritical at its base (`science::steam::hides_surface`).
+pub(crate) const CLIMATE_HIDES_SURFACE: &str = "planet.climate.hides-surface";
+/// Weight of N2 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_N2: &str = "planet.climate.air.n2";
+/// Weight of CO2 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_CO2: &str = "planet.climate.air.co2";
+/// Weight of water vapour in the air the climate leaves: over a wet
+/// surface, the saturation pressure at its temperature, which the column
+/// takes as the vapour's weight (`science::radiation::gases::Weights`);
+/// a runaway's, the steam the chain kept.
+pub(crate) const CLIMATE_AIR_H2O: &str = "planet.climate.air.h2o";
+/// Weight of CH4 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_CH4: &str = "planet.climate.air.ch4";
+/// Weight of NH3 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_NH3: &str = "planet.climate.air.nh3";
+/// Weight of SO2 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_SO2: &str = "planet.climate.air.so2";
+/// Weight of O2 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_O2: &str = "planet.climate.air.o2";
+/// Weight of Ar in the air the climate leaves: at most the weight whose
+/// partial pressure is its frost's or liquid's pressure at the surface
+/// temperature.
+pub(crate) const CLIMATE_AIR_AR: &str = "planet.climate.air.ar";
+/// Surface pressure of the air the climate leaves: the sum of its
+/// weights.
+pub(crate) const CLIMATE_AIR_PRESSURE: &str = "planet.climate.air.pressure";
+/// N2 on the ground at the surface temperature (liquid or frost);
+/// recorded when positive.
+pub(crate) const CLIMATE_CONDENSATE_N2: &str = "planet.climate.condensate.n2";
+/// CH4 on the ground at the surface temperature (a sea or a frost);
+/// recorded when positive.
+pub(crate) const CLIMATE_CONDENSATE_CH4: &str = "planet.climate.condensate.ch4";
+/// Ar on the ground at the surface temperature (a frost, or a liquid
+/// above its triple point, 83.806 K, when the air holds more argon than
+/// the liquid's vapour pressure); recorded when positive. Not a surface
+/// liquid, and left out of the ground's frost.
+pub(crate) const CLIMATE_CONDENSATE_AR: &str = "planet.climate.condensate.ar";
+/// What fills the oceans, from the phase diagrams: recorded when there is
+/// a liquid.
+pub(crate) const SURFACE_LIQUID: &str = "planet.surface.liquid";
+/// The share of the surface under water: the sea term of the cover
+/// law, recorded when the liquid is water; an imposed 0 for the other
+/// liquids (no sea level reads them yet).
+pub(crate) const SURFACE_OCEAN_SHARE: &str = "planet.surface.ocean-share";
+/// What life has made of the planet (`timeline::Biosphere`), from the
+/// liquid (or, without one, the climate's state), the age and the life
+/// draw (`science::life::stage`); recorded for a planet with a surface.
+pub(crate) const LIFE: &str = "planet.life";
+/// The life draw, uniform in (0, 1), from the `planet/life` sub-seed.
+pub(crate) const LIFE_DRAW: &str = "planet.life.draw";
+/// Partial pressure of O2 in the air life has oxygenated
+/// (`science::life::oxygenate`): `O2_PER_N2` times the N2 for a modern
+/// biosphere, the bare air's O2 for an oxidising one.
+pub(crate) const LIFE_AIR_O2: &str = "planet.life.air.o2";
+/// Partial pressure of CH4 in the air life has oxygenated: 0 bar for an
+/// oxidising biosphere, the methane oxidised; for a modern one, the
+/// methane its flux keeps under its stars on its gravity
+/// (`science::life_gases::modern_methane`).
+pub(crate) const LIFE_AIR_CH4: &str = "planet.life.air.ch4";
+/// Surface pressure of the air life has oxygenated: the sum of its
+/// partial pressures.
+pub(crate) const LIFE_AIR_PRESSURE: &str = "planet.life.air.pressure";
+/// Whether the planet is tidally locked, which the climate reads: an
+/// imposed `false` until the tidal evolution of the spin (#604).
+pub(crate) const SPIN_LOCKED: &str = "planet.spin.locked";
+/// The radial samples of the interior: an imposed empty list until a
+/// planet's temperature profile exists (a sample needs a temperature).
+pub(crate) const INTERIOR_SAMPLES: &str = "planet.interior.samples";
+/// The mass of the liquid at the surface when it is not water: the column
+/// mass of its condensate's partial pressure on the ground (hydrocarbons,
+/// nitrogen), an imposed 0 for lava. Water's inventory is the water's own
+/// node.
+pub(crate) const LIQUID_INVENTORY: &str = "planet.surface.liquid-inventory";
+/// The class of the planet: the first rule of the table that holds,
+/// from the nodes the rules up to that one read (mass, period, the steam
+/// line, the liquid, the runaway, the air, the water, the bulk's radius
+/// and gravity, the water fraction, the regime).
+pub(crate) const CLASS: &str = "planet.class";
+
+/// The gases of the air the climate leaves, each with the code of its
+/// weight, in the contract's order.
+pub(crate) const CLIMATE_AIR_GASES: [(timeline::Gas, &str); 8] = [
+    (timeline::Gas::N2, CLIMATE_AIR_N2),
+    (timeline::Gas::Co2, CLIMATE_AIR_CO2),
+    (timeline::Gas::H2o, CLIMATE_AIR_H2O),
+    (timeline::Gas::Ch4, CLIMATE_AIR_CH4),
+    (timeline::Gas::Nh3, CLIMATE_AIR_NH3),
+    (timeline::Gas::So2, CLIMATE_AIR_SO2),
+    (timeline::Gas::O2, CLIMATE_AIR_O2),
+    (timeline::Gas::Ar, CLIMATE_AIR_AR),
+];

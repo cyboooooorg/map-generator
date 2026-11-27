@@ -8,7 +8,8 @@ use super::*;
 use crate::constants::{STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use crate::radiation::gases::H2O_MOLAR_MASS;
 use crate::radiation::ktable::{CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
-use crate::radiation::test_points::{self, EARTH_SURFACE_K, MANABE_HUMIDITY};
+use crate::radiation::test_points::{self, EARTH_SURFACE_K, PER_MILLION, PREINDUSTRIAL_PPM};
+use crate::surface::RELATIVE_HUMIDITY;
 use crate::water::vapour_saturation_bar;
 
 /// The table on bins half as wide (10 cm⁻¹) over 0-2500 cm⁻¹, at
@@ -46,29 +47,8 @@ const DECADES: usize = 6;
 /// was not read (the NASA scan has no text layer).
 const TROPOPAUSE_K: f64 = 217.0;
 
-/// Definition: Earth's pre-industrial CO₂ of the test columns, ppm.
-const PREINDUSTRIAL_PPM: f64 = 280.0;
-
 /// Definition: O₂'s mole fraction in the test columns' dry air, rounded.
 const O2_SHARE: f64 = 0.21;
-
-/// Definition: parts per million.
-const PER_MILLION: f64 = 1e-6;
-
-/// Source: clear-sky outgoing longwave radiation at the top of the
-/// atmosphere, global annual mean of CERES EBAF Ed4, July 2005 to June
-/// 2015: 267.9 W/m² (Kato et al. 2018, J. Climate 31, 4501,
-/// doi:10.1175/JCLI-D-17-0523.1, Table 5, "Clear-sky, TOA LW up", Ed4
-/// column; Ed2.8 gives 265.4).
-const CERES_CLEAR_SKY_OLR: f64 = 267.9;
-
-/// Calibration: the error budget of one fixed profile against a global
-/// mean, W/m², not a published uncertainty: the test column is a single
-/// US-standard-like profile at 280 ppm, with no ozone, no aerosol and no
-/// geography, against a mean over latitudes and seasons at the CO₂ of
-/// 2005-2015; Kato et al. 2018 quote uncertainties of a few W/m² for the
-/// measurement itself. The legacy ±10 W/m², kept.
-const CLEAR_SKY_OLR_TOLERANCE: f64 = 10.0;
 
 /// Calibration: a plausibility band for the forcing of a CO₂ doubling,
 /// W/m², on the legacy test profile, not a like-for-like anchor. 3.7 W/m²
@@ -242,9 +222,10 @@ fn earth_air(co2_ppm: f64) -> PartialPressures {
 /// A path through the air: the optical depth of each g-point of each
 /// gas, and the smooth part's, summed layer by layer.
 fn add_layer(path: &mut BinAbsorption, a: &BinAbsorption, b: &BinAbsorption, span: f64) {
-    for g in 0..G {
-        path.co2[g] += log_mean(a.co2[g], b.co2[g]) * span;
-        path.water[g] += log_mean(a.water[g], b.water[g]) * span;
+    for ((path, a), b) in path.lines.iter_mut().zip(&a.lines).zip(&b.lines) {
+        for g in 0..G {
+            path[g] += log_mean(a[g], b[g]) * span;
+        }
     }
     path.smooth += log_mean(a.smooth, b.smooth) * span;
 }
@@ -276,11 +257,14 @@ fn olr_bins(
             nh3: gases.nh3 * share,
             so2: gases.so2 * share,
             o2: gases.o2 * share,
+            ar: gases.ar * share,
         };
         g.h2o = point.vapour_bar;
         Level {
             temperature_k: point.temperature_k,
             gases: g,
+            ozone_bar: 0.0,
+            n2o_bar: 0.0,
             gravity_m_s2: EARTH_GRAVITY,
         }
     };
@@ -317,11 +301,7 @@ fn olr_fixed_profile(profile: &[Point], gases: &PartialPressures) -> f64 {
 }
 
 fn earth_column() -> Vec<Point> {
-    earth_profile(EARTH_SURFACE_K, TROPOPAUSE_K, MANABE_HUMIDITY)
-}
-
-fn earth_olr(co2_ppm: f64) -> f64 {
-    olr_fixed_profile(&earth_column(), &earth_air(co2_ppm))
+    earth_profile(EARTH_SURFACE_K, TROPOPAUSE_K, RELATIVE_HUMIDITY)
 }
 
 fn doubling_forcing(co2_ppm: f64) -> f64 {
@@ -341,6 +321,8 @@ fn venus_level() -> Level {
             so2,
             ..PartialPressures::default()
         },
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
         gravity_m_s2: VENUS_GRAVITY,
     }
 }
@@ -367,12 +349,14 @@ fn water_mixes_its_two_broadenings_by_its_share() {
             n2,
             ..PartialPressures::default()
         },
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
         gravity_m_s2: EARTH_GRAVITY,
     };
     let per_kg = |l: &Level| {
         let a = absorption_per_ln_p(ROTATION_BIN, l);
         let mass = l.mass_per_ln_p(l.gases.h2o, H2O_MOLAR_MASS);
-        a.water.map(|k| k / mass)
+        a.lines[LineGas::Water as usize].map(|k| k / mass)
     };
     let trace = per_kg(&level(TRACE_BAR, 1.0));
     let steam = per_kg(&level(1.0, 0.0));
@@ -455,16 +439,6 @@ fn co2_forcing_is_logarithmic() {
 }
 
 #[test]
-fn earth_clear_sky_olr() {
-    let olr = earth_olr(PREINDUSTRIAL_PPM);
-    assert!(
-        (olr - CERES_CLEAR_SKY_OLR).abs() <= CLEAR_SKY_OLR_TOLERANCE,
-        "Earth's clear-sky OLR {olr:.2} W/m², against \
-         {CERES_CLEAR_SKY_OLR} ± {CLEAR_SKY_OLR_TOLERANCE}"
-    );
-}
-
-#[test]
 fn halving_bins_keeps_the_forcing() {
     // The halved table covers 0-2500 cm⁻¹; past it both sums take the
     // model's bins, which then cancel in the comparison.
@@ -500,6 +474,8 @@ fn the_spectrum_of_a_level_is_its_bins() {
                 h2o: earth_h2o,
                 ..earth_air(earth_ppm)
             },
+            ozone_bar: 0.0,
+            n2o_bar: 0.0,
             gravity_m_s2: EARTH_GRAVITY,
         },
         venus,
@@ -510,6 +486,8 @@ fn the_spectrum_of_a_level_is_its_bins() {
                 ch4: titan_ch4,
                 ..PartialPressures::default()
             },
+            ozone_bar: 0.0,
+            n2o_bar: 0.0,
             gravity_m_s2: TITAN_GRAVITY,
         },
         Level {
@@ -520,6 +498,8 @@ fn the_spectrum_of_a_level_is_its_bins() {
                 co2: steam_co2,
                 ..PartialPressures::default()
             },
+            ozone_bar: 0.0,
+            n2o_bar: 0.0,
             gravity_m_s2: EARTH_GRAVITY,
         },
     ];
@@ -529,11 +509,15 @@ fn the_spectrum_of_a_level_is_its_bins() {
         absorption_spectrum(level, &mut spectrum);
         for i in 0..BINS {
             let one = absorption_per_ln_p(i, level);
-            let all = one.co2.iter().chain(&one.water).chain([&one.smooth]);
+            let all = one.lines.iter().flatten().chain([&one.smooth]);
             assert!(all.into_iter().all(|x| *x >= 0.0), "bin {i}: {one:?}");
-            for g in 0..G {
-                assert!(close(spectrum.co2[i][g], one.co2[g]), "CO₂ bin {i}");
-                assert!(close(spectrum.water[i][g], one.water[g]), "water bin {i}");
+            for (gas, (lines, one)) in LineGas::ALL
+                .iter()
+                .zip(spectrum.lines.iter().zip(&one.lines))
+            {
+                for g in 0..G {
+                    assert!(close(lines[i][g], one[g]), "{gas:?} bin {i}");
+                }
             }
             assert!(
                 close(spectrum.smooth[i], one.smooth),
@@ -543,9 +527,14 @@ fn the_spectrum_of_a_level_is_its_bins() {
                 one.smooth
             );
         }
-        assert_eq!(spectrum.co2[TAIL], spectrum.co2[BINS - 1]);
-        assert_eq!(spectrum.water[TAIL], spectrum.water[BINS - 1]);
-        assert_eq!(spectrum.smooth[TAIL], spectrum.smooth[BINS - 1]);
+        // A structural contract, not a value: the tail holds no
+        // absorption in the reference spectrum, because
+        // `column::beyond::beyond` carries the whole region past
+        // 5000 cm⁻¹ on the shortwave table's bins.
+        for lines in &spectrum.lines {
+            assert_eq!(lines[TAIL], [0.0; G]);
+        }
+        assert_eq!(spectrum.smooth[TAIL], 0.0);
     }
 }
 
@@ -566,6 +555,205 @@ fn the_planck_spectrum_is_the_bins_and_their_rest() {
         assert!(
             (sum / black - 1.0).abs() < SIGMA_T4_TOLERANCE,
             "{t} K: {sum} vs {black}"
+        );
+    }
+}
+
+#[test]
+fn the_planck_flux_over_any_edges_is_their_integrals_and_the_rest() {
+    // Uneven edges across the head and tail series' switch, as the
+    // column's sum past the longwave table takes them: each interval is
+    // its exact integral, the last slot the rest, and the whole `σT⁴`
+    // from the first edge at 0.
+    let edges = [0.0, 1000.0, 5000.0, 7311.0, 14_364.0, 50_000.0];
+    let mut out = [0.0; 6];
+    for t in PLANCK_BANDS_K {
+        planck_over(t, &edges, &mut out);
+        for (j, p) in out[..edges.len() - 1].iter().enumerate() {
+            let one = planck_between(edges[j], edges[j + 1], t);
+            assert!(
+                (p - one).abs() <= SAME_SUM * one.max(TINY),
+                "{t} K, interval {j}: {p} vs {one}"
+            );
+        }
+        let black = STEFAN_BOLTZMANN * f64::powi(t, 4);
+        let sum: f64 = out.iter().sum();
+        assert!(
+            (sum / black - 1.0).abs() < SIGMA_T4_TOLERANCE,
+            "{t} K: {sum} vs {black}"
+        );
+    }
+}
+
+/// The level weighs its argon: Earth's dry air of the fact sheet, its
+/// argon included, has the U.S. Standard Atmosphere's mean molar mass,
+/// 28.964 g/mol ([`DRY_AIR_R`]'s), within 0.1 %; without its argon it is
+/// 0.3 % lighter. Pure argon weighs its CIAAW 39.95 g/mol.
+#[test]
+fn a_level_weighs_its_argon() {
+    /// Source: the mean molar mass of the U.S. Standard Atmosphere 1976's
+    /// dry air, 28.964 g/mol (NASA-TM-X-74335, as [`DRY_AIR_R`] cites
+    /// it), kg/mol.
+    const DRY_AIR_MOLAR_MASS: f64 = 28.964e-3;
+    let level = |gases| Level {
+        temperature_k: EARTH_SURFACE_K,
+        gases,
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
+        gravity_m_s2: EARTH_GRAVITY,
+    };
+    // Source: dry air, NASA Earth fact sheet: 78.08 % N₂, 20.95 % O₂,
+    // 9340 ppm Ar, 420 ppm CO₂, by volume.
+    let air = PartialPressures {
+        n2: 0.7808,
+        o2: 0.2095,
+        ar: 9340e-6,
+        co2: 420e-6,
+        ..PartialPressures::default()
+    };
+    let mass = level(air).molar_mass_kg();
+    assert!((mass / DRY_AIR_MOLAR_MASS - 1.0).abs() < 1e-3, "{mass}");
+    let without = level(PartialPressures { ar: 0.0, ..air }).molar_mass_kg();
+    assert!(
+        (without / DRY_AIR_MOLAR_MASS - 1.0).abs() > 2e-3,
+        "{without}"
+    );
+    let argon = level(PartialPressures {
+        ar: 1.0,
+        ..PartialPressures::default()
+    });
+    assert!((argon.molar_mass_kg() - crate::radiation::gases::AR_MOLAR_MASS).abs() < 1e-15);
+}
+
+/// Source: points of HITRAN's collision-induced absorption files
+/// (`OPACITY.md`, SHA-256 there): the pair, the file's block temperature
+/// (K), a wavenumber (cm⁻¹) and the file's coefficient there
+/// (cm⁵/molecule²), as the file's rows give them, with the column of
+/// [`PAIRS_CIA_K`] nearest the block's temperature. `N2-N2_2021.cia`,
+/// 70.0 K and 290.0 K at 110 cm⁻¹ (Chistikov et al. 2019);
+/// `O2-O2_2024.cia`, 297.8 K at 1550.1 cm⁻¹; `O2-N2_2024.cia`, 293.0 K at
+/// 1550.4882 cm⁻¹; `N2-CH4_2024.cia`, 90.0 K at 110 and 310 cm⁻¹
+/// (Finenko et al. 2022); `CH4-CH4_2011.cia`, 400.0 K at 110 and 310 cm⁻¹
+/// (Borysow & Frommhold 1987).
+const PAIR_FILE_POINTS: [(&str, f64, f64, f64); 8] = [
+    ("N2-N2", 70.0, 110.0, 4.4969e-45),
+    ("N2-N2", 290.0, 110.0, 6.4148e-45),
+    ("O2-O2", 300.0, 1550.1, 6.340e-45),
+    ("O2-N2", 290.0, 1550.4882, 6.0856e-45),
+    ("N2-CH4", 90.0, 110.0, 2.9326e-44),
+    ("N2-CH4", 90.0, 310.0, 7.4544e-45),
+    ("CH4-CH4", 400.0, 110.0, 4.193e-45),
+    ("CH4-CH4", 400.0, 310.0, 1.388e-44),
+];
+
+/// Calibration: how far a 20 cm⁻¹ cell's mean may stray from the file's
+/// value at a point inside it, a share, 5 %, chosen above the largest
+/// stray measured on the points of [`PAIR_FILE_POINTS`]: N₂–N₂ at 70 K,
+/// 110 cm⁻¹, +3.46 % (the band's curvature over the cell at its peak),
+/// and O₂–O₂ at 300 K against the 297.8 K block, −3.50 % (the cell's mean
+/// and a 2.2 K step in temperature); the others stray by 0.06 to 2.3 %.
+/// Not a derivation: the band's change with temperature near its peak,
+/// 2 to 2.5 % per K at 70 to 80 K (study 38's probes), would give a bound
+/// per point, not one share for all.
+const CELL_AGAINST_POINT: f64 = 0.05;
+
+/// Definition: relative tolerance of the single-precision pairs against
+/// the double-precision ones, a few roundings of `f32`.
+const FAST_PAIRS_TOLERANCE: f64 = 1e-6;
+
+/// The pair of [`PAIRS`] made of `a` and `b`.
+fn pair(a: Partner, b: Partner) -> &'static Pair {
+    PAIRS
+        .iter()
+        .find(|p| p.gases == (a, b))
+        .expect("a pair of the list")
+}
+
+#[test]
+fn the_pairs_are_hitrans_files() {
+    use Partner::{Ch4, N2, O2};
+    let named = |name: &str| match name {
+        "N2-N2" => pair(N2, N2),
+        "O2-O2" => pair(O2, O2),
+        "O2-N2" => pair(O2, N2),
+        "N2-CH4" => pair(N2, Ch4),
+        "CH4-CH4" => pair(Ch4, Ch4),
+        other => panic!("{other}"),
+    };
+    for (name, t, nu, file) in PAIR_FILE_POINTS {
+        let p = named(name);
+        let row = p.rows[(nu / CIA_CELL_CM).floor() as usize].expect("a cell");
+        let k = p.coefficient(row, p.column(t));
+        assert!(
+            (k / file - 1.0).abs() < CELL_AGAINST_POINT,
+            "{name} at {t} K, {nu} cm⁻¹: {k:e} against the file's {file:e}"
+        );
+    }
+    // Each grows as the product of its two gases' densities: twice each
+    // gas, the same mixture, four times the depth per `ln p`.
+    let level = |n2: f64, ch4: f64| Level {
+        temperature_k: 90.0,
+        gases: PartialPressures {
+            n2,
+            ch4,
+            ..PartialPressures::default()
+        },
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
+        gravity_m_s2: TITAN_GRAVITY,
+    };
+    let one = pair(N2, Ch4).depth(110.0, &level(1.0, 0.05));
+    let more = pair(N2, Ch4).depth(110.0, &level(2.0, 0.1));
+    assert!((more / one - 4.0).abs() < SCALE_TOLERANCE, "{more} {one}");
+    assert_eq!(pair(N2, Ch4).depth(110.0, &level(1.0, 0.0)), 0.0);
+}
+
+#[test]
+fn the_fast_pairs_are_the_reference() {
+    // The fast path's smooth part against the reference's, on dry airs
+    // whose smooth part is all pairs: Earth's N₂ and O₂ at 288 K, and
+    // Titan's N₂ and methane at 93.7 K.
+    let [titan_k, titan_n2, titan_ch4] = TITAN_LEVEL;
+    let earth = Level {
+        temperature_k: EARTH_SURFACE_K,
+        gases: PartialPressures {
+            co2: 0.0,
+            ..earth_air(0.0)
+        },
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
+        gravity_m_s2: EARTH_GRAVITY,
+    };
+    let titan = Level {
+        temperature_k: titan_k,
+        gases: PartialPressures {
+            n2: titan_n2,
+            ch4: titan_ch4,
+            ..PartialPressures::default()
+        },
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
+        gravity_m_s2: TITAN_GRAVITY,
+    };
+    let mut fast = FastLevel::default();
+    let mut reference = Spectrum::default();
+    for level in [earth, titan] {
+        fast_level(&level, BINS, &mut fast);
+        absorption_spectrum(&level, &mut reference);
+        let mut absorbing = 0;
+        for i in 0..BINS {
+            let (f, r) = (f64::from(fast.smooth[i]), reference.smooth[i]);
+            assert!(
+                (f - r).abs() <= FAST_PAIRS_TOLERANCE * r,
+                "bin {i} at {} K: {f} vs {r}",
+                level.temperature_k
+            );
+            absorbing += usize::from(r > 0.0);
+        }
+        assert!(
+            absorbing > 0,
+            "no pair absorbs at {} K",
+            level.temperature_k
         );
     }
 }

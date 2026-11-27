@@ -1,5 +1,6 @@
 use super::*;
-use crate::constants::MOLAR_GAS_CONSTANT;
+use crate::constants::{EARTH_MASS, MOLAR_GAS_CONSTANT};
+use crate::units::{Kilogram, SolarLuminosity};
 
 /// Definition: relative tolerance of the CO2 vapour pressure against the
 /// NIST WebBook table, 0.1 %.
@@ -62,6 +63,93 @@ const METHANE_TABLE: [(f64, f64); 4] = [
 
 fn close(a: f64, b: f64, tolerance: f64) -> bool {
     ((a - b) / b).abs() <= tolerance
+}
+
+/// Definition: relative tolerance of the ammonia frost at its triple
+/// point, 1e-6.
+const AMMONIA_TRIPLE_TOLERANCE: f64 = 1e-6;
+/// Source: triple-point pressure of ammonia, 0.06060 bar (Fonseca and Lobo
+/// 1989, via the NIST Chemistry WebBook phase-change page).
+const AMMONIA_TRIPLE_BAR: f64 = 0.060_60;
+/// Source: triple-point temperature of ammonia, 195.49 K (Gao et al. 2023,
+/// doi:10.1063/5.0128269).
+const AMMONIA_TRIPLE_K: f64 = 195.49;
+/// Source: ammonia frost points (T in K, p in bar, relative tolerance):
+/// 1.27e-3 bar at 162.39 K (Karwat 1924, via Fray and Schmitt 2009, quoted
+/// by Blakley et al. 2024 section 1) within 5 %, and 8.26e-3 bar at 177 K
+/// (Fray and Schmitt 2009 fit NH3-1, via Lisse et al. 2021 supplement
+/// Table 2) within 2 %.
+const AMMONIA_FROST_POINTS: [(f64, f64, f64); 2] =
+    [(162.39, 1.27e-3, 5e-2), (177.0, 8.26e-3, 2e-2)];
+/// Definition: relative tolerance of two reads of the same curve, 1e-12
+/// (the bar round trip changes the last bit).
+const SAME_CURVE_TOLERANCE: f64 = 1e-12;
+/// Definition: temperatures of the CO2 comparison, 150 K and 200 K, both
+/// under the triple point.
+const CO2_FROST_CHECKS_K: [f64; 2] = [150.0, 200.0];
+/// Definition: coldest temperature of the cap check, 10 K.
+const FROST_CAP_FLOOR_K: f64 = 10.0;
+/// Definition: step of the cap check, 0.5 K.
+const FROST_CAP_STEP_K: f64 = 0.5;
+/// Definition: relative gap under the triple point where the frost is read,
+/// 1e-9.
+const JUST_UNDER: f64 = 1e-9;
+
+#[test]
+fn ammonia_frost_meets_its_triple_point() {
+    let p = ammonia_frost_pressure(Kelvin(AMMONIA_TRIPLE_K * (1.0 - JUST_UNDER))).unwrap();
+    assert!(close(
+        p.0 / PASCALS_PER_BAR,
+        AMMONIA_TRIPLE_BAR,
+        AMMONIA_TRIPLE_TOLERANCE
+    ));
+}
+
+#[test]
+fn ammonia_frost_follows_its_source() {
+    for (t, bar, tolerance) in AMMONIA_FROST_POINTS {
+        let p = ammonia_frost_pressure(Kelvin(t)).unwrap();
+        assert!(
+            close(p.0 / PASCALS_PER_BAR, bar, tolerance),
+            "{t} K: {}",
+            p.0
+        );
+    }
+}
+
+#[test]
+fn co2_frost_is_the_co2_curve_below_its_triple_point() {
+    for t in CO2_FROST_CHECKS_K {
+        let frost = co2_frost_pressure(Kelvin(t)).unwrap().0;
+        assert!(close(
+            frost,
+            co2_saturation_pressure(Kelvin(t)).0,
+            SAME_CURVE_TOLERANCE
+        ));
+    }
+}
+
+#[test]
+fn the_frost_cap_holds_from_10_k_to_the_triple_point() {
+    type Frost = fn(Kelvin) -> Option<Pascal>;
+    let gases: [(Frost, f64); 2] = [
+        (co2_frost_pressure, CO2_TRIPLE_TEMPERATURE),
+        (ammonia_frost_pressure, AMMONIA_TRIPLE_TEMPERATURE),
+    ];
+    for (frost, triple) in gases {
+        let mut previous = 0.0;
+        let mut t = FROST_CAP_FLOOR_K;
+        while t < triple * (1.0 - JUST_UNDER) {
+            let p = frost(Kelvin(t)).unwrap().0;
+            assert!(p.is_finite() && p > previous, "{t} K: {p} after {previous}");
+            previous = p;
+            t += FROST_CAP_STEP_K;
+        }
+        let top = frost(Kelvin(triple * (1.0 - JUST_UNDER))).unwrap().0;
+        assert!(top.is_finite() && top > previous);
+        assert!(frost(Kelvin(triple)).is_none());
+        assert!(frost(Kelvin(triple + FROST_CAP_STEP_K)).is_none());
+    }
 }
 
 #[test]
@@ -150,5 +238,635 @@ fn methane_caps_and_freezes() {
     for t in [1.0, 0.0, -5.0, f64::NAN] {
         let p = methane_saturation_bar(t);
         assert!(p.is_finite() && p >= 0.0, "{t} K: {p}");
+    }
+}
+
+/// Source: core mass fraction of the Earth, 32.5 ± 0.3 wt%, the primitive
+/// mantle (the bulk silicate Earth) the other 67.5 wt% (Wang, Lineweaver
+/// & Ireland 2018, Icarus 299, 460, doi:10.1016/j.icarus.2017.08.024,
+/// arXiv:1708.08718, section 2.2 and Fig. 2).
+const EARTH_SILICATE_SHARE: f64 = 0.675;
+/// Source: sulphur in the primitive mantle, 235 ± 38 ppm by mass (Wang et
+/// al. 2018, Table 1, concordance of three compilations), in kg per kg.
+const WANG_SULPHUR: (f64, f64) = (235e-6, 38e-6);
+
+#[test]
+fn earths_silicate_sulphur_is_wangs() {
+    let silicate = Kilogram(EARTH_MASS.0 * EARTH_SILICATE_SHARE);
+    let core = Kilogram(EARTH_MASS.0 - silicate.0);
+    let earth = inventory(EARTH_MASS, silicate, Kilogram(0.0), false);
+    // The sulphur comes from the silicate alone, never from the core.
+    assert_eq!(earth.s, Kilogram(ROCK_S * silicate.0));
+    assert_eq!(
+        inventory(core, Kilogram(0.0), Kilogram(0.0), false).s,
+        Kilogram(0.0)
+    );
+    let (centre, spread) = WANG_SULPHUR;
+    let ppm = earth.s.0 / silicate.0;
+    assert!((ppm - centre).abs() <= spread, "{ppm} kg/kg");
+    assert_eq!(earth.co2, Kilogram(ROCK_CO2 * EARTH_MASS.0));
+    assert_eq!(earth.n2, Kilogram(ROCK_N2 * EARTH_MASS.0));
+}
+
+/// Source: triple-point pressure of nitrogen, 0.1253 bar (Angus, de Reuck
+/// et al. 1979, via the NIST Chemistry WebBook; study 24).
+const NITROGEN_TRIPLE_PA: f64 = 12_530.0;
+/// Source: the beta-N2 fit `N2-2` at the triple point, 0.1215 bar, and at
+/// 37.2 K, 1.36e-5 bar (Fray and Schmitt 2009 through Lisse et al. 2021,
+/// Table 2; study 24, finding 1).
+const NITROGEN_BETA_READS: (f64, f64) = (0.1215, 1.36e-5);
+/// Source: surface pressure of Triton's N2 air, 14 +/- 1 ubar, 1.4e-5 bar,
+/// from the Voyager 2 radio occultation of 1989 (Gurrola 1995, Stanford
+/// PhD thesis, not reached; refining the 1.6 +/- 0.3 Pa of Tyler et al.
+/// 1989, Science 246, 1466; both as quoted by Sicardy et al. 2024,
+/// arXiv:2402.02476). The source gives no temperature with it: the test
+/// reads it at [`TRITON_FROST_K`], where the beta curve puts it.
+const TRITON_FROST_BAR: f64 = 1.4e-5;
+/// Definition: temperature of Triton's frost, 37.2 K.
+const TRITON_FROST_K: f64 = 37.2;
+/// Definition: absolute tolerance on Triton's pressure, 0.05e-5 bar.
+const TRITON_TOLERANCE_BAR: f64 = 0.05e-5;
+/// Definition: relative tolerance of the beta fit scaled to the triple
+/// point, 1 %.
+const BETA_SCALED_TOLERANCE: f64 = 1e-2;
+/// Definition: coldest temperature, 2 K, and step, 0.1 K, of the
+/// monotony check of the nitrogen frost.
+const NITROGEN_SWEEP_FLOOR_K: f64 = 2.0;
+/// Definition: warmest temperature of the sweep, 63.1 K, under the triple
+/// point.
+const NITROGEN_SWEEP_CEILING_K: f64 = 63.1;
+/// Definition: see [`NITROGEN_SWEEP_FLOOR_K`].
+const NITROGEN_SWEEP_STEP_K: f64 = 0.1;
+/// Definition: alpha-beta transition of nitrogen, 35.61 K (Scott 1976, as
+/// quoted by Tegler et al. 2019).
+const NITROGEN_TRANSITION_K: f64 = 35.61;
+/// Source: Span, Lemmon, Jacobsen, Wagner & Yokozeki 2000 (J. Phys.
+/// Chem. Ref. Data 29, 1361, doi:10.1063/1.1349047), the tables
+/// "Thermodynamic properties of nitrogen on the saturation line as a
+/// function of temperature" (pp. 1403-1405) and "of pressure" (p. 1407,
+/// for the normal boiling point): (T in K, p in MPa), computed from
+/// their equation of state.
+const SPAN_TABLE: [(f64, f64); 6] = [
+    (63.151, 0.012_523),
+    (70.0, 0.038_54),
+    (77.355, 0.101_325),
+    (90.0, 0.360_46),
+    (100.0, 0.778_27),
+    (120.0, 2.510_58),
+];
+/// Source: relative uncertainty of the vapour pressures of Nowak et al.
+/// 1997b at the triple point, 0.075 %, the largest the paper states for
+/// them (Span et al. 2000, Sec. 2.3, p. 1367; "typically less than
+/// 0.015 %" elsewhere). The ancillary equation "represents the
+/// experimental values well within their uncertainties along the entire
+/// coexistence curve" (Sec. 2.6, p. 1368); the paper gives no other
+/// figure for it.
+const SPAN_TOLERANCE: f64 = 7.5e-4;
+/// Source: triple-point temperature of nitrogen, 63.151 K (Span et al.
+/// 2000, Sec. 2.2, eq. 3, p. 1367, adopted from Nowak et al. 1997b,
+/// ITS-90).
+const SPAN_TRIPLE_TEMPERATURE: Kelvin = Kelvin(63.151);
+/// Source: triple-point pressure of nitrogen, 12.523 kPa (Span et al.
+/// 2000, Sec. 2.2, eq. 3, p. 1367, adopted from Nowak et al. 1997b).
+const SPAN_TRIPLE_PRESSURE: Pascal = Pascal(12_523.0);
+/// Definition: an offset, 1e-9 K, under the switch from the frost to the
+/// liquid curve, to read the frost's side of the join.
+const JUST_UNDER_K: f64 = 1e-9;
+/// Definition: coldest temperature, 30 K, and step, 0.1 K, of the
+/// monotony check of the whole nitrogen saturation curve.
+const SATURATION_SWEEP_FLOOR_K: f64 = 30.0;
+/// Definition: see [`SATURATION_SWEEP_FLOOR_K`].
+const SATURATION_SWEEP_STEP_K: f64 = 0.1;
+/// Source: constants `A`, `B`, `C` of the Antoine fit of liquid nitrogen
+/// that the Span curve replaces, `log10(p / 1 bar) = A - B / (T - C)`
+/// (Edejer and Thodos 1967, via the NIST Chemistry WebBook), read only to
+/// print the change at methane's triple point.
+const EDEJER_THODOS: [f64; 3] = [3.7362, 264.651, 6.788];
+
+#[test]
+fn nitrogen_frost_follows_fray_and_schmitt() {
+    let triple = nitrogen_frost_pressure(Kelvin(63.14 * (1.0 - JUST_UNDER))).unwrap();
+    assert!(close(triple.0, NITROGEN_TRIPLE_PA, 1e-6));
+    assert!(nitrogen_frost_pressure(Kelvin(63.14)).is_none());
+
+    let scale = NITROGEN_TRIPLE_PA / PASCALS_PER_BAR / NITROGEN_BETA_READS.0;
+    let p = nitrogen_frost_pressure(Kelvin(TRITON_FROST_K)).unwrap().0 / PASCALS_PER_BAR;
+    assert!(
+        close(p, NITROGEN_BETA_READS.1 * scale, BETA_SCALED_TOLERANCE),
+        "{p}"
+    );
+    assert!((p - TRITON_FROST_BAR).abs() <= TRITON_TOLERANCE_BAR, "{p}");
+
+    let below = nitrogen_frost_pressure(Kelvin(NITROGEN_TRANSITION_K - 1e-9)).unwrap();
+    let at = nitrogen_frost_pressure(Kelvin(NITROGEN_TRANSITION_K)).unwrap();
+    assert!(close(below.0, at.0, 1e-6));
+
+    let mut previous = f64::INFINITY;
+    let mut t = NITROGEN_SWEEP_CEILING_K;
+    while t >= NITROGEN_SWEEP_FLOOR_K - 1e-9 {
+        let p = nitrogen_frost_pressure(Kelvin(t)).unwrap().0;
+        assert!(p > 0.0 && p < previous, "{t} K: {p}");
+        previous = p;
+        t -= NITROGEN_SWEEP_STEP_K;
+    }
+}
+
+#[test]
+fn nitrogen_saturation_is_span_2000() {
+    for (t, mpa) in SPAN_TABLE {
+        let p = nitrogen_saturation_pressure(Kelvin(t)).0;
+        let table = mpa * 1e6;
+        println!(
+            "N2 at {t} K: {p:.2} Pa against {table:.2} Pa ({:+.4} %)",
+            100.0 * (p / table - 1.0)
+        );
+        assert!(close(p, table, SPAN_TOLERANCE), "{p} Pa at {t} K");
+    }
+}
+
+#[test]
+fn nitrogen_saturation_joins_its_frost() {
+    let switch = NITROGEN_TRIPLE_TEMPERATURE;
+    let frost = nitrogen_saturation_pressure(Kelvin(switch.0 - JUST_UNDER_K)).0;
+    let liquid = nitrogen_saturation_pressure(switch).0;
+    let join = (liquid - frost).abs() / frost;
+    // The frost is pinned at Angus et al. 1979's triple point (63.14 K,
+    // 12 530 Pa), the liquid is Span et al. 2000's curve through theirs
+    // (63.151 K, 12 523 Pa). The bound is built from the same terms as
+    // the join (the curve's miss of Angus's pressure at Span's triple
+    // temperature, plus the curve's change over the 0.011 K between the
+    // two triple temperatures), so it holds by construction, to second
+    // order: it does not test the sources' disagreement (their triple
+    // pressures are 0.056 % apart; the rest of the 0.27 % is the curve's
+    // slope). What it catches is a change of either curve, the frost's or
+    // the liquid's, that opens the join past them (user decision, Task
+    // 3).
+    let at_span = nitrogen_saturation_pressure(SPAN_TRIPLE_TEMPERATURE).0;
+    let pressures = (at_span - NITROGEN_TRIPLE_PRESSURE.0).abs() / NITROGEN_TRIPLE_PRESSURE.0;
+    let temperatures = (at_span - liquid).abs() / at_span;
+    let bound = pressures + temperatures;
+    let sourced =
+        (SPAN_TRIPLE_PRESSURE.0 - NITROGEN_TRIPLE_PRESSURE.0).abs() / NITROGEN_TRIPLE_PRESSURE.0;
+    println!(
+        "N2 join at {} K: frost {frost:.2} Pa, liquid {liquid:.2} Pa, {:.4} %; \
+         bound {:.4} % (pressures {:.4} %, temperatures {:.4} %); triple \
+         pressures {:.4} % apart",
+        switch.0,
+        100.0 * join,
+        100.0 * bound,
+        100.0 * pressures,
+        100.0 * temperatures,
+        100.0 * sourced,
+    );
+    assert!(join <= bound, "join {join} over {bound}");
+
+    let critical = nitrogen_saturation_pressure(NITROGEN_CRITICAL_TEMPERATURE).0;
+    assert!(critical.is_infinite() && critical > 0.0, "{critical}");
+
+    let mut previous = 0.0;
+    let mut step = 0.0;
+    loop {
+        let t = SATURATION_SWEEP_FLOOR_K + step * SATURATION_SWEEP_STEP_K;
+        if t >= NITROGEN_CRITICAL_TEMPERATURE.0 {
+            break;
+        }
+        let p = nitrogen_saturation_pressure(Kelvin(t)).0;
+        assert!(p.is_finite() && p > previous, "{t} K: {p} <= {previous}");
+        previous = p;
+        step += 1.0;
+    }
+
+    let t = METHANE_TRIPLE_TEMPERATURE;
+    let span = nitrogen_saturation_pressure(Kelvin(t)).0 / PASCALS_PER_BAR;
+    let [a, b, c] = EDEJER_THODOS;
+    let antoine = 10f64.powf(a - b / (t - c));
+    println!(
+        "N2 at {t} K: Span {span:.4} bar, Antoine {antoine:.4} bar ({:+.3} %)",
+        100.0 * (span / antoine - 1.0)
+    );
+}
+
+/// Source: N2 on its saturation line, Span et al. 2000
+/// (doi:10.1063/1.1349047), the table "Thermodynamic properties of
+/// nitrogen on the saturation line as a function of temperature", p. 1403
+/// of the NIST reprint (read 2026-11-26): `(T K, liquid density mol/dm3,
+/// vapour density mol/dm3, liquid enthalpy J/mol, vapour enthalpy
+/// J/mol)` at the triple point, 70 K and 77 K.
+const SPAN_SATURATED: [(f64, f64, f64, f64, f64); 3] = [
+    (63.151, 30.957, 0.024_07, -4222.6, 1814.7),
+    (70.0, 29.933, 0.067_68, -3837.0, 1991.7),
+    (77.0, 28.832, 0.158_38, -3438.5, 2153.9),
+];
+/// Definition: litres per cubic metre, 1000, to turn the table's mol/dm3
+/// into a molar volume in m3/mol.
+const LITRES_PER_CUBIC_METRE: f64 = 1e3;
+/// Calibration: relative tolerance of N2's liquid curve's slope against
+/// Clapeyron's with [`SPAN_SATURATED`]'s real enthalpy and volume of
+/// vaporisation, 0.1 %. Both come from Span et al. 2000 (the curve is
+/// their vapour-pressure equation, the table their equation of state):
+/// measured within 0.024 % at the three temperatures, so 0.1 % sits a
+/// factor 4 above; no published tolerance between the two was found.
+const NITROGEN_CLAPEYRON_TOLERANCE: f64 = 1e-3;
+/// Definition: joules per thermochemical calorie, 4.184, the calorie of
+/// NBS Circular 500's kcal/mole ("1 cal = 4.1840 abs joule ...;
+/// definition", its introduction).
+const JOULES_PER_CALORIE: f64 = 4.184;
+/// Source: N2's enthalpy of fusion (c, I to liquid) at 63.15 K and 94 mm
+/// Hg, 0.172 kcal/mole (0.7196 kJ/mol), Rossini, F. D. et al. 1952,
+/// "Selected Values of Chemical Thermodynamic Properties", NBS Circular
+/// 500, Series II, Table 18-1, p. 561 (read 2026-11-27, through the NIST
+/// scan <https://nvlpubs.nist.gov/nistpubs/Legacy/circ/nbscircular500.pdf>,
+/// PDF page 569; its references include Giauque & Clayton 1933).
+const NITROGEN_FUSION_KCAL_MOL: f64 = 0.172;
+/// Calibration: relative tolerance of N2's latent heat over its frost at
+/// the triple point against the sublimation enthalpy Span et al.'s
+/// vaporisation and NBS's fusion add up to, 2 %, CO2's tolerance for the
+/// same check ([`LATENT_TOLERANCE`]). The code's heat is the ideal-vapour
+/// slope of the frost's fit, 1.75 % under that sum (measured); 2 % keeps
+/// the check, and fails the liquid's heat read over the frost (9.7 %
+/// under). `docs/science/nitrogen-phases.md`, "What the code does since".
+const NITROGEN_SUBLIMATION_TOLERANCE: f64 = 2e-2;
+/// Definition: the temperatures, K, at which N2's readers over each
+/// condensate are checked against its saturation curve: across the alpha-beta
+/// transition, the frost, the triple point and the liquid, to past the
+/// critical point.
+const NITROGEN_OVER_CHECKS_K: [f64; 9] = [0.5, 20.0, 40.0, 59.25, 63.0, 63.14, 70.0, 120.0, 130.0];
+
+#[test]
+fn nitrogen_latent_heat_is_the_curves_slope() {
+    // Clapeyron, dp/dT = Δh / (T Δv), with the real enthalpy and volume
+    // of vaporisation of Span et al.'s table: the liquid curve's slope,
+    // which the latent heat over liquid is read from, must agree.
+    for (t, rho_l, rho_v, h_l, h_v) in SPAN_SATURATED {
+        let dv = (1.0 / rho_v - 1.0 / rho_l) / LITRES_PER_CUBIC_METRE;
+        let clapeyron = (h_v - h_l) / (t * dv);
+        let latent = nitrogen_latent_j_mol_over(t, Condensate::Liquid);
+        let p = nitrogen_saturation_bar_over(t, Condensate::Liquid) * PASCALS_PER_BAR;
+        let slope = p * latent / (MOLAR_GAS_CONSTANT * t * t);
+        println!(
+            "N2 at {t} K: slope {slope:.1} Pa/K against {clapeyron:.1} ({:+.3} %); ideal-vapour \
+             heat {latent:.1} J/mol against {:.1} ({:+.2} %)",
+            100.0 * (slope / clapeyron - 1.0),
+            h_v - h_l,
+            100.0 * (latent / (h_v - h_l) - 1.0)
+        );
+        assert!(
+            close(slope, clapeyron, NITROGEN_CLAPEYRON_TOLERANCE),
+            "{t} K: {slope} against {clapeyron}"
+        );
+    }
+    // Across the triple point the heat jumps up by fusion's: the frost's
+    // curve is steeper than the liquid's (a solid holds less entropy).
+    // The two fits' jump falls short of the measured fusion (a declared
+    // simplification: each heat is its own curve's slope), but the
+    // frost's heat meets the sublimation enthalpy, vaporisation plus
+    // fusion, at the triple point.
+    let t = NITROGEN_TRIPLE_TEMPERATURE.0;
+    let (frost, liquid) = (
+        nitrogen_latent_j_mol_over(t, Condensate::Ice),
+        nitrogen_latent_j_mol_over(t, Condensate::Liquid),
+    );
+    let fusion = NITROGEN_FUSION_KCAL_MOL * 1e3 * JOULES_PER_CALORIE;
+    let (_, _, _, h_l, h_v) = SPAN_SATURATED[0];
+    let sublimation = h_v - h_l + fusion;
+    println!(
+        "N2 at {t} K: frost {frost:.1} J/mol, liquid {liquid:.1} J/mol, jump {:.1} against \
+         fusion {fusion:.1} J/mol; sublimation {sublimation:.1} J/mol ({:+.2} %)",
+        frost - liquid,
+        100.0 * (frost / sublimation - 1.0)
+    );
+    assert!(frost > liquid, "{frost} <= {liquid}");
+    assert!(
+        close(frost, sublimation, NITROGEN_SUBLIMATION_TOLERANCE),
+        "{frost} against {sublimation}"
+    );
+}
+
+#[test]
+fn nitrogen_reads_either_curve_over_its_condensate() {
+    // A contract test: it checks the readers against the code's own
+    // saturation curve (the same bits over the stable condensate, the
+    // holds past each curve's end), not against a published value.
+    // Over the condensate stable at a temperature, the readers are the
+    // saturation curve itself; over the other, the liquid's curve goes on
+    // a little under the triple point, and the frost's is held at the
+    // triple point above it.
+    for t in NITROGEN_OVER_CHECKS_K.into_iter().chain([f64::NAN]) {
+        let stable = nitrogen_condensate(t);
+        let over = nitrogen_saturation_bar_over(t, stable);
+        let curve = nitrogen_saturation_bar(t);
+        assert_eq!(
+            over.to_bits(),
+            curve.to_bits(),
+            "{t} K: {over} against {curve}"
+        );
+    }
+    let triple = NITROGEN_TRIPLE_TEMPERATURE.0;
+    let held = nitrogen_saturation_bar_over(triple + 1.0, Condensate::Ice);
+    assert_eq!(held, NITROGEN_TRIPLE_PRESSURE.0 / PASCALS_PER_BAR);
+    let frost_heat = nitrogen_latent_j_mol_over(triple, Condensate::Ice);
+    assert_eq!(
+        nitrogen_latent_j_mol_over(triple + 1.0, Condensate::Ice),
+        frost_heat
+    );
+    let under = nitrogen_saturation_bar_over(triple - 0.1, Condensate::Liquid);
+    assert!(
+        under > 0.0 && under < nitrogen_saturation_bar(triple),
+        "{under}"
+    );
+    let critical = NITROGEN_CRITICAL_TEMPERATURE.0;
+    assert_eq!(
+        nitrogen_saturation_bar_over(critical, Condensate::Liquid),
+        f64::INFINITY
+    );
+    assert_eq!(
+        nitrogen_latent_j_mol_over(critical, Condensate::Liquid),
+        0.0
+    );
+}
+
+/// Definition: coldest temperature, 10 K, of the sulphur dioxide sweep.
+const SO2_SWEEP_FLOOR_K: f64 = 10.0;
+/// Definition: warmest temperature of the sweep, 197 K, under the triple
+/// point.
+const SO2_SWEEP_CEILING_K: f64 = 197.0;
+/// Source: Wagman 1979, `P = 1.516e8 exp(-4510 K / T)` bar (as quoted by
+/// Giles et al. 2024, eq. 1; study 24, finding 2): prefactor.
+const WAGMAN_BAR: f64 = 1.516e8;
+/// Source: the exponent of the same law, 4510 K.
+const WAGMAN_EXPONENT_K: f64 = 4510.0;
+/// Definition: temperature of the Io check, 115 K (study 24, finding 2).
+const IO_FROST_K: f64 = 115.0;
+/// Definition: factor between the anchored curve and Wagman's own at
+/// 115 K, 1.2 (study 24: 1.3e-9 against 1.4e-9 bar).
+const WAGMAN_FACTOR: f64 = 1.2;
+
+#[test]
+fn sulphur_dioxide_frost_holds_from_io_to_its_triple_point() {
+    let triple = SULPHUR_DIOXIDE_TRIPLE_TEMPERATURE;
+    let p = sulphur_dioxide_frost_pressure(Kelvin(triple.0 - 1e-9)).unwrap();
+    assert!(close(p.0, SULPHUR_DIOXIDE_TRIPLE_PRESSURE.0, 1e-6));
+    assert!(sulphur_dioxide_frost_pressure(triple).is_none());
+
+    let mut previous = 0.0;
+    let mut t = SO2_SWEEP_FLOOR_K;
+    while t <= SO2_SWEEP_CEILING_K {
+        let p = sulphur_dioxide_frost_pressure(Kelvin(t)).unwrap().0;
+        assert!(p.is_finite() && p > previous, "{t} K: {p}");
+        previous = p;
+        t += 1.0;
+    }
+
+    let ours = sulphur_dioxide_frost_pressure(Kelvin(IO_FROST_K))
+        .unwrap()
+        .0
+        / PASCALS_PER_BAR;
+    let wagman = WAGMAN_BAR * (-WAGMAN_EXPONENT_K / IO_FROST_K).exp();
+    let ratio = ours / wagman;
+    assert!(
+        ratio < WAGMAN_FACTOR && ratio > 1.0 / WAGMAN_FACTOR,
+        "{ratio}"
+    );
+}
+
+/// Source: normal boiling point of ethane, 184.6 K (NIST Chemistry
+/// WebBook).
+const ETHANE_NORMAL_BOILING_K: f64 = 184.6;
+/// Source: critical temperature of ethane, 305.3 K (NIST Chemistry
+/// WebBook).
+const ETHANE_CRITICAL_K: f64 = 305.3;
+
+#[test]
+fn boiling_caps_at_the_critical_point() {
+    let normal = ethane_boiling_temperature(Pascal(101_325.0)).0;
+    assert!((normal - ETHANE_NORMAL_BOILING_K).abs() < 0.01, "{normal}");
+    let mpa = ethane_boiling_temperature(Pascal(1e6)).0;
+    assert!(
+        mpa > ETHANE_NORMAL_BOILING_K && mpa <= ETHANE_CRITICAL_K,
+        "{mpa}"
+    );
+    assert_eq!(ethane_boiling_temperature(Pascal(1e9)).0, ETHANE_CRITICAL_K);
+    assert!(ethane_boiling_temperature(Pascal(1e5)).0 < mpa);
+    assert!(mpa < ethane_boiling_temperature(Pascal(1e7)).0);
+}
+
+/// Source: Saturn's semi-major axis, 9.57 au (NASA planetary fact
+/// sheet: 1432.0 million km over 149.6), where the model places Titan.
+const SATURN: AstronomicalUnit = AstronomicalUnit(9.57);
+/// Definition: an orbit of 30 au, about Neptune's, where the Triton-like
+/// body of the planet tests forms (a test input).
+const NEPTUNE: AstronomicalUnit = AstronomicalUnit(30.0);
+/// Definition: an orbit of 40 au, about Pluto's (a test input).
+const PLUTO: AstronomicalUnit = AstronomicalUnit(40.0);
+
+/// Definition: the Sun's luminosity, the unit of the scale.
+const SUN: SolarLuminosity = SolarLuminosity(1.0);
+/// Definition: a host as faint as an M dwarf, 1 % of the Sun's light (a
+/// test input).
+const M_DWARF: SolarLuminosity = SolarLuminosity(0.01);
+/// Definition: a host as bright as an F star, three times the Sun's
+/// light (a test input).
+const F_STAR: SolarLuminosity = SolarLuminosity(3.0);
+
+/// Source: the luminosity power of a disc's temperature at a fixed
+/// distance, 1/4: an optically thin disc lit by its star has
+/// `T⁴ ∝ L a⁻²` (Hayashi 1981, Prog. Theor. Phys. Suppl. 70, 35, eq. 2.3,
+/// as Kennedy & Kenyon 2008, ApJ 673, doi:10.1086/524130, p. 3, and Ida
+/// & Lin 2005, ApJ 626, 1045, doi:10.1086/429953, eq. 4, quote it).
+const HAYASHI_POWER: f64 = 0.25;
+
+/// Definition: relative tolerance of a law checked against its own
+/// formula (round-off only).
+const ROUND_OFF: f64 = 1e-12;
+
+/// Definition: radius of the disc around `host` where it is `t`, from
+/// the published form `T = 200 K (L / L☉)^¼ (r / 1 au)^-0.62` (Andrews &
+/// Williams 2007 via Öberg et al. 2011 eq. 1, Hayashi 1981 eq. 2.3),
+/// solved for `r`: the test's own inverse of the law.
+fn radius_at(t: f64, host: SolarLuminosity) -> AstronomicalUnit {
+    AstronomicalUnit((200.0 * host.0.powf(HAYASHI_POWER) / t).powf(1.0 / 0.62))
+}
+
+#[test]
+fn the_disc_is_the_average_discs_around_the_sun() {
+    // Öberg et al. 2011 eq. 1: 200 K at 1 au around a Sun-like star,
+    // `(r / 1 au)^-0.62` beyond.
+    let at_one = disc_temperature(AstronomicalUnit(1.0), SUN);
+    assert!((at_one.0 / 200.0 - 1.0).abs() < ROUND_OFF);
+    // The 30 K line lies `(200 / 30)^(1 / 0.62)` = 21.3 au out.
+    let line = radius_at(30.0, SUN);
+    assert!((line.0 - 21.32).abs() < 0.01, "{line:?}");
+    let at_line = disc_temperature(line, SUN);
+    assert!((at_line.0 / NITROGEN_TRAPPING_TEMPERATURE.0 - 1.0).abs() < ROUND_OFF);
+}
+
+#[test]
+fn a_brighter_host_heats_its_disc_as_hayashis() {
+    // At a fixed distance the disc is `(L / L☉)^¼` times the Sun's
+    // (Hayashi 1981 eq. 2.3), so its N2 line moves as
+    // `L^(1 / (4 × 0.62))`: 3.33 au round an M dwarf of 0.01 L☉, 33.2 au
+    // round an F star of 3 L☉.
+    for (host, line_au) in [(M_DWARF, 3.333), (F_STAR, 33.22)] {
+        let at_saturn = disc_temperature(SATURN, host).0 / disc_temperature(SATURN, SUN).0;
+        assert!((at_saturn / host.0.powf(HAYASHI_POWER) - 1.0).abs() < ROUND_OFF);
+        let line = radius_at(30.0, host);
+        assert!((line.0 / line_au - 1.0).abs() < 1e-3, "{line:?}");
+        let moved = line.0 / radius_at(30.0, SUN).0;
+        assert!((moved / host.0.powf(1.0 / (4.0 * 0.62)) - 1.0).abs() < ROUND_OFF);
+        let at_line = disc_temperature(line, host);
+        assert!((at_line.0 / NITROGEN_TRAPPING_TEMPERATURE.0 - 1.0).abs() < ROUND_OFF);
+    }
+}
+
+#[test]
+fn titans_ice_holds_no_nitrogen_and_tritons_does() {
+    // Titan's building blocks lost their N2 (its 36Ar/14N, Mousis et al.
+    // 2009); Pluto's and, beyond Neptune, a captured Triton's formed cold
+    // enough to trap it (Glein 2023).
+    assert!(!traps_nitrogen(disc_temperature(SATURN, SUN)));
+    assert!(traps_nitrogen(disc_temperature(NEPTUNE, SUN)));
+    assert!(traps_nitrogen(disc_temperature(PLUTO, SUN)));
+    assert!(!traps_nitrogen(disc_temperature(
+        AstronomicalUnit(1.0),
+        SUN
+    )));
+}
+
+#[test]
+fn only_a_cold_ice_carries_its_nitrogen() {
+    let ice = Kilogram(EARTH_MASS.0);
+    let rock = Kilogram(EARTH_MASS.0);
+    let warm = inventory(rock, rock, ice, false);
+    let cold = inventory(rock, rock, ice, true);
+    assert_eq!(warm.n2, Kilogram(ROCK_N2 * rock.0));
+    assert_eq!(cold.n2, Kilogram(ROCK_N2 * rock.0 + ICE_N2 * ice.0));
+    // The gate is the N2's alone.
+    assert_eq!(
+        (warm.co2, warm.ch4, warm.nh3),
+        (cold.co2, cold.ch4, cold.nh3)
+    );
+}
+
+/// Source: argon's triple point, 83.806 K and 68 891 Pa (Tegeler, Span &
+/// Wagner 1999, J. Phys. Chem. Ref. Data 28, 779, doi:10.1063/1.556037,
+/// as Xiao et al. 2025 and CoolProp's `Argon.json` take it).
+const ARGON_TRIPLE: (f64, f64) = (83.806, 68_891.0);
+
+/// Source: argon's frost at Triton's 37.2 K, 0.0219 Pa: Xiao,
+/// Sriskandaruban & Maynard-Casely 2025 (Int. J. Thermophys. 46, 14,
+/// doi:10.1007/s10765-024-03469-2), eq. 55, computed by hand in study 29b
+/// (`docs/science/planet-atmospheres.md`, "Argon's frost"), to its three
+/// printed digits.
+const ARGON_FROST_TRITON: (f64, f64) = (37.2, 0.0219);
+
+/// Definition: the tolerance of a value printed to three digits, 0.5 %.
+const THREE_DIGITS: f64 = 5e-3;
+
+/// Source: Fray & Schmitt 2009's fit `Ar-1` of solid argon's
+/// sublimation pressure, `ln(p / 1 bar) = sum A_i / T^i`, `A_0` to `A_4`
+/// (Planet. Space Sci. 57, 2053, doi:10.1016/j.pss.2009.09.011, as Table 2
+/// of Lisse et al. 2021, arXiv:2009.02277, reprints it): the cross-check
+/// of Xiao et al.'s curve.
+const FRAY_SCHMITT_ARGON: [f64; 5] = [10.69, -893.2, -3567.0, 65_740.0, -428_000.0];
+
+/// Definition: the test's margins between the two fits, chosen over how
+/// far they part (derived from the two formulas): from Triton's and
+/// Pluto's ices up to the triple point a factor 1.7, over the 1.64 at
+/// 37 K (study 29b's table: 1.63 at 37.2 K, 1.58 at 38 K, 1.18 at 50 K);
+/// above 65 K, where both rest on many data sets, 2 %, over the largest
+/// gap, 1.7 % near 75 K (1 % at 70 K).
+const FIT_SPREAD: [(f64, f64); 2] = [(37.0, 1.7), (65.0, 1.02)];
+
+/// Source: argon's normal boiling point, 87.28 K at 1 atm (Gosman et al.
+/// 1969, through the NIST Chemistry WebBook, as study 29b reads it), and
+/// the tolerance of CoolProp's ancillary there, 0.5 % (it gives 1.011
+/// bar).
+const ARGON_BOILING: (f64, f64) = (87.28, 101_325.0);
+
+/// Source: argon's critical temperature, 150.687 K (Tegeler et al. 1999,
+/// as CoolProp's `Argon.json` gives it).
+const ARGON_CRITICAL_K: f64 = 150.687;
+
+/// Definition: temperatures under the fit's 26 K where the carried slope
+/// is read, K.
+const COLDER_K: [f64; 4] = [20.0, 25.0, 10.0, 15.0];
+
+fn fray_schmitt_argon(t: f64) -> f64 {
+    let inverse = 1.0 / t;
+    let ln_bar = FRAY_SCHMITT_ARGON
+        .iter()
+        .rev()
+        .fold(0.0, |sum, a| sum * inverse + a);
+    ln_bar.exp() * PASCALS_PER_BAR
+}
+
+#[test]
+fn argon_frost_is_xiao_et_al_s() {
+    let (tt, pt) = ARGON_TRIPLE;
+    let triple = argon_frost_pressure(Kelvin(tt * (1.0 - JUST_UNDER)))
+        .unwrap()
+        .0;
+    assert!(close(triple, pt, 1e-6), "{triple}");
+    assert!(argon_frost_pressure(Kelvin(tt)).is_none());
+    let (t, p) = ARGON_FROST_TRITON;
+    let triton = argon_frost_pressure(Kelvin(t)).unwrap().0;
+    assert!(close(triton, p, THREE_DIGITS), "{triton}");
+}
+
+#[test]
+fn argon_frost_agrees_with_fray_and_schmitt() {
+    let (tt, _) = ARGON_TRIPLE;
+    for (from, spread) in FIT_SPREAD {
+        let mut t = from;
+        while t < tt {
+            let ratio = fray_schmitt_argon(t) / argon_frost_pressure(Kelvin(t)).unwrap().0;
+            assert!(
+                ratio < spread && ratio > 1.0 / spread,
+                "{t} K: {ratio} against {spread}"
+            );
+            t += 0.5;
+        }
+    }
+}
+
+#[test]
+fn argon_frost_carries_its_slope_under_26_k() {
+    // Definition: the curve is read down to 26 K, the low end of Xiao et
+    // al.'s fit, and carries on there with a constant `d ln p / d(1/T)`.
+    let ln = |t: f64| argon_frost_pressure(Kelvin(t)).unwrap().0.ln();
+    let floor = ARGON_FIT_FLOOR;
+    assert!(close(ln(floor * (1.0 - JUST_UNDER)), ln(floor), 1e-6));
+    let slope = |a: f64, b: f64| (ln(a) - ln(b)) / (1.0 / a - 1.0 / b);
+    let [a, b, c, d] = COLDER_K;
+    assert!(close(slope(a, b), slope(c, d), 1e-9));
+    assert!(close(slope(a, b), slope(floor - 1e-4, floor - 2e-4), 1e-3));
+    for t in [0.0, -1.0, f64::NAN] {
+        let p = argon_frost_pressure(Kelvin(t)).unwrap().0;
+        assert!(p.is_finite() && p >= 0.0, "{t}: {p}");
+    }
+}
+
+#[test]
+fn argon_saturation_joins_its_liquid() {
+    let (tt, pt) = ARGON_TRIPLE;
+    let frost = argon_saturation_pressure(Kelvin(tt * (1.0 - JUST_UNDER))).0;
+    let liquid = argon_saturation_pressure(Kelvin(tt)).0;
+    assert!(close(liquid, frost, JOIN_TOLERANCE), "{frost} {liquid}");
+    assert!(close(liquid, pt, JOIN_TOLERANCE), "{liquid}");
+    let (t, p) = ARGON_BOILING;
+    let boiling = argon_saturation_pressure(Kelvin(t)).0;
+    assert!(close(boiling, p, THREE_DIGITS), "{boiling}");
+    assert!(
+        argon_saturation_pressure(Kelvin(ARGON_CRITICAL_K))
+            .0
+            .is_infinite()
+    );
+    let mut t = COLDER_K[0];
+    let mut last = 0.0;
+    while t < ARGON_CRITICAL_K {
+        let p = argon_saturation_pressure(Kelvin(t)).0;
+        assert!(p > last, "{t} K");
+        last = p;
+        t += 0.25;
     }
 }

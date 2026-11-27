@@ -21,6 +21,7 @@ pub mod star;
 
 pub use archetype::ArchetypeId;
 pub use draw::{Drawn, draw_with};
+pub use engine::{Generated, generate, generate_with};
 pub use error::SystemError;
 pub use families::Family;
 pub use inputs::{BodyRequest, INPUTS_SCHEMA, Inputs, Request, SystemRequest};
@@ -35,4 +36,6 @@ use timeline::EngineVersion;
 /// so the same `Inputs` give another system.
 /// 3: a compact chain ends at 1071 d (#630), so compact systems lose
 /// their far planets.
-pub const ENGINE_VERSION: EngineVersion = EngineVersion(3);
+/// 4: the planet model classifies the draw (class, radius, density from the
+/// chain), and spins are drawn from the trial seed.
+pub const ENGINE_VERSION: EngineVersion = EngineVersion(4);

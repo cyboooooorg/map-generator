@@ -2,17 +2,20 @@
 //!
 //! A [`Trial`] runs before letters exist (they follow distance once
 //! every orbit is placed), so it has no designation and its own seed:
-//! `system_seed.derive("trial/<archetype id>")` or
-//! `"trial/slot-<n>"`, as legacy `system.rs:896-920`
-//! (`git show legacy-final:<path>`).
+//! `system_seed.derive("trial/<archetype id>/<k>")` or
+//! `"trial/slot-<n>"` (`draw/place.rs`), unique per planet, as legacy
+//! `system.rs:896-920` (`git show legacy-final:<path>`).
 //!
 //! `planet::class_of` runs the planet model's chain on a trial (its own
 //! seed, no spin, on a scratch copy of the trace) to read the class.
 //!
-//! The [`Placement`] adds the designation, the body seed and the spin,
-//! and `planet::model` runs the same chain on it, drawing only from the
-//! body seed, never from `trial.seed` (two planets of one archetype
-//! share their trial streams). The orbit's period is the draw's (Kepler),
+//! The [`Placement`] adds the designation, the body seed and the spin.
+//! `planet::model` runs the same chain on it from the trial's seed, as
+//! `class_of` does, and the spin is drawn from that seed too, so that
+//! the obliquity the climate reads is the placement's. The draw
+//! classifies the circular trial and `model` runs on the eccentric one.
+//! The body seed stays for what is drawn after the designation (nothing
+//! in the planet model). The orbit's period is the draw's (Kepler),
 //! never recomputed.
 //!
 //! The orbit's perihelion longitude draws from

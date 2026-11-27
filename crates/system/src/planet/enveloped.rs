@@ -72,6 +72,16 @@ pub(crate) enum Body {
     Giant(GiantRecord),
 }
 
+/// What escape reads of a planet: the radius it loses its air from and
+/// the whole mass that holds it.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Exposed {
+    pub radius: Traced<EarthRadius>,
+    pub mass: Kilogram,
+    /// The nodes `mass` derives from.
+    pub mass_from: Vec<NodeId>,
+}
+
 impl Body {
     /// The bulk of the whole planet.
     pub(crate) fn bulk(&self) -> &Bulk {
@@ -79,6 +89,45 @@ impl Body {
             Self::Rocky(interior) => &interior.bulk,
             Self::MiniNeptune { bulk, .. } => bulk,
             Self::Giant(record) => &record.bulk,
+        }
+    }
+
+    /// The whole planet's mass and the nodes it derives from: the bulk
+    /// mass plus the water beyond the laws ([`Water::BeyondLaw`]) when
+    /// the body has one, which the bulk leaves out. The one mass that
+    /// holds a planet's steam (`super::water::water`) and its air (the
+    /// shoreline of `super::air::air`). Both read it through
+    /// [`Body::exposed`]; a steam world's pass on its envelope
+    /// (`super::settled::steam_world`) reads the exposed view of its
+    /// inflated body, whose bulk mass is the core and the steam
+    /// ([`Water::Steam`]) at the envelope's radius.
+    pub(crate) fn whole_mass(&self) -> (Kilogram, Vec<NodeId>) {
+        let bulk = self.bulk().mass;
+        let beyond = match self {
+            Self::Rocky(interior) | Self::MiniNeptune { core: interior, .. } => {
+                match interior.water {
+                    Water::BeyondLaw { mass, .. } => Some(mass),
+                    Water::InMantle | Water::Layer { .. } | Water::Steam { .. } => None,
+                }
+            }
+            Self::Giant(_) => None,
+        };
+        let mut mass = Kilogram::from(*bulk.value());
+        let mut from = vec![bulk.node()];
+        if let Some(water) = beyond {
+            mass = Kilogram(mass.0 + water.value().0);
+            from.push(water.node());
+        }
+        (mass, from)
+    }
+
+    /// The bulk's radius and [`Body::whole_mass`]: what escape reads.
+    pub(crate) fn exposed(&self) -> Exposed {
+        let (mass, mass_from) = self.whole_mass();
+        Exposed {
+            radius: self.bulk().radius,
+            mass,
+            mass_from,
         }
     }
 
@@ -107,6 +156,13 @@ pub(crate) struct EnvelopeRecord {
     pub thickness: Traced<EarthRadius>,
     /// The envelope as a layer: its mass is [`Self::mass`].
     pub layer: ShellRecord,
+    /// The planet's mass without its envelope, `(1 - f) M`
+    /// (`planet.mass-without-envelope`): the core the boil-off ceiling
+    /// reads.
+    pub mass_without: Traced<EarthMass>,
+    /// The bolometric flux the envelope's thickness was read under
+    /// (`planet.bolometric-flux`), which the boil-off ceiling reads too.
+    pub flux: Traced<EarthFlux>,
 }
 
 /// A giant.
@@ -275,6 +331,8 @@ fn mini_neptune(trial: &Trial, drawn: &Drawn, trace: &mut Trace) -> Result<Body,
             mass: envelope_mass,
             thickness,
             layer,
+            mass_without: core_mass,
+            flux,
         },
         bulk,
     })

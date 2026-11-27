@@ -20,6 +20,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       web: ${{ steps.filter.outputs.web }}
       markdown: ${{ steps.filter.outputs.markdown }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -38,6 +39,14 @@ jobs:
               - '.github/workflows/**'
             web:
               - 'web/**'
+              - 'mise.toml'
+              - '.github/workflows/**'
+            docs:
+              - 'docs/science/**'
+              - 'tools/figures/**'
+              - 'crates/science/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
               - 'mise.toml'
               - '.github/workflows/**'
             markdown:
@@ -78,7 +87,12 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # Builds before the timed run, so the budget measures the tests only.
       - run: cargo nextest run --profile tier1 --workspace --no-run
+      # The runners' tier-1 times vary by about 2x (69 to 160 s for the
+      # same tests): the CI budget is 180 s, the local one 120 s (user,
+      # 2026-11-27).
       - run: mise run test:tier1 -- --test-threads num-cpus
+        env:
+          TIER1_BUDGET: 180
 
   tier2:
     needs: changes
@@ -103,6 +117,21 @@ jobs:
       - uses: jdx/mise-action@v5
       - run: mise run md:lint
 
+  docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ hashFiles('Cargo.toml') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Compiles tools/figures, redraws every figure and compares, builds
+      # the book and checks its links.
+      - run: mise run docs:check
+
   web:
     needs: changes
     if: needs.changes.outputs.web == 'true'
@@ -117,7 +146,7 @@ jobs:
   # skipped by the path filters, red when one failed or was cancelled.
   ci-ok:
     if: always()
-    needs: [changes, fmt-lint, tier1, tier2, markdown, web]
+    needs: [changes, fmt-lint, tier1, tier2, markdown, docs, web]
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed or was skipped

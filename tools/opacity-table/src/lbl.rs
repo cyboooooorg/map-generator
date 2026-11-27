@@ -11,6 +11,10 @@
 //! `(2 − d²/B²)` times the Lorentz value at the cutoff `B`, which its CO₂
 //! continuum assumes since MT_CKD 2.0 ("Fundamental change in the lblrtm
 //! fourth function with consequent changes in continuum", Nov 2007).
+//! For every other molecule (methane, ozone and N₂O here, which MT_CKD
+//! gives no continuum) LBLRTM subtracts the flat Lorentz value at the cutoff
+//! (`CONVF4`, "all molecules other than co2": `f4fn = sil/(α² + d²) −
+//! f4bnd`, `f4bnd = sil/(α² + B²)`), as for water.
 //!
 //! The bin is sampled on a uniform grid fine enough to resolve its
 //! narrowest line ([`sample_step`]). Summing every line on every sample is
@@ -63,7 +67,8 @@ pub enum Pedestal {
     /// Nothing (the synthetic bands of the tests).
     #[cfg_attr(not(test), allow(dead_code))]
     None,
-    /// The profile's value at the cutoff (water, MT_CKD's plinth).
+    /// The profile's value at the cutoff (water, MT_CKD's plinth; methane
+    /// and ozone, LBLRTM's `CONVF4` for every molecule but CO₂).
     Flat,
     /// `(2 − d²/B²)` times the Lorentz value at the cutoff `B` (CO₂,
     /// LBLRTM's fourth function).

@@ -4,7 +4,7 @@
 //! reduced to g-points.
 //!
 //! ```text
-//! opacity-table [--shortwave | --continua] [--raw DIR] [--out FILE] [--bin-width CM]
+//! opacity-table [--shortwave | --continua | --ozone] [--raw DIR] [--out FILE] [--bin-width CM]
 //!               [--top CM] [--temperatures K,K,…]
 //!               [--pressure-step DECADES] [--threads N]
 //! ```
@@ -13,11 +13,17 @@
 //! the bands of the albedo's stellar spectrum from 0.7 to 5 µm
 //! ([`shortwave_edges`]), with MT_CKD's water continuum binned in.
 //!
-//! `--continua` writes, instead of a table, the two text files the
+//! `--continua` writes, instead of a table, the three text files the
 //! spectrum reads: `mt-ckd-water.tsv` (MT_CKD's water continuum at every
-//! 50 cm⁻¹) and `co2-cia.tsv` (HITRAN's CO₂–CO₂ collision-induced
-//! absorption on 20 cm⁻¹ cells), into `crates/science/data/` (or the
-//! directory of `--out`).
+//! 50 cm⁻¹), `co2-cia.tsv` (HITRAN's CO₂–CO₂ collision-induced
+//! absorption on 20 cm⁻¹ cells) and `pairs-cia.tsv` (HITRAN's N₂–N₂,
+//! O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄ pairs on the same cells), into
+//! `crates/science/data/` (or the directory of `--out`).
+//!
+//! `--ozone` writes, instead of a table, `ozone.tsv`: ozone's
+//! cross-sections of Serdyuchenko et al. (2014) at 223 and 233 K reduced
+//! to g-points on every band of the albedo's spectrum that they cover
+//! ([`ozone`]).
 
 mod cia;
 mod continuum;
@@ -25,6 +31,7 @@ mod hitran;
 mod kdist;
 mod lbl;
 mod netcdf;
+mod ozone;
 mod table;
 mod voigt;
 
@@ -34,7 +41,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use hitran::{Line, PartitionSum, T_REF, parse_line, strength_at};
 use kdist::{G, reduce};
 use lbl::{Cutoff, Pedestal, Shape, bin_spectrum};
-use table::{Header, SETS, Set, encode};
+use table::{Header, Set, encode};
 
 /// Avogadro constant, 1/mol (CODATA 2018, exact).
 const AVOGADRO: f64 = 6.022_140_76e23;
@@ -67,8 +74,11 @@ struct Isotopologue {
 }
 
 /// The main isotopologues of H₂O (161, 181, 171, 162) and CO₂ (626, 636,
-/// 628, 627), each over 1e-4 of its gas.
-const ISOTOPOLOGUES: [Isotopologue; 8] = [
+/// 628, 627), each over 1e-4 of its gas; every isotopologue HITRAN lists
+/// for O₃ (666, 668, 686, 667, 676), CH₄ (211, 311, 212, 312) and N₂O
+/// (446, 456, 546, 448, 447), the molar masses of its isotopologue table
+/// (hitran.org/docs/iso-meta, read 2026-11-26).
+const ISOTOPOLOGUES: [Isotopologue; 22] = [
     Isotopologue {
         molecule: 1,
         local: 1,
@@ -117,6 +127,90 @@ const ISOTOPOLOGUES: [Isotopologue; 8] = [
         global: 10,
         molar_kg: 44.994_045e-3,
     },
+    Isotopologue {
+        molecule: 3,
+        local: 1,
+        global: 16,
+        molar_kg: 47.984_745e-3,
+    },
+    Isotopologue {
+        molecule: 3,
+        local: 2,
+        global: 17,
+        molar_kg: 49.988_991e-3,
+    },
+    Isotopologue {
+        molecule: 3,
+        local: 3,
+        global: 18,
+        molar_kg: 49.988_991e-3,
+    },
+    Isotopologue {
+        molecule: 3,
+        local: 4,
+        global: 19,
+        molar_kg: 48.988_960e-3,
+    },
+    Isotopologue {
+        molecule: 3,
+        local: 5,
+        global: 20,
+        molar_kg: 48.988_960e-3,
+    },
+    Isotopologue {
+        molecule: 6,
+        local: 1,
+        global: 32,
+        molar_kg: 16.031_300e-3,
+    },
+    Isotopologue {
+        molecule: 6,
+        local: 2,
+        global: 33,
+        molar_kg: 17.034_655e-3,
+    },
+    Isotopologue {
+        molecule: 6,
+        local: 3,
+        global: 34,
+        molar_kg: 17.037_475e-3,
+    },
+    Isotopologue {
+        molecule: 6,
+        local: 4,
+        global: 35,
+        molar_kg: 18.040_830e-3,
+    },
+    Isotopologue {
+        molecule: 4,
+        local: 1,
+        global: 21,
+        molar_kg: 44.001_062e-3,
+    },
+    Isotopologue {
+        molecule: 4,
+        local: 2,
+        global: 22,
+        molar_kg: 44.998_096e-3,
+    },
+    Isotopologue {
+        molecule: 4,
+        local: 3,
+        global: 23,
+        molar_kg: 44.998_096e-3,
+    },
+    Isotopologue {
+        molecule: 4,
+        local: 4,
+        global: 24,
+        molar_kg: 46.005_308e-3,
+    },
+    Isotopologue {
+        molecule: 4,
+        local: 5,
+        global: 25,
+        molar_kg: 45.005_278e-3,
+    },
 ];
 
 /// One gas: its lines (sorted by wavenumber), the partition sum of each of
@@ -138,6 +232,8 @@ struct Options {
     shortwave: bool,
     /// Whether to write the continuum text files instead of a table.
     continua: bool,
+    /// Whether to write the ozone cross-sections instead of a table.
+    ozone: bool,
     raw: PathBuf,
     out: PathBuf,
     /// Whether `--out` was given.
@@ -152,12 +248,16 @@ struct Options {
 fn options() -> Result<Options, String> {
     let shortwave = std::env::args().any(|a| a == "--shortwave");
     let continua = std::env::args().any(|a| a == "--continua");
+    let ozone = std::env::args().any(|a| a == "--ozone");
     let mut o = Options {
         shortwave,
         continua,
+        ozone,
         raw: PathBuf::from("tools/opacity-table/raw"),
         out: PathBuf::from(if shortwave {
             "crates/science/data/shortwave.bin"
+        } else if ozone {
+            "crates/science/data/ozone.tsv"
         } else {
             "crates/science/data/opacity.bin"
         }),
@@ -178,7 +278,7 @@ fn options() -> Result<Options, String> {
     };
     let mut args = std::env::args()
         .skip(1)
-        .filter(|a| a != "--shortwave" && a != "--continua");
+        .filter(|a| a != "--shortwave" && a != "--continua" && a != "--ozone");
     while let Some(flag) = args.next() {
         let value = args.next().ok_or(format!("{flag} needs a value"))?;
         let number = |v: &str| v.parse::<f64>().map_err(|e| format!("{v}: {e}"));
@@ -321,7 +421,7 @@ fn shapes(gas: &Gas, broadening: Set, p_bar: f64, t_k: f64) -> Vec<Shape> {
         .filter_map(|line| {
             let &(_, doppler, q_ref, q_t) =
                 per_isotopologue.iter().find(|i| i.0 == line.isotopologue)?;
-            let gamma = if matches!(broadening, Set::WaterSelf | Set::Co2Self) {
+            let gamma = if broadening.self_broadened() {
                 line.gamma_self
             } else {
                 line.gamma_air
@@ -392,11 +492,49 @@ fn cia_header() -> String {
         })
 }
 
+/// Temperatures, K, of the columns of `pairs-cia.tsv`: every 10 K from
+/// 70 to 400 K, the grid of HITRAN's N₂–N₂ roto-translational blocks
+/// (Chistikov et al. 2019) and of its N₂–CH₄ file (Finenko et al. 2022),
+/// onto which the other files' blocks are interpolated
+/// ([`cia::Cia::interpolated`]). The science crate holds the same list
+/// (`spectrum::PAIRS_CIA_K`); both check it against the file's header,
+/// which [`pairs_header`] writes from this one.
+const PAIR_TEMPERATURES_K: [f64; 34] = {
+    let mut out = [0.0; 34];
+    let mut i = 0;
+    while i < 34 {
+        out[i] = 70.0 + 10.0 * i as f64;
+        i += 1;
+    }
+    out
+};
+
+/// The pairs of `pairs-cia.tsv`, in its order: the name its rows carry
+/// and HITRAN's file (`fetch.sh`; sources in `crates/science/data/OPACITY.md`).
+const PAIR_FILES: [(&str, &str); 5] = [
+    ("N2-N2", "N2-N2_2021.cia"),
+    ("O2-O2", "O2-O2_2024.cia"),
+    ("O2-N2", "O2-N2_2024.cia"),
+    ("N2-CH4", "N2-CH4_2024.cia"),
+    ("CH4-CH4", "CH4-CH4_2011.cia"),
+];
+
+/// The first line of `pairs-cia.tsv`: its columns, the temperatures
+/// named.
+fn pairs_header() -> String {
+    PAIR_TEMPERATURES_K
+        .iter()
+        .fold(String::from("# pair cell_start_cm"), |h, t| {
+            h + &format!(" k_{t}K")
+        })
+}
+
 /// Spacing, cm⁻¹, of the water continuum's nodes in `mt-ckd-water.tsv`,
 /// and the last of them.
 const WATER_NODES_CM: (f64, f64) = (50.0, 5000.0);
 
-/// Writes `mt-ckd-water.tsv` and `co2-cia.tsv` (`--continua`).
+/// Writes `mt-ckd-water.tsv`, `co2-cia.tsv` and `pairs-cia.tsv`
+/// (`--continua`).
 fn write_continua(o: &Options) -> Result<(), String> {
     let dir = if o.out_given {
         o.out.parent().map(Path::to_path_buf).unwrap_or_default()
@@ -440,7 +578,39 @@ fn write_continua(o: &Options) -> Result<(), String> {
     }
     write_file(&dir.join("co2-cia.tsv"), &tsv)?;
     eprintln!("{} water nodes, {} CIA cells", nodes.len(), cells.len());
+
+    let mut tsv = pairs_header() + "\n";
+    tsv += "# HITRAN N2-N2_2021, O2-O2_2024, O2-N2_2024, N2-CH4_2024 and CH4-CH4_2011 (alternate) .cia\n\
+         # binned on 20 cm-1 cells to 5000 cm-1 (trapezoid mean; blocks interpolated linearly in temperature\n\
+         # within each band, held at its ends): pair; cell start in cm-1; binary absorption coefficient\n\
+         # in cm5 per molecule2 at every 10 K from 70 to 400 K. Written by tools/opacity-table --continua.\n";
+    for (name, file) in PAIR_FILES {
+        let text = String::from_utf8(read(file)?).map_err(|e| e.to_string())?;
+        let cia = cia::Cia::parse(&text).ok_or(format!("{file}: unreadable"))?;
+        let cells = cia.interpolated(20.0, 5000.0, &PAIR_TEMPERATURES_K);
+        for (start, k) in &cells {
+            tsv += &format!("{name}\t{start:.1}");
+            for v in k {
+                tsv += &format!("\t{v:.4e}");
+            }
+            tsv += "\n";
+        }
+        eprintln!("{name}: {} cells", cells.len());
+    }
+    write_file(&dir.join("pairs-cia.tsv"), &tsv)?;
     Ok(())
+}
+
+/// Writes `ozone.tsv` (`--ozone`) from `serdyuchenkogorshelev5digits.dat`.
+fn write_ozone(o: &Options) -> Result<(), String> {
+    let path = o.raw.join("serdyuchenkogorshelev5digits.dat");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let rows = ozone::parse(&text).ok_or(format!("{}: unreadable", path.display()))?;
+    let tsv = ozone::table(&rows, SPECTRUM_UM).ok_or("no ozone band")?;
+    if let Some(dir) = o.out.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    write_file(&o.out, &tsv)
 }
 
 fn write_file(path: &Path, text: &str) -> Result<(), String> {
@@ -453,6 +623,9 @@ fn run() -> Result<(), String> {
     let o = options()?;
     if o.continua {
         return write_continua(&o);
+    }
+    if o.ozone {
+        return write_ozone(&o);
     }
     let path = o.raw.join("contnm.f90");
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -493,17 +666,34 @@ fn run() -> Result<(), String> {
     }
     let water = read_gas(&o, "h2o_", 1, 18.015e-3, Pedestal::Flat)?;
     let co2 = read_gas(&o, "co2_", 2, 44.009e-3, Pedestal::Quadratic)?;
+    // Methane, ozone and N₂O enter the longwave table only; LBLRTM cuts
+    // their lines with the flat pedestal of every molecule but CO₂
+    // ([`Pedestal`]).
+    let (ch4, o3, n2o) = if o.shortwave {
+        (None, None, None)
+    } else {
+        (
+            Some(read_gas(&o, "ch4_", 6, 16.043e-3, Pedestal::Flat)?),
+            Some(read_gas(&o, "o3_", 3, 47.997e-3, Pedestal::Flat)?),
+            Some(read_gas(&o, "n2o_", 4, 44.013e-3, Pedestal::Flat)?),
+        )
+    };
     eprintln!(
-        "{} H2O lines, {} CO2 lines; {} bins over {:?} cm-1, {} pressures, {} temperatures",
+        "{} H2O lines, {} CO2 lines, {} CH4 lines, {} O3 lines, {} N2O lines; {} bins over \
+         {:?} cm-1, {} pressures, {} temperatures",
         water.lines.len(),
         co2.lines.len(),
+        ch4.as_ref().map_or(0, |g| g.lines.len()),
+        o3.as_ref().map_or(0, |g| g.lines.len()),
+        n2o.as_ref().map_or(0, |g| g.lines.len()),
         header.bins,
         (header.bin(0).0, header.bin(header.bins - 1).1),
         header.pressures_bar.len(),
         header.temperatures_k.len()
     );
     let (n_p, n_t) = (header.pressures_bar.len(), header.temperatures_k.len());
-    let jobs: Vec<(usize, usize, usize)> = (0..SETS.len())
+    let sets = header.sets();
+    let jobs: Vec<(usize, usize, usize)> = (0..sets.len())
         .flat_map(|s| (0..n_p).flat_map(move |p| (0..n_t).map(move |t| (s, p, t))))
         .collect();
     let next = AtomicUsize::new(0);
@@ -519,11 +709,13 @@ fn run() -> Result<(), String> {
                         let Some(&(s, p, t)) = jobs.get(i) else {
                             break;
                         };
-                        let set = SETS[s];
-                        let gas = if matches!(set, Set::Co2 | Set::Co2Self) {
-                            &co2
-                        } else {
-                            &water
+                        let set = sets[s];
+                        let gas = match set {
+                            Set::Co2 | Set::Co2Self => &co2,
+                            Set::WaterForeign | Set::WaterSelf => &water,
+                            Set::Ch4 | Set::Ch4Self => ch4.as_ref().expect("longwave"),
+                            Set::O3 => o3.as_ref().expect("longwave"),
+                            Set::N2o => n2o.as_ref().expect("longwave"),
                         };
                         let (p_bar, t_k) = (header.pressures_bar[p], header.temperatures_k[t]);
                         let codes = job(gas, set, &header, p_bar, t_k);
@@ -563,6 +755,11 @@ mod tests {
     fn the_committed_cia_table_is_at_the_tools_temperatures() {
         let committed = include_str!("../../../crates/science/data/co2-cia.tsv");
         assert_eq!(committed.lines().next(), Some(super::cia_header().as_str()));
+        let committed = include_str!("../../../crates/science/data/pairs-cia.tsv");
+        assert_eq!(
+            committed.lines().next(),
+            Some(super::pairs_header().as_str())
+        );
     }
 
     use super::*;

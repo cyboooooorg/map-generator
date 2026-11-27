@@ -8,12 +8,13 @@
 //! A period law truncated at the stellar surface leaves the Roche floor
 //! to the placement loop, which knows the classified density.
 
-use super::{FULTON_OUTER_SUPPORT, Family, FamilyContext, HOT_JUPITER_MAX_PERIOD};
+use super::{FULTON_OUTER_SUPPORT, Family, FamilyContext};
 use crate::random::{
     beta, beta_half, broken_power_law, half_gaussian, log_normal, log_uniform, normal, rayleigh,
     uniform,
 };
 use rand_chacha::ChaCha8Rng;
+use science::classes::HOT_GIANT_MAX_PERIOD;
 use science::orbit::{self, ICE_LINE_OF_THE_SUN};
 use science::units::{AstronomicalUnit, Day, EarthMass, Kilogram, SolarMass};
 use timeline::PlanetClass;
@@ -341,7 +342,7 @@ pub(crate) fn hot_jupiter_axis(
     stellar_radius: AstronomicalUnit,
 ) -> AstronomicalUnit {
     let surface = orbit::period(stellar_radius, host);
-    let period = log_uniform(rng, surface.0, HOT_JUPITER_MAX_PERIOD.0);
+    let period = log_uniform(rng, surface.0, HOT_GIANT_MAX_PERIOD.0);
     orbit::semi_major_axis(Day(period), host)
 }
 

@@ -38,11 +38,11 @@ layers above presses with a pressure $P(r)$ at a distance $r$ from the
 centre, and $P_c$ at the centre itself; $G$ is the gravitational constant
 (Lineweaver & Norman 2010, eq. 2, after Ryan & Melosh 1998):
 
-```math
+$$
 P(r) = \frac{2\pi}{3}\,G\rho^2\left(R^2 - r^2\right),
 \qquad
 P_c = \frac{2\pi}{3}\,G\rho^2 R^2
-```
+$$
 
 **In words.** The pressure inside grows with the square of the body's
 size and the square of its density. Twice the radius, four times the
@@ -73,11 +73,11 @@ above the mean radius exceed it, and find the radius $R_\text{pot}$ at
 which bodies of density $\rho$ turn from potatoes into spheres (their
 eq. 10):
 
-```math
+$$
 R_\text{pot} \approx 240\ \text{km}
 \left(\frac{\sigma_y}{10\ \text{MPa}}\right)^{1/2}
 \left(\frac{\rho}{2.5\ \text{g/cm}^3}\right)^{-1}
-```
+$$
 
 **In words.** A stronger material resists longer, so the body must grow
 larger before it rounds. A denser body weighs more for its size, so it
@@ -133,9 +133,9 @@ planet, $b$ along its orbit and $c$ along its spin axis. For a body in
 equilibrium (Noyelles 2017, eq. 4, after Matsuyama & Nimmo 2009 and
 others), to first order:
 
-```math
+$$
 \frac{b-c}{a-c} \approx \frac{1}{4}
-```
+$$
 
 the correction growing with $q = n^2R^3/(GM)$, the ratio of the spin's
 pull to the moon's own gravity, where $n$ is its orbital rate and $M$ its
@@ -148,11 +148,11 @@ $\tfrac{5}{4}\,qR$ across it, and the synchronous spin flattens the
 poles. Adding the three, to first order in $q$ (this article's
 derivation, which gives the 1/4 above):
 
-```math
+$$
 a = R\left(1 + \tfrac{35}{12}\,q\right), \qquad
 b = R\left(1 - \tfrac{5}{6}\,q\right), \qquad
 c = R\left(1 - \tfrac{25}{12}\,q\right)
-```
+$$
 
 so that $a - c = 5\,qR$.
 
@@ -260,8 +260,8 @@ Ring moons have their own copy of the rule with the ice limit
 [`rings.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/rings.rs)). The viewer reads
 `shape.png` and moves each vertex of the globe out to that radius, tilting
 its normal by the shape's slopes (`setShape` in
-[`PlanetView.ts`](../../web/src/lib/viewer/PlanetView.ts), `shapeAt` in
-[`shaders.ts`](../../web/src/lib/viewer/shaders.ts)).
+[`PlanetView.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/PlanetView.ts), `shapeAt` in
+[`shaders.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/shaders.ts)).
 
 ### Where it departs from the science
 

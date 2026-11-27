@@ -1,12 +1,15 @@
-//! The correlated-k tables of CO₂'s and water's lines that
+//! The correlated-k tables of the gases' lines that
 //! `tools/opacity-table` builds from HITRAN: the longwave one,
 //! `crates/science/data/opacity.bin`, on the column's even bins, and the
-//! shortwave one (a later change) on the albedo's bands. Both share one
+//! shortwave one on the albedo's bands. Both share one
 //! format (documented in `crates/science/data/OPACITY.md`; the tool's
 //! `table.rs` writes it), one decoding and one interpolation:
 //!
 //! - for each set (CO₂ broadened by air, water broadened by air, water
-//!   broadened by itself, CO₂ broadened by itself), each pressure and
+//!   broadened by itself, CO₂ broadened by itself; in the longwave table
+//!   also methane broadened by air and by itself, ozone broadened by air
+//!   and N₂O broadened by air: [`N2O_SET`], the eighth, index 7), each
+//!   pressure and
 //!   temperature of the grid, each bin and each g-point, the mass
 //!   absorption coefficient of the gas, m²/kg, as a 16-bit code of `ln k`;
 //! - MT_CKD 4.3's CO₂ continuum binned on the table's bins, and, in the
@@ -23,8 +26,8 @@ use super::spectrum::Level;
 pub(crate) const G: usize = 8;
 
 /// Definition: the file signature of the longwave table, on even bins from
-/// 0 cm⁻¹ (`OPACITY.md`, Layout).
-pub(crate) const LONGWAVE_MAGIC: &[u8; 8] = b"MGOPACK2";
+/// 0 cm⁻¹, with [`LONGWAVE_SETS`] sets (`OPACITY.md`, Layout).
+pub(crate) const LONGWAVE_MAGIC: &[u8; 8] = b"MGOPACK3";
 
 /// Definition: the file signature of the shortwave table, on bins of uneven
 /// width.
@@ -44,13 +47,27 @@ pub(crate) const WATER_FOREIGN_SET: usize = 1;
 pub(crate) const WATER_SELF_SET: usize = 2;
 /// Definition: index of CO₂ broadened by itself, see [`CO2_SET`].
 pub(crate) const CO2_SELF_SET: usize = 3;
-/// Definition: the number of sets, four, the file's.
-const SETS: usize = 4;
+/// Definition: index of methane broadened by air, in the longwave table
+/// only, see [`CO2_SET`].
+pub(crate) const CH4_SET: usize = 4;
+/// Definition: index of methane broadened by itself, see [`CH4_SET`].
+pub(crate) const CH4_SELF_SET: usize = 5;
+/// Definition: index of ozone broadened by air, see [`CH4_SET`].
+pub(crate) const O3_SET: usize = 6;
+/// Definition: index of N₂O broadened by air, see [`CH4_SET`].
+pub(crate) const N2O_SET: usize = 7;
+/// Definition: the number of sets of the longwave table, eight.
+pub(crate) const LONGWAVE_SETS: usize = 8;
+/// Definition: the number of sets of the shortwave table, four: CO₂'s
+/// and water's.
+const SHORTWAVE_SETS: usize = 4;
 
 /// A table, decoded.
 pub(crate) struct Table {
     /// Number of bins.
     pub(crate) bins: usize,
+    /// Number of sets ([`LONGWAVE_SETS`] or the shortwave's four).
+    pub(crate) sets: usize,
     /// Width of a bin, cm⁻¹, of a table of even bins from 0 cm⁻¹ (the
     /// longwave); 0 for uneven bins.
     pub(crate) bin_width_cm: f64,
@@ -75,16 +92,12 @@ pub(crate) struct Table {
     /// coefficient at 296 K, its temperature exponent, foreign coefficient
     /// at 296 K, cm² per molecule per cm⁻¹ at 1013 mbar. Empty for the
     /// longwave table, whose continuum `spectrum::MT_CKD` holds.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the shortwave of PR 2b-2 reads it")
-    )]
     pub(crate) water_continuum: Vec<(f64, f64, f64)>,
 }
 
 impl Table {
     /// Decodes a table file of either kind, by its signature; `None` if it
-    /// is not one, or not of [`G`] g-points and four sets.
+    /// is not one, or not of [`G`] g-points and its kind's sets.
     pub(crate) fn parse(bytes: &[u8]) -> Option<Table> {
         let mut at = 0usize;
         let mut take = |n: usize| -> Option<&[u8]> {
@@ -102,7 +115,12 @@ impl Table {
             *i = u32::from_le_bytes(take(4)?.try_into().ok()?) as usize;
         }
         let [bins, g, n_p, n_t, sets] = ints;
-        if g != G || sets != SETS || n_p < 2 || n_t < 2 || bins == 0 {
+        let expected = if shortwave {
+            SHORTWAVE_SETS
+        } else {
+            LONGWAVE_SETS
+        };
+        if g != G || sets != expected || n_p < 2 || n_t < 2 || bins == 0 {
             return None;
         }
         let mut float = || -> Option<f64> { Some(f64::from_le_bytes(take(8)?.try_into().ok()?)) };
@@ -119,7 +137,7 @@ impl Table {
         let ln_p = (0..n_p).map(|_| float()).collect::<Option<Vec<_>>>()?;
         let t_k = (0..n_t).map(|_| float()).collect::<Option<Vec<_>>>()?;
         let (k0, step) = (float()?, float()?);
-        let count = SETS * n_p * n_t * bins * G;
+        let count = sets * n_p * n_t * bins * G;
         let codes = take(2 * count)?;
         let ln_k = codes
             .as_chunks::<2>()
@@ -144,6 +162,7 @@ impl Table {
         };
         Some(Table {
             bins,
+            sets,
             bin_width_cm,
             edges_cm,
             weights: std::array::from_fn(|i| bounds[i + 1] - bounds[i]),
@@ -201,8 +220,9 @@ impl Table {
     }
 
     /// The lines of one gas, of partial pressure `partial_bar` and molar
-    /// mass `molar_kg`, at `level` in the first `m` g-points (over the
-    /// bins) into `out`, per unit `ln p` (vertical optical depths), in
+    /// mass `molar_kg`, at `level` in the g-points `points` (over the
+    /// bins, `b * G + g`) into `out`, per unit `ln p` (vertical optical
+    /// depths), in
     /// single precision: its set broadened by the air (`sets.0`) and its
     /// set broadened by itself (`sets.1`), mixed by its share of the
     /// pressure, each interpolated in `ln k` into `by_air` and `by_self`
@@ -219,7 +239,7 @@ impl Table {
         partial_bar: f64,
         molar_kg: f64,
         sets: (usize, usize),
-        m: usize,
+        points: std::ops::Range<usize>,
         by_air: &mut [f32],
         by_self: &mut [f32],
         out: &mut [f32],
@@ -236,7 +256,7 @@ impl Table {
             (mass * (1.0 - share)).ln() as f32,
             (mass * share).ln() as f32,
         );
-        let node = |at: usize| -> &[f32] { &self.ln_k[at..at + m] };
+        let node = |at: usize| -> &[f32] { &self.ln_k[at + points.start..at + points.end] };
         interpolate(&air_at.map(node), &wa, air_ln, by_air);
         interpolate(&self_at.map(node), &ws, self_ln, by_self);
         add_exp(by_air, by_self, out);
@@ -279,8 +299,8 @@ mod tests {
     const WEIGHT_SUM_TOLERANCE: f64 = 1e-12;
 
     /// Source: `crates/science/data/OPACITY.md`, Grid: 15 pressures, 16
-    /// temperatures and 4 sets.
-    const NODES: usize = 15 * 16 * 4;
+    /// temperatures and 8 sets.
+    const NODES: usize = 15 * 16 * 8;
 
     /// Source: `OPACITY.md` (Layout), the temperature of the CO₂
     /// continuum's band-head exponents, K.
@@ -293,7 +313,16 @@ mod tests {
     const SCALE_TOLERANCE: f64 = 1e-9;
 
     /// Definition: the sets in the order of the file.
-    const SETS_IN_ORDER: [usize; 4] = [CO2_SET, WATER_FOREIGN_SET, WATER_SELF_SET, CO2_SELF_SET];
+    const SETS_IN_ORDER: [usize; LONGWAVE_SETS] = [
+        CO2_SET,
+        WATER_FOREIGN_SET,
+        WATER_SELF_SET,
+        CO2_SELF_SET,
+        CH4_SET,
+        CH4_SELF_SET,
+        O3_SET,
+        N2O_SET,
+    ];
 
     fn longwave() -> Table {
         Table::parse(include_bytes!("../../data/opacity.bin")).expect("a longwave table")
@@ -303,6 +332,7 @@ mod tests {
     fn the_table_parses() {
         let table = longwave();
         assert_eq!(table.bins, BINS);
+        assert_eq!(table.sets, LONGWAVE_SETS);
         assert_eq!(table.bin_width_cm, BIN_WIDTH_CM);
         assert!(table.edges_cm.is_empty());
         assert!(table.water_continuum.is_empty());

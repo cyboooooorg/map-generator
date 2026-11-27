@@ -10,9 +10,10 @@
 //! outgassing, in the planet interior plan's second pull request). Only a
 //! water world (formed beyond the ice line or migrated from there) has a
 //! water layer; a water world at 355 K or more, past the water laws, keeps
-//! its water as an inventory outside the structure until the second pull
-//! request gives it a steam envelope (legacy `steam_interior`, Turbet et
-//! al. 2020).
+//! its water as an inventory outside the structure ([`rocky`]). A steam
+//! world, whose climate boiled its water, takes the steam envelope of
+//! [`steam_interior`] on top of its rock (legacy `steam_interior`, Turbet
+//! et al. 2020): the water is then [`Water::Steam`], a layer of the bulk.
 //!
 //! The temperature profile and the state of the layers that depend on it
 //! (a partly molten mantle, a molten or frozen core) come with the climate,
@@ -28,10 +29,12 @@ use science::constants::GRAVITATIONAL_CONSTANT;
 use science::envelope::EnvelopeError;
 use science::eos::{EosError, MaterialEos, core_alloy, mantle, water, water_on_melting_curve};
 use science::giants::GiantError;
+use science::steam::envelope as steam_envelope;
+use science::stellar::StellarError;
 use science::structure::{LayerSpec, Structure, StructureError, integrate};
 use science::units::{
-    EarthMass, EarthRadius, FractionOutOfRange, Kelvin, Kilogram, KilogramPerCubicMetre, Metre,
-    MetrePerSecondSquared, Pascal,
+    EarthMass, EarthRadius, Fraction, FractionOutOfRange, Kelvin, Kilogram, KilogramPerCubicMetre,
+    Metre, MetrePerSecondSquared, Pascal,
 };
 use science::water::V_VI_LIQUID_TEMPERATURE;
 use timeline::{
@@ -69,6 +72,8 @@ pub(crate) enum Water {
         mass: Traced<Kilogram>,
         temperature: Traced<Kelvin>,
     },
+    /// The steam envelope of a steam world, a layer counted in the bulk.
+    Steam { mass: Traced<Kilogram> },
 }
 
 /// The interior of a planet in hydrostatic equilibrium.
@@ -89,10 +94,12 @@ pub(crate) struct Interior {
     pub structure: Structure,
 }
 
-/// Why an interior or its heat could not be computed. Crate-internal
-/// until the `SystemError` of the draw lands; then a variant of it.
+/// Why the planet chain could not compute a planet: its interior, its
+/// heat, its envelope or a trace error. A variant of the system's error,
+/// `SystemError::Planet`.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum InteriorError {
+#[non_exhaustive]
+pub enum InteriorError {
     Contract(ContractError),
     Structure(StructureError),
     Eos(EosError),
@@ -105,6 +112,10 @@ pub(crate) enum InteriorError {
     NoEnvelope,
     Giant(GiantError),
     Envelope(EnvelopeError),
+    /// A star's high-energy history, which the methane photolysis reads,
+    /// has no answer at the trial's age (the draw places main-sequence
+    /// stars only, so it is not expected).
+    Stellar(StellarError),
 }
 
 impl std::fmt::Display for InteriorError {
@@ -118,6 +129,7 @@ impl std::fmt::Display for InteriorError {
             Self::NoEnvelope => write!(f, "interior-no-envelope"),
             Self::Giant(error) => write!(f, "interior-{error}"),
             Self::Envelope(error) => write!(f, "interior-{error}"),
+            Self::Stellar(error) => write!(f, "interior-stellar({error})"),
         }
     }
 }
@@ -151,6 +163,12 @@ impl From<GiantError> for InteriorError {
 impl From<EnvelopeError> for InteriorError {
     fn from(error: EnvelopeError) -> Self {
         Self::Envelope(error)
+    }
+}
+
+impl From<StellarError> for InteriorError {
+    fn from(error: StellarError) -> Self {
+        Self::Stellar(error)
     }
 }
 
@@ -442,4 +460,155 @@ fn water_law(t: Kelvin) -> Result<Option<(MaterialEos, bool)>, InteriorError> {
         Err(EosError::TemperatureOutOfRange { .. }) => Ok(None),
         Err(error) => Err(error.into()),
     }
+}
+
+/// The interior of a steam world (legacy `interior::steam_interior`): the
+/// iron and rock shells of `rock` under a steam envelope of `steam`, its
+/// thickness from [`steam_envelope`] (Turbet et al. 2020) for the core of
+/// those shells, the steam's share of core and steam as the water share,
+/// and the sum of `trial`'s fluxes. `hides` (the steam hides the surface)
+/// sets the envelope's shell as gas. Every steam node is recorded from
+/// the one call.
+///
+/// The water layer of `rock`, if any, gives way to the steam, the water
+/// the runaway kept. The core is the iron and rock shells, its mass the
+/// whole less the steam (so that Turbet's `x` is the steam's share of the
+/// whole), its radii the condensed structure's. A dry body's water is in
+/// its rock shells: each gives up its share, its mass scaled by `1 -
+/// steam / (the rock shells' mass)`, so the shells add up to the whole. The bulk is
+/// the core's shells and the steam (the whole mass of a dry body) at
+/// the radius of the core plus the thickness. `rock` is returned as it is
+/// when `steam` is 0.
+///
+/// # Errors
+///
+/// A steam beyond what the rock shells hold, and the errors of the
+/// trace.
+pub(crate) fn steam_interior(
+    rock: &Interior,
+    steam: Traced<Kilogram>,
+    trial: &Trial,
+    hides: Traced<bool>,
+    trace: &mut Trace,
+) -> Result<Interior, InteriorError> {
+    let steam_kg = steam.value().0;
+    if steam_kg <= 0.0 {
+        return Ok(rock.clone());
+    }
+    let is_core =
+        |shell: &&ShellRecord| matches!(shell.material.value(), Material::Iron | Material::Rock);
+    let mut core: Vec<ShellRecord> = rock.shells.iter().filter(is_core).cloned().collect();
+    // A dry body's rock shells hold the water: they give up the steam.
+    if rock.water == Water::InMantle {
+        let held: f64 = core
+            .iter()
+            .filter(|s| *s.material.value() == Material::Rock)
+            .map(|s| s.mass.value().0)
+            .sum();
+        let given = Fraction::try_from(steam_kg / held).map_err(InteriorError::NotAFraction)?;
+        let kept = 1.0 - given.get();
+        for shell in core
+            .iter_mut()
+            .filter(|s| *s.material.value() == Material::Rock)
+        {
+            let from = [shell.mass.node(), steam.node()];
+            shell.mass = trace.record(
+                Code::of(codes::LAYER_MASS),
+                Kilogram(shell.mass.value().0 * kept),
+                &from,
+            )?;
+        }
+    }
+    let top = core.last().ok_or(InteriorError::NoEnvelope)?;
+    let core_radius = *top.outer_radius.value();
+    let core_mass = Kilogram(core.iter().map(|s| s.mass.value().0).sum());
+    let share = Fraction::try_from(steam_kg / (core_mass.0 + steam_kg))
+        .map_err(InteriorError::NotAFraction)?;
+    let one_call = steam_envelope(core_mass, core_radius, share, trial.sources.total_flux());
+    let mut from: Vec<NodeId> = core.iter().map(|s| s.mass.node()).collect();
+    from.push(top.outer_radius.node());
+    from.push(steam.node());
+    from.extend(trial.sources.iter().map(|s| s.flux.node()));
+    trace.record(
+        Code::of(codes::STEAM_TEMPERATURE),
+        one_call.temperature,
+        &from,
+    )?;
+    let thickness = trace.record(Code::of(codes::STEAM_THICKNESS), one_call.thickness, &from)?;
+
+    // The whole mass is the core's shells and the steam: a water layer or
+    // a water beyond the laws gives way to the steam, and what escape took
+    // is gone. For a dry body it is the bulk's mass, the shells having
+    // given up the steam.
+    let mut whole_from: Vec<NodeId> = core.iter().map(|s| s.mass.node()).collect();
+    whole_from.push(steam.node());
+    let whole = Kilogram(core_mass.0 + steam_kg);
+    let mass = trace.record(
+        Code::of(codes::MASS_WITH_STEAM),
+        EarthMass::from(whole),
+        &whole_from,
+    )?;
+    // The mantle of a dry body gave up the steam: its mass again, from its
+    // scaled shells.
+    let mantle_mass = if rock.water == Water::InMantle {
+        let rock_shells: Vec<&ShellRecord> = core
+            .iter()
+            .filter(|s| *s.material.value() == Material::Rock)
+            .collect();
+        trace.record(
+            Code::of(codes::MANTLE_MASS),
+            Kilogram(rock_shells.iter().map(|s| s.mass.value().0).sum()),
+            &rock_shells
+                .iter()
+                .map(|s| s.mass.node())
+                .collect::<Vec<_>>(),
+        )?
+    } else {
+        rock.mantle_mass
+    };
+    let outer = Metre(core_radius.0 + thickness.value().0);
+    let radius = trace.record(
+        Code::of(codes::RADIUS_STEAM),
+        EarthRadius::from(outer),
+        &[top.outer_radius.node(), thickness.node()],
+    )?;
+    let from = [mass.node(), radius.node()];
+    let gravity = trace.record(
+        Code::of(codes::SURFACE_GRAVITY),
+        MetrePerSecondSquared(GRAVITATIONAL_CONSTANT * whole.0 / outer.0.powi(2)),
+        &from,
+    )?;
+    let density = trace.record(
+        Code::of(codes::MEAN_DENSITY),
+        KilogramPerCubicMetre(whole.0 / (4.0 / 3.0 * std::f64::consts::PI * outer.0.powi(3))),
+        &from,
+    )?;
+
+    let layer = [radius.node(), steam.node()];
+    core.push(ShellRecord {
+        outer_radius: trace.record(Code::of(codes::LAYER_OUTER_RADIUS), outer, &layer)?,
+        mass: trace.record(
+            Code::of(codes::LAYER_MASS),
+            steam.value().to_owned(),
+            &layer,
+        )?,
+        material: trace.record(Code::of(codes::LAYER_MATERIAL), Material::Steam, &layer)?,
+        state: trace.record(
+            Code::of(codes::LAYER_STATE),
+            MatterState::Gas,
+            &[hides.node()],
+        )?,
+    });
+    Ok(Interior {
+        bulk: Bulk {
+            mass,
+            radius,
+            surface_gravity: gravity,
+            mean_density: density,
+        },
+        mantle_mass,
+        water: Water::Steam { mass: steam },
+        shells: core,
+        ..rock.clone()
+    })
 }

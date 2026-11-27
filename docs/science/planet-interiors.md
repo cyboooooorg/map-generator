@@ -108,7 +108,7 @@ start from these parameters:
 
 **Where the study is.** The bounds, with the page of every number and
 what was searched and not found, are in the
-[draw bounds study](../superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md).
+[draw bounds study](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md).
 
 #### The envelope draw
 
@@ -116,8 +116,10 @@ A planet's hydrogen and helium envelope is its mass fraction `f`, drawn
 for every planet from its own sub-seed, with one uniform number in every
 regime (so a planet's stream never depends on its mass). It is the
 primordial envelope: what the planet captured before the disc dispersed,
-before the loss of gas of the later pull requests. The bounds depend on
-the mass:
+before the loss of gas of the later pull requests. It is applied at the
+planet's final mass, which for a planet that finished after the gas is
+more than it held (see "Planets that finish after the gas (study 31)"
+below). The bounds depend on the mass:
 
 | Mass | Draw | Bounds | Source |
 | --- | --- | --- | --- |
@@ -141,6 +143,19 @@ interpolates log-linearly in mass between the grid masses:
 | 2 | $6.1 \times 10^{-5}$ | 0.11 |
 | 3 | $2.0 \times 10^{-4}$ | 0.33 |
 | 5 | $8.7 \times 10^{-4}$ | 0.35 |
+
+**An asked archetype.** A planet asked as `earth-like` draws none of
+this: its envelope is 0, an input in the trace, as are Earth's core
+(0.325, `EARTH_CORE_MASS_FRACTION`: Wang, Lineweaver & Ireland 2018, as
+Plotnykov & Valencia 2020 quote it, and Zeng et al. 2016, Table 1) and
+bulk water (Marty 2012's 2700 ppm, one ocean at the surface). Lammer et
+al. (2014) keep a nebular envelope round a 1 $M_\oplus$ core at 1 au in
+8 of their 12 cases, but take Earth's lack of one ("for the Earth there
+is no evidence that it was surrounded by a dense hydrogen envelope since
+the past 3.5 Gyr") as the constraint on its nebula: the archetype
+promises that Earth, not a drawn planet of its mass. Legacy's other pins
+of `earth-like` (life, the temperate branch, CO₂, N₂, NH₃, radiogenic
+abundance) are not ported yet (#695).
 
 The grid is by core mass, and the draw reads it at the planet's total
 mass: the two differ by the envelope's share, at most 35 % (the 0.35
@@ -204,6 +219,168 @@ The radius is continuous at 1 $M_\oplus$ (below).
   study's survey of giant tables (its Sect. 1.5) found no other with a
   free core mass, so none with a core above 100 $M_\oplus$.
 
+#### Planets that finish after the gas (study 31)
+
+**What the draw assumes.** Lammer et al. (2014) model a core already
+grown to its final mass inside the nebula. The draw gives that envelope
+to every planet of 0.1 to 5 $M_\oplus$, so no drawn planet can have
+finished forming after the gas disc dispersed, as Earth did. A drawn
+Earth at 1 au keeps a mini-Neptune's envelope about one draw in three
+(an estimate from the draw's bounds, not run per seed; issue #696). This
+section is the study of that gap; **the code does not model it**. The
+user decided (2026-11-25) to record a departure and adopt no law; what
+follows is the outline a future law would rest on.
+
+**When discs go.** The share of young stars with a disc falls with age:
+half lose it in about 3 Myr and essentially all in about 6 Myr (Haisch
+et al. 2001); an exponential with an e-folding time of 2.5 Myr, about
+1.2 Myr above 1.3 $M_\odot$ (Mamajek 2009). Gas accretion stops before
+the dust clears, 2.3 against 2.9 Myr (Fedele et al. 2010). Pfalzner et
+al. (2026) fit the lifetimes with a Weibull distribution by host mass;
+for stars born with a disc ($f_\mathrm{init} = 80\,\%$, their Table 2):
+
+| Host mass ($M_\odot$) | $k$ | $\lambda$ (Myr) | Median (Myr) |
+| --- | --- | --- | --- |
+| 0.01 to 0.2 | 2.03 | 10.21 | 8.52 |
+| 0.2 to 1.0 | 2.55 | 9.40 | 8.14 |
+| 1.0 to 3.0 | 1.73 | 6.10 | 4.93 |
+
+Discs disperse up to twice as fast above 2 $M_\odot$ (Ribas et al.
+2015). The medians differ from Mamajek's 1.7 Myr by a factor 3 to 5,
+from revised cluster ages and the shape of the fit. (The 1.7 Myr is the
+half-life of Mamajek's exponential, derived: 2.5 Myr times $\ln 2$.)
+
+**When rocky planets finish.** Embryos of about 0.1 $M_\oplus$ grow in
+about 1 Myr (Kenyon & Bromley 2006); the giant impacts that merge them
+start once the gas no longer damps their orbits, and last tens of Myr.
+From protoplanets at about 1 au, the growth time is
+$(0.73 \pm 0.74) \times 10^8$ yr (Kokubo & Genda 2010, Table 1).
+Earth's last core formation was 30 to 100 Myr after the first solids
+(Hf-W, Kleine et al. 2009, as Raymond et al. 2014 quote it), its
+Moon-forming impact at $95 \pm 32$ Myr (Jacobson et al. 2014).
+Proto-Earth held 0.53 to 0.58 $M_\oplus$ when the disc dispersed at
+about 4 Myr (Lammer et al. 2020b, Icarus 339, from atmospheric noble
+gases, as Lammer et al. 2021 quote it). Mars finished within
+about 5 Myr, inside the gas (Dauphas & Pourmand 2011, as Raymond et al.
+2014 and Lammer et al. 2021 quote it); Venus perhaps too (Lammer et al.
+2020), so that both that and the $p_\mathrm{late}$ of 0.96 below give a
+bare Venus. Raymond, Scalo & Meadows (2007, § 3.2) find habitable-zone
+planets forming in a few Myr round 0.2 $M_\odot$ stars and in 20 to 50
+Myr round Sun-like ones, fitted by $t_G \propto (\Sigma v)^{-1}$.
+
+**The envelope of a late planet.** What a growing planet captures and
+keeps after the boil-off is small: 0.0035 % of Earth's mass for
+proto-Earth (Lammer et al. 2021, p. 24), about 30 times (derived) under
+the stripping threshold of the escape law. In a gas-poor nebula, cores lighter than
+1 to 2 $M_\oplus$ do not accrete enough gas to look enveloped (Lee &
+Connors 2021). Had proto-Earth held more than 0.7 $M_\oplus$ in the
+disc, it would have kept at least 0.0042 $M_\oplus$ of hydrogen and
+become "sub-Neptune-like" (Lammer et al. 2021, p. 28). A planet that
+finished after the gas has, for the model, no envelope.
+
+**No sourced probability.** No paper read gives the probability that a
+rocky planet of given mass, orbit and host finished after the gas.
+Raymond et al. (2014, § 7.1) leave open how many terrestrial planets go
+through a phase of giant impacts at all. Owen & Wu (2017) say bare
+planets beyond 30 to 60 days, if abundant, need a population "born
+bare". The numbers that exist are for orbits under 100 days and depend
+on a model: 20 % of Kepler planets "intrinsically rocky" (Neil & Rogers
+2020), 57 to 74 % of close-in planets with a giant impact after the gas
+in simulations (Izidoro et al. 2022; derived from the shares with no
+giant impact after the gas). They disagree with the law below, which puts
+close-in planets in the gas because they grow fast, where Izidoro et al.
+find the gas damps their giant impacts until it goes. Neil & Rogers's
+born-rocky share falls with period (0.35 at 10 days to 0.14 at 100
+days, derived) while the law rises with the orbit. And Cloutier & Menou
+(2020) find rocky planets dominant round mid-M dwarfs, where reading B
+below gives fewer late planets at a fixed orbit.
+
+**What a calibration would rest on.** If $T_d$ is the disc lifetime
+(the Weibull above) and $T_G$ the time the giant impacts end, a planet
+finished after the gas with the probability
+
+$$
+p_\mathrm{late} = P(T_G > T_d)
+= \int_0^\infty f_d(t)
+\left[1 - \Phi\left(\frac{\ln t - \ln \tilde T_G}{\sigma}\right)\right] dt,
+$$
+
+with $T_G$ log-normal: $\sigma = 0.84$ and a median of 51 Myr at
+1 $M_\oplus$, 1 au and 1 $M_\odot$, from Kokubo & Genda's mean and
+spread (derived), scaled by Raymond, Scalo & Meadows (2007)'s
+$t_G \propto (\Sigma v)^{-1}$. Kokubo & Genda's time is for a whole
+system (its largest planet is 1.18 $M_\oplus$ at 0.79 au); moved to
+1 $M_\oplus$ at 1 au with the scaling below it would be about 108 Myr
+(derived). The 51 Myr is kept because Raymond et al. (2007, Fig. 5: 50
+Myr) and Raymond et al. (2014, Table 1: about 50 Myr) give the same for
+Earth. Read with their assumption that a planet's mass is that of its
+annulus, $\Sigma \propto M_p\,a^{-2}$:
+
+$$
+\tilde T_G = 51\ \mathrm{Myr}
+\left(\frac{M_p}{M_\oplus}\right)^{-1}
+\left(\frac{a}{1\ \mathrm{au}}\right)^{5/2}
+\left(\frac{M_\star}{M_\odot}\right)^{-1/2},
+$$
+
+which gives back their habitable-zone fit, $t_G \propto M_\star^{3/2}$,
+with $a_\mathrm{HZ} \propto M_\star^2$ and $M_p \propto M_\star^3$ (their
+$\alpha = h = 1$). The alternative, reading A, takes their disc profile
+instead of the planet's mass, $\Sigma \propto a^{-1} M_\star$, and gives
+$t_G \propto a^{3/2} M_\star^{-3/2}$; B is recommended because it reads
+the planet's mass, which the model draws, where A reads only the orbit
+and the host.
+
+The disc and completion constants are sourced; four things are
+calibrations, which a law would have to label: (1) the construction
+$p_\mathrm{late} = P(T_G > T_d)$, with the two times taken as
+independent and every planet as going through giant impacts; (2) the
+51 Myr anchor, and Raymond et al.'s scaling used away from the
+habitable zone and with the annulus's mass; (3) the domain, 0.1 to
+5 $M_\oplus$ inside the ice line, where the sources apply; (4) hosts
+above 3 $M_\odot$ read with the 1.0 to 3.0 $M_\odot$ bin, the bins taken
+as steps. It gives (derived), for a 1 $M_\odot$ host read with the 1.0
+to 3.0 $M_\odot$ bin:
+
+| Planet | $\tilde T_G$ | $p_\mathrm{late}$ |
+| --- | --- | --- |
+| Earth (1 $M_\oplus$, 1 au) | 51 Myr | 0.99 |
+| Venus (0.815 $M_\oplus$, 0.723 au) | 28 Myr | 0.96 |
+| 1 $M_\oplus$ at 0.4 au, Sun | 5.2 Myr | 0.54 |
+| 1 $M_\oplus$ at 0.2 au, Sun | 0.92 Myr | 0.08 |
+| 5 $M_\oplus$ at 1 au, Sun | 10 Myr | 0.78 |
+
+With the 0.2 to 1.0 $M_\odot$ bin for the same host, the values are
+0.978 for Earth, 0.34 at 0.4 au, 0.02 at 0.2 au and 0.62 for 5
+$M_\oplus$ at 1 au (derived).
+
+Mars comes out late (its 0.107 $M_\oplus$ is a stranded embryo, outside
+the annulus assumption) but is bare either way: the largest envelope
+the draw gives it, about $1.2 \times 10^{-4}$ (derived), is under the stripping
+threshold.
+
+**How it would join the draw.** One code path: the envelope draw takes
+$p_\mathrm{late}$ from a law in `science`, draws a second uniform number
+from the same sub-seed as the first, in every regime (so the stream never
+depends on the mass), and compares it only for 0.1 to 5 $M_\oplus$
+inside the ice line (otherwise an ice giant at 20 au would lose its
+envelope): it returns 0 when that number is under $p_\mathrm{late}$, the
+Lammer value of today otherwise. Study 30 (core-powered loss, issue #697)
+neither runs on an in-gas branch nor reads a disc lifetime: its
+decisions are Tang et al. 2024's boil-off ceiling at today's flux, with
+the flux at dispersal left to #700. If a law came, that ceiling would act
+only on planets that formed in the gas, and a disc-lifetime law shared
+with #700 would be open.
+
+**Limitations.** The disc lifetimes are dust measures and gas goes
+first; no fit covers hosts above 3 $M_\odot$; the gas damps giant
+impacts until it goes, which a timescale comparison ignores close in;
+the share of planets that grow as "giant embryos" inside the gas,
+without giant impacts, is unknown; metallicity enters only through the
+planet's mass. The full study, its alternatives and the open decisions
+are in
+[31-late-formation-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/31-late-formation-audit).
+
 ### From layers to radius
 
 The solid part of a planet (iron core, rock mantle, water and ices) is
@@ -216,11 +393,11 @@ integrator), `science::eos` and `science::water` (the materials).
 the mass inside, $P$ the pressure and $\rho(P)$ the density of the
 material at that pressure:
 
-```math
+$$
 \frac{dm}{dr} = 4\pi r^2 \rho, \qquad
 \frac{dP}{dr} = -\frac{G\,m\,\rho}{r^2}, \qquad
 C = \int_0^M \tfrac{2}{3}\, r^2\, dm
-```
+$$
 
 The model integrates outward from the centre with fourth-order
 Runge-Kutta, using $t = (m/M)^{1/3}$ as the variable, so that the centre
@@ -234,7 +411,7 @@ the radius and $C/MR^2$ within $10^{-4}$ of the converged answer for
 Earth and for 20 Earth masses (`STEPS_PER_LAYER`, a calibration,
 measured when the integrator was written against a 1280-step reference;
 the
-[prototype](../superpowers/studies/2026-11-21-planet-interior/prototype-report.md),
+[prototype](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/prototype-report.md),
 which did not end steps at the phase changes, needed 160).
 
 **In words.** Squeeze the planet under its own weight, layer by layer,
@@ -253,8 +430,8 @@ reference density $\rho_0$, bulk modulus $K_0$ and its pressure
 derivative $K_0'$. A mix of minerals adds the volumes of its parts at
 equal pressure (Amagat's law), by mass share. The values are in
 `science::eos` and `science::water`, each with its source; the studies
-([equations of state](../superpowers/studies/2026-11-21-planet-interior/equations-of-state.md),
-[core and dynamo](../superpowers/studies/2026-11-21-planet-interior/core-and-dynamo.md))
+([equations of state](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md),
+[core and dynamo](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/core-and-dynamo.md))
 give the search behind them.
 
 | Layer | Material and law | $\rho_0$ (kg/m³), $K_0$ (GPa), $K_0'$ | Source |
@@ -269,10 +446,14 @@ give the search behind them.
 | Ice VII | Vinet | 1460, 14.3771, 6.57972 | Seager et al. 2007, section 3.3 |
 
 The boundaries between phases of water are the melting curves of ices
-Ih and VI and the three triple points (208.566 MPa at 251.165 K,
-350.1 MPa and 632.4 MPa at 273.31 K, 2216 MPa at 355 K), from the IAPWS
+Ih and VI and the triple points of the liquid (208.566 MPa at 251.165 K,
+350.1 MPa at 256.164 K, 632.4 MPa at 273.31 K, 2216 MPa at 355 K), from the IAPWS
 release R14-08 (2011) of Wagner et al., and the ice VI to ice VII
-boundary of the AQUA model (Haldemann et al. 2020, eq. 22). A water
+boundary of the AQUA model (Haldemann et al. 2020, eq. 22). The surface
+liquid also reads the melting curves of ices III and V (IAPWS R14-08,
+eqs. 2 and 3; study 25 of the Wiki and
+[the surface liquid](planet-atmospheres.md#climate-and-surface-liquid)).
+A water
 layer follows one of two paths, chosen by its temperature $T$:
 
 - **273.31 K ≤ $T$ < 355 K:** the isotherm at $T$. Liquid water up to
@@ -320,7 +501,9 @@ was found for ices III, V and VI beyond Journaux et al.'s parameters.
 | 5 $M_\oplus$, 50 % water, 300 K | 12 175 km (1.911 $R_\oplus$, Zeng et al. 2019) | 12 059.9 km | −0.95 % |
 
 The Earth, Venus, Mars, Mercury and Moon rows use the core mass
-fractions 0.325 (PREM), 0.30 (Skinner et al. 2026, citing Shah et al.
+fractions 0.325 (`EARTH_CORE_MASS_FRACTION`: Wang, Lineweaver &
+Ireland 2018, as Plotnykov & Valencia 2020 quote it; Zeng et al. 2016,
+Table 1), 0.30 (Skinner et al. 2026, citing Shah et al.
 2022), 0.21 (Khan et al. 2023), 0.7136 (Genova et al. 2019) and 0.0168
 (Viswanathan et al. 2019). Ganymede takes the split 0.085 core, 0.46
 rock and 0.455 ice of Rodriguez-Mozos & Moya (2022), along the melting
@@ -466,10 +649,10 @@ of hydrogen-helium planets over a core of 50/50 ice and rock, at ages of
 9.5 au from a star of the Sun's luminosity, for cores of 0, 10, 25, 50
 and 100 $M_\oplus$ and masses of 10 to 3 594 $M_\oplus$. The model reads
 the 25 files of the authors' page (4 550 rows; provenance and checks in
-[GIANTS.md](../../crates/science/data/GIANTS.md)), not the three printed
-tables, since one printed value is a misprint (Table 4, 9.5 au, 25
-$M_\oplus$ core, 464 $M_\oplus$: 1.037 against 1.013 at 3.16 Gyr and
-0.985 at 10 Gyr in the file).
+[GIANTS.md](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/data/GIANTS.md)),
+not the three printed tables, since one printed value is a misprint
+(Table 4, 9.5 au, 25 $M_\oplus$ core, 464 $M_\oplus$: 1.037 against 1.013 at
+3.16 Gyr and 0.985 at 10 Gyr in the file).
 
 - A star of another luminosity is read at the flux-equivalent distance
   $d_\mathrm{eq} = 1/\sqrt{F}$ au, $F$ the light received in Earth's. The
@@ -494,6 +677,21 @@ $M_\oplus$ core, 464 $M_\oplus$: 1.037 against 1.013 at 3.16 Gyr and
 - No inflation. The tables are the uninflated radius, and hot Jupiters
   stay near 1 $R_J$ until the integrated structure of issue #621 (the
   heating efficiency of Thorngren & Fortney 2018 is not a radius).
+
+![Radius at 1 bar of giant planets against mass, for cores of 0, 10 and 25 Earth masses, with Jupiter and Saturn.](figures/giant-radius.svg)
+
+*Radius at 1 bar, in units of Jupiter's equatorial radius, of giants of 20
+to 3 000 $M_\oplus$ at 4.5 Gyr and 5.2 au from a star of the Sun's
+luminosity, for cores of 0, 10 and 25 $M_\oplus$. Drawn by
+`tools/figures` from `giants::giant` (Fortney, Marley & Barnes 2007, see
+[GIANTS.md](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/data/GIANTS.md)),
+and regenerated by `mise run docs:figures`. The 25 $M_\oplus$ core starts
+near 28 $M_\oplus$, where the tables have a row for it. Jupiter and
+Saturn are the NASA planetary fact sheets' masses and equatorial radii at
+the 1 bar level (71 492 and 60 268 km; entries 116 and 117), the
+convention of Fortney et al.
+The curves are at Jupiter's distance; Saturn sits at 9.6 au, where a
+planet of its mass is slightly smaller.*
 
 **The core's radius** is Fortney et al.'s Eq. 7 (their coefficients as
 corrected in v4 of the paper) at an ice mass fraction of 0.5, the tables'
@@ -525,10 +723,10 @@ molecular layer and a metallic one.
 The pressure is located by an index-one polytrope of the whole giant,
 $P = K\rho^2$, with Hubbard's (2013) Eqs. 61 and 62:
 
-```math
+$$
 \rho(r) = \rho_c\,\frac{\sin\xi}{\xi},\quad \xi = \frac{\pi r}{R},\quad
 \rho_c = \frac{\pi^2}{3}\,\bar\rho,\quad K = \frac{2 G R^2}{\pi}
-```
+$$
 
 Pressure falls with $r$, so the radius of 100 GPa is found by bisection,
 and the mass inside it is $M(\sin\xi - \xi\cos\xi)/\pi$ (the same
@@ -616,9 +814,9 @@ which melted that much ice (Barr & Canup 2008 find that Callisto and
 Titan stayed partly differentiated only if they grew slowly enough to
 radiate most of it):
 
-```math
+$$
 s = \min\left(1,\ \frac{h\,\tfrac{3}{5}\,G M / R}{L_\mathrm{ice}}\right)
-```
+$$
 
 with $L_\mathrm{ice}$ = 333.6 kJ/kg the latent heat of ice (Feistel &
 Wagner 2006) and $h$ = 0.057, a calibration on Callisto and Titan.
@@ -672,9 +870,10 @@ core under water of 0.95 to 1).
 $C / (M R^2)$ of
 its layers, each of uniform density:
 
-```math
-\frac{C}{M R^2} = \frac{2}{5\,M R^2} \sum_i m_i \frac{r_i^5 - r_{i-1}^5}{r_i^3 - r_{i-1}^3}
-```
+$$
+\frac{C}{M R^2}
+  = \frac{2}{5\,M R^2} \sum_i m_i \frac{r_i^5 - r_{i-1}^5}{r_i^3 - r_{i-1}^3}
+$$
 
 0.4 for a uniform sphere, less the more the mass sits at the centre.
 Over the asked moons of seeds 1 to 20: Io 0.370 to 0.376 (0.378
@@ -694,18 +893,23 @@ body gets which law).
 **Radiogenic.** Uranium-238 and -235, thorium-232 and potassium-40 decay
 and heat the rock. Each isotope's power per kilogram of silicate today is
 the abundance of its element in Earth's silicate part, times the heat
-per kilogram of the element (Dye 2012, Table 3: U 98.5, Th 26.3 and K
-$3.33 \times 10^{-3}$ µW/kg), times the isotope's share of the element
+per kilogram of the element (Dye 2012, Table 3: U 98.5 and Th 26.3
+µW/kg; K $3.400 \times 10^{-3}$ µW/kg, derived below), times the
+isotope's share of the element
 (U-238: 0.958, derived in the heat study). The abundances are 20 ng/g
 for uranium and 80 ng/g for thorium, calibrations inside the published
 models (see "Where it departs from the science"), and 280 µg/g for potassium (Arevalo
 et al. 2009, a K/U ratio, read in its abstract). Each isotope is carried
-to the planet's age by its half-life (Dye 2012, Table 2: 4.468, 0.704,
-14.05 and 1.277 Gyr; the earlier model used 1.248 Gyr for potassium-40):
+to the planet's age by its half-life (Dye 2012, Table 2: 4.468, 0.704
+and 14.05 Gyr; for potassium-40 the DDEP evaluation of 2025, 1.2522 Gyr,
+Mougeot 2025, which the argon of the air shares, see
+[planet atmospheres](planet-atmospheres.md#argon-study-29); Dye 2012's
+1.277 Gyr, taken until #694, was 0.6 to 2.3 % longer than every
+evaluation, and the earlier model used 1.248 Gyr):
 
-```math
+$$
 H = \sum_i p_i\, m_\mathrm{sil}\, a\, e^{\lambda_i (4.5673 - t)}
-```
+$$
 
 where $p_i$ is the isotope's power per kilogram today, $m_\mathrm{sil}$
 the silicate mass, $a$ the planet's abundance relative to Earth's,
@@ -713,29 +917,57 @@ $\lambda_i = \ln 2 / t_{1/2,i}$, $t$ the age in Gyr and 4.5673 Gyr Earth's
 age (Connelly et al. 2012, read in its abstract). Earth's silicate mass
 is $4.03 \times 10^{24}$ kg (Dye 2012, Table 7).
 
+**Potassium's heat, derived.** Potassium's heat per kilogram is the
+product of its ⁴⁰K atoms, their decay constant and the heat of a decay,
+all from the DDEP evaluation of 2025 (the LNE-LNHB table of ⁴⁰K, read,
+Mougeot et al. 2026), so that it shares the half-life the argon reads:
+
+$$
+h_K = \frac{x_{40} N_A}{m_K} \, \frac{\ln 2}{t_{1/2}} \sum_b P_b E_b
+$$
+
+with $x_{40}$ = 0.011668 % of the atoms (Naumenko et al. 2013, as DDEP
+takes it), $m_K$ = 39.0983 g/mol (CIAAW), $t_{1/2}$ = 1.2522 Gyr of
+Julian years (λ = 17.541e-18 /s), and for each branch its share and the
+energy it leaves in the rock: β⁻ 89.56 % with its electron's mean
+582.898 keV (the antineutrino leaves the planet), capture to ⁴⁰Ar's
+level 10.34 % with the 1460.851 keV transition (the neutrino leaves),
+β⁺ 0.00103 % with its positron's mean 251.757 keV and the two 511 keV
+photons of its annihilation. The capture to the ground state and the
+atomic relaxation after each capture leave at most argon's K-shell 3.2
+keV on 10.44 % of the decays, under 0.05 %: left out. That is 673.1 keV
+a decay and $h_K = 3.400 \times 10^{-9}$ W/kg. Dye 2012's $3.33 \times
+10^{-3}$ µW/kg, taken until #694, is the same product on his λ,
+17.200e-18 /s: carried to DDEP's λ it is $3.396 \times 10^{-9}$, 0.1 %
+from the derived value (test `potassiums_heat_is_dyes_on_ddeps_decay_constant`,
+which also checks the β⁻ activity, 28.233 per second and gram, against
+DDEP's measured 28.23 ± 0.06). Earth's radiogenic power today moves
+from 20.18 to 20.25 TW (+0.39 %), at formation from 103.1 to 104.1 TW.
+
 **In words.** The younger the planet, the more heat; the isotopes with
 short half-lives dominate early.
 
-**Orders of magnitude.** Earth makes 20.2 TW today: uranium-238 38 %,
-thorium-232 42 %, potassium-40 19 %, uranium-235 2 %. The published
+**Orders of magnitude.** Earth makes 20.3 TW today (20.25): uranium-238
+38 %, thorium-232 42 %, potassium-40 19 %, uranium-235 2 %. The published
 models span 11 to 38 TW (Dye 2012). The abundance $a$ is drawn around 1
 with a spread of 0.23 dex (Nimmo et al. 2020, derived in the heat
 study); the earlier model drew 0.15 dex.
 
 **Secular cooling.** A planet also loses the heat it was born with: its
 mantle and core cool. Earth loses 46.7 TW through its surface (Davies &
-Davies 2010), so 26.5 TW beyond its radiogenic 20.2 (the model's 46.7 TW
+Davies 2010), so 26.4 TW beyond its radiogenic 20.3 (the model's 46.7 TW
 total is that split, by construction). The model scales that by the
 silicate mass, which holds the heat, and lets it decay with
 age over a cooling time that grows as the area of the body, $R^2$ with
 $R^3 \propto M$:
 
-```math
-S = S_\oplus\, \frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\, e^{4.5673/\tau_\oplus - t/\tau},
+$$
+S = S_\oplus\, \frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\,
+  e^{4.5673/\tau_\oplus - t/\tau},
 \qquad \tau = \tau_\oplus \left(\frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\right)^{2/3}
-```
+$$
 
-with $S_\oplus$ = 26.5 TW and $\tau_\oplus$ = 10 Gyr. Both the
+with $S_\oplus$ = 26.4 TW and $\tau_\oplus$ = 10 Gyr. Both the
 10 Gyr and the exponent 2/3 are calibrations: no source gives a cooling
 time or its scaling with mass (see "Where it departs from the science").
 
@@ -753,9 +985,9 @@ with the response of an enveloped body.
 **Tidal.** A host raises tides in a planet on an eccentric orbit, and
 friction turns them into heat (Peale, Cassen & Reynolds 1979):
 
-```math
+$$
 \dot E = \frac{21}{2}\,\frac{k_2}{Q}\,\frac{G M_h^2 R^5 n\, e^2}{a^6}
-```
+$$
 
 with $M_h$ the host's mass, $R$ the planet's radius, $a$ and $e$ its orbit's
 semi-major axis and eccentricity, $n$ its mean motion, and $k_2/Q$ the
@@ -802,9 +1034,9 @@ period ratio lies within 1 % of 2. A pair merely near it is not locked:
 Dione and Rhea, at 1.67, are not. The host's tides push each moon
 outward with a torque
 
-```math
+$$
 T_i = \frac{3}{2}\,\frac{k_2}{Q}\bigg|_h\,\frac{G m_i^2 R_h^5}{a_i^6}
-```
+$$
 
 and the resonance locks each pair of neighbours together: they migrate
 as one, at the mean motion $\bar n = \sum n_i L_i / \sum L_i$ weighted by
@@ -812,9 +1044,10 @@ their orbits' angular momenta $L_i = m_i n_i a_i^2$. What the torques
 pump into the two orbits and the orbits do not keep is dissipated by the
 eccentricity the resonance forces (Meyer & Wisdom 2007):
 
-```math
-\dot E = \sum_{i \in \text{pair}} n_i T_i - \bar n \sum_{i \in \text{pair}} T_i \;\ge 0
-```
+$$
+\dot E = \sum_{i \in \text{pair}} n_i T_i -
+  \bar n \sum_{i \in \text{pair}} T_i \;\ge 0
+$$
 
 Each pair's heat goes to its inner moon, as Meyer & Wisdom put all of
 the Enceladus–Dione pair's heat in Enceladus: the inner moon, closer to
@@ -836,9 +1069,9 @@ resonance locking (Fuller, Luan & Quataert 2016): the host dissipates so
 that its innermost round moon migrates outward over the system's age,
 $a/\dot a = t$, which gives
 
-```math
+$$
 \frac{k_2}{Q}\bigg|_h = \frac{n a^8}{3\,t\,G m R_h^5}
-```
+$$
 
 for that moon's $m$, $a$ and $n$, at most the $3 \times 10^{-3}$ measured
 for Saturn at Titan's frequency (Lainey et al. 2020). One value per host,
@@ -918,19 +1151,19 @@ $567/T$), so Fourier's law integrates to a shell of plane thickness
 $d_0$, which the sphere thins to $d$ (its base is smaller than its
 surface; Turcotte & Schubert 2014):
 
-```math
+$$
 d_0 = \frac{651\,\ln(T_b / T_s)}{q}, \qquad d = \frac{R\,d_0}{R + d_0}
-```
+$$
 
 with $T_s$ the surface temperature, $q$ the internal heat flux (radiogenic,
 tidal and secular), $R$ the radius and $T_b$ the melting point at the base
 (Hussmann, Sohl & Spohn 2006). Ice melts colder under pressure: the base
 follows the IAPWS melting curve of ice Ih (Wagner et al. 2011),
 
-```math
+$$
 \frac{p}{p_t} = 1 + \sum_{i=1}^{3} a_i \left(1 - \theta^{b_i}\right),
 \qquad \theta = \frac{T}{273.16\ \mathrm{K}}
-```
+$$
 
 with $p_t$ = 611.657 Pa, $a_i$ = 1 195 393.37, 80 818.3159, 3338.2686 and
 $b_i$ = 3, 25.75, 103.75, from 273.16 K at no pressure through about
@@ -967,9 +1200,7 @@ the mean over the surface and its polar thickness the shell at the pole.
   dissipates, in the membrane limit, as $\Psi_A + \tfrac{9}{2}\Psi_C$
   (Beuthe 2013), averaged over longitude:
 
-  ```math
-  w(\mu) = 1 + \frac{-\tfrac{7}{2}\,a_{20} P_2(\mu) + \tfrac{7}{4}\,a_{40} P_4(\mu)}{\tfrac{11}{2}\,a_{00}}
-  ```
+  $$w(\mu) = 1 + \frac{-\tfrac{7}{2}\,a_{20} P_2(\mu) + \tfrac{7}{4}\,a_{40} P_4(\mu)}{\tfrac{11}{2}\,a_{00}}$$
 
   with $\mu$ the cosine of the colatitude and $a_{00} = 21/5$,
   $a_{20} = -33/7$, $a_{40} = 387/140$ (Beuthe 2013, table 1): 1.92
@@ -999,9 +1230,9 @@ which it freezes, along the liquidus of the water–ammonia phase diagram
 at low pressure (Leliwa-Kopystyński et al. 2002), a fit in the ammonia
 mass fraction $X$ of the liquid:
 
-```math
+$$
 T_\mathrm{liq} = 273 - 53.07\,X - 1651.4\,X^2 + 11842\,X^3 - 46269\,X^4 + 56695\,X^5
-```
+$$
 
 from 273 K for pure water through about 259 K at 10 % to about 175 K at
 the eutectic, a third of ammonia (176 K measured), below which no liquid
@@ -1020,9 +1251,9 @@ ocean with it.
 **Convection.** A thick shell convects under a stagnant lid. The ice
 creeps by diffusion, a Newtonian viscosity (Goldsby & Kohlstedt 2001):
 
-```math
+$$
 \eta = \frac{R\,T\,d^2}{84\,V_m\,D_0\,e^{-Q/RT}}
-```
+$$
 
 with $D_0$ = 9.1 × 10⁻⁴ m²/s, $Q$ = 59.4 kJ/mol, $V_m$ = 1.97 × 10⁻⁵
 m³/mol and a grain size $d$ of 30 mm, the low end of the 30 to 80 mm
@@ -1032,18 +1263,18 @@ takes the viscosity as $\sigma / 2\dot\varepsilon$, a calibration). The
 shell convects when its Rayleigh number with the viscosity at its base
 reaches the stagnant-lid onset (Solomatov 1995):
 
-```math
+$$
 Ra = \frac{\rho\,g\,\alpha\,\Delta T\,D^3}{\kappa\,\eta(T_b)} \ge 20.9\,\theta^4,
 \qquad \theta = \frac{Q\,\Delta T}{R\,T_b^2}
-```
+$$
 
 with $\alpha$ = 1.6 × 10⁻⁴ K⁻¹ and $\kappa = k / \rho c_p$, $c_p$ =
 2097 J kg⁻¹ K⁻¹ (Feistel & Wagner 2006). It then carries up into its lid
 a flux that does not depend on its thickness (Solomatov & Moresi 2000):
 
-```math
+$$
 q_c = 0.53\,k\left(\frac{R\,T_b^2}{Q}\right)^{4/3}\left(\frac{\rho\,g\,\alpha}{\kappa\,\eta(T_b)}\right)^{1/3}
-```
+$$
 
 taken at the base's temperature, which overestimates it a little. If
 $q_c$ is more than the internal heat supplies, the ocean freezes: down to
@@ -1168,18 +1399,88 @@ stay lava.
 ### Classes
 
 The class is read off the result, in this order; the first rule that holds
-wins.
+wins. The table gives the rules the rewrite ports in planet PR 2d-4, as
+[study 27](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit)
+checked them and the user decided on 2026-11-24, with the giant and
+small-planet rules only; the surface classes are in
+[the atmospheres page](planet-atmospheres.md#the-chain-and-the-surface-classes).
+The thresholds are in `science::classes` (`HOT_GIANT_MAX_PERIOD`,
+`SUPER_EARTH_MIN_RADIUS`, `ICE_WORLD_MIN_OCEANS`); the families draw
+their hot Jupiters within the same `HOT_GIANT_MAX_PERIOD`.
 
 | Class | Rule | Source of the threshold |
 | --- | --- | --- |
-| Giant: gas giant | at least 10 Earth masses and 5 % gas; at least 50 % of the mass in gas | calibration (parts Jupiter and Saturn from Uranus and Neptune) |
-| Giant: hot Jupiter | a gas giant with a period of 10 days or less | Wright et al. 2012 |
-| Giant: hot Neptune | an ice giant with a period of 10 days or less (the sparse "Neptune desert") | Wright et al. 2012; Mazeh, Holczer & Faigler 2016, doi:10.1051/0004-6361/201528065 |
-| Giant: ice giant | a giant with less than 50 % gas | same calibration |
-| Mini-Neptune | at least 0.1 % gas and 1.6 $R_\oplus$ or more | Rogers 2015; the gas share is a calibration |
-| Ice world | at least 5 % water and ices | calibration (Europa about 8 %, Earth 0.02 %) |
-| Super-Earth | 1.25 $R_\oplus$ or more | Borucki et al. 2011 |
+| Giant: gas giant | a `Body::Giant`: 20 $M_\oplus$ or more, with an envelope | Thorngren et al. 2016's sample bound (`GAS_GIANT_MIN_MASS`, the user's decision of 2026-11-21) |
+| Giant: hot Jupiter | a gas giant with a period of 10 days or less | Wright et al. 2012, § 3: "P < 10 d" |
+| Giant: ice giant | a `Body::MiniNeptune` drawn at 10 $M_\oplus$ or more (the trial's mass, see below) | Lopez & Fortney 2014 p. 8 (`MINI_NEPTUNE_MAX_MASS`) |
+| Giant: hot Neptune | an ice giant with a period of 10 days or less (the sparse "Neptune desert") | Wright et al. 2012; Mazeh, Holczer & Faigler 2016 put the desert "below ~5–10 d" |
+| Mini-Neptune | a `Body::MiniNeptune` under 10 $M_\oplus$: it kept at least 0.1 % of its mass in gas | `MIN_ENVELOPE`, a calibration of the escape |
+| Ice world | at least 5 % water and ices, and 0.01 Earth ocean kept at the surface | `ICY_MIN_WATER`, the tides' calibration; `ICE_WORLD_MIN_OCEANS`, a calibration (#452) |
+| Super-Earth | 1.25 $R_\oplus$ or more | Borucki et al. 2011: "Earth-size (Rp < 1.25 R⊕)" |
 | Rocky | the rest | |
+
+Legacy's rules, and why the rewrite departs from them:
+
+- **The giants.** Legacy took a giant from 10 $M_\oplus$ and 5 % of gas,
+  and a gas giant from 50 % of gas. Its 10 $M_\oplus$ cited Pollack et
+  al. 1996, whose abstract gives no critical core mass; Lopez & Fortney
+  2014 (p. 8) give the "fundamental change ... around ~10 M⊕", which the
+  rewrite already reads as the edge of the mini-Neptunes' envelope draw.
+  No source gives a share of hydrogen and helium that parts gas giants
+  from ice giants: Helled et al. 2020 only say that the ice giants'
+  compositions "are not dominated by" it. The rewrite parts them at
+  20 $M_\oplus$, and its envelope draw gives a 20 $M_\oplus$ giant about
+  46 % of gas at the fit's centre: legacy's 50 % line would have made
+  half of those ice giants. The class reads the body kinds the chain
+  already decides, so no second constant holds either line, and the
+  5 % and 50 % lines are gone.
+- **Which mass the 10 $M_\oplus$ line reads.** The trial's mass, the
+  one the envelope draw read to choose its regime: the line splits the
+  draw's regimes (Lammer's grid and the mini-Neptunes below, the ice
+  giants' 9 to 20 % above), so a planet drawn an ice giant's envelope is
+  classed an ice giant. The bulk would not do: when a hot core's water
+  is beyond the laws, the bulk is the condensed planet without that
+  water, and a 13.5 $M_\oplus$ water-rich hot Neptune would read
+  6.7 $M_\oplus$ and become a mini-Neptune. The mass kept after escape
+  would not either: the escape thins the envelope the draw gave, it does
+  not redraw its regime.
+- **The hot giants.** Wright et al. 2012 define a hot Jupiter by its
+  period under 10 days and a mass over 0.1 $M_J$ (about 32 $M_\oplus$),
+  "not ... presumed 'ice giants' with M < 0.1MJup". The rewrite keeps
+  its one 20 $M_\oplus$ line: a 20 to 32 $M_\oplus$ giant within 10 days
+  is a hot Jupiter for the model, a hot Neptune for Wright.
+- **The mini-Neptune.** Legacy also asked for 1.6 $R_\oplus$. Rogers
+  2015 is a statement on a population, the Kepler planets within 50 days
+  that have measured masses; the 1.6 $R_\oplus$ is the 95 % upper bound
+  of its transition (median 1.48). Fulton et al. 2017 find the gap
+  between 1.5 and 2.0 $R_\oplus$, and Lopez & Fortney 2014 suggest
+  1.75 $R_\oplus$. The model knows the envelope itself, and a body that
+  keeps at least 0.1 % of its mass in gas has no surface: legacy's rule
+  gave a rocky class to a body with no ground. The radius rule is
+  dropped.
+- **The ice world.** No source sets a share of water that makes an ice
+  world: Europa holds 6 to 9 % of ice and water by mass (Kuskov &
+  Kronrod 2005, as a 2025 review quotes them), and the definitions found
+  are by volume of the crust. The 5 % is the calibration the rewrite
+  already has for the tides, which legacy said is the same share; the
+  class reads that one.
+- **The super-Earth.** Borucki et al. 2011 say what legacy cites.
+
+**Calibration of the ice world's surface water.** `ICE_WORLD_MIN_OCEANS`,
+0.01 Earth ocean (#452), is ported as legacy had it. What it was fitted
+against: Mars's water ice. Carr & Head 2015 put its polar deposits and
+shallow ground ice at about 34 m of global equivalent layer, about
+4.9e18 kg, 0.0035 of the rewrite's `OCEAN_MASS` (1.4e21 kg; derived,
+about 0.004). How: by hand, a little over twice that one body's share,
+so that a body keeping a Mars's worth of ice is not yet an ice world;
+no distribution was fitted. What was searched and not found
+([study 27](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit),
+its table of the class constants and item 2 of its "New
+calibrations"): a surface water that makes an ice world; the definitions
+found (the COSPAR draft's icy worlds) are by the crust's volume. Carr &
+Head 2015 itself was not reached by study 27 (a 403 and an empty ADS
+record): the 34 m is the figure as study 22 reads it in the abstract,
+and as legacy quotes it.
 
 ## In the app
 
@@ -1200,17 +1501,19 @@ in `codes`). The draw takes the seed from its caller: the planet model
 will pass the body's seed, so each body depends on no other, and the
 class trial of the backward search the trial's seed.
 
-- **Iron.** The core's share of the refractory mass is $0.32 + \sigma z$,
-  $z$ a standard normal, with $\sigma$ = 0.12 below the median and 0.14
-  above (Plotnykov & Valencia 2020: 0.32 +0.14/−0.12, read as a median
-  and a 68 % interval), kept between 0 and 1. The earlier model's slope
-  of 0.15 per dex of `[Fe/H]` is gone: the new draw has none.
-- **Water inside the ice line.** Log-normal around 2700 ppm of the mass,
-  Earth's bulk water (Marty 2012), with $\sigma_{\ln}$ = 0.5
-  (Calibration, derived from Marty's ±1350 ppm). A planet beyond the ice
-  line, or one in ten that migrated in (Calibration, as the earlier
-  model), is a water world and draws a uniform share between 0.5 and 0.67
-  instead (Zeng et al. 2019). The trace says why: a flag that the planet
+- **Iron.** The core's share of the refractory mass is uniform from 0 to
+  0.8 (see [the draws and their bounds](#the-draws-and-their-bounds):
+  Elkins-Tanton & Seager 2008; Plotnykov & Valencia 2020). The earlier
+  model's slope of 0.15 per dex of `[Fe/H]` is gone: the new draw has
+  none.
+- **Water inside the ice line.** Log-uniform from $10^{-5}$ to
+  $10^{-2}$ of the mass, the bulk water (see [the draws and their
+  bounds](#the-draws-and-their-bounds)); Earth's is 2700 ppm (Marty
+  2012), the reference the surface share is calibrated on. A planet
+  beyond the ice line, or one in ten that migrated in (Calibration, as
+  the earlier model), is a water world and draws a uniform share between
+  0.1 and 0.67 instead (Marboeuf et al. 2014; Zeng et al. 2019). The
+  trace says why: a flag that the planet
   formed beyond the ice line (from its orbit and the ice line) and a drawn
   migration flag, from which the water fraction derives.
 - **Radiogenic abundance.** Normal around Earth's, 0.23 dex.
@@ -1219,15 +1522,23 @@ class trial of the backward search the trial's seed.
   before the climate of the second pull request). The drawn $w$ is the
   bulk water. A dry planet's stays in its mantle, which weighs
   $(1 - c)(1 - w) M + w M$: hydrated silicate, whose ocean comes from
-  outgassing in the second pull request (Marty's 2700 ppm is the bulk
-  Earth's water, not its oceans'). A water world adds a water layer
+  outgassing (Marty's 2700 ppm is the bulk Earth's water, not its
+  oceans'). The planet model's water step (`system::planet::water`)
+  keeps a share of it at the surface, its ocean,
+  `science::habitable::SURFACE_WATER_SHARE` (0.085, Earth's ocean over
+  Marty's bulk water, a calibration; #663 and [surface
+  water](planet-atmospheres.md#surface-water)); the rest stays in the
+  mantle. A water world's water is not shared out: its layer, or its
+  water beyond the laws, is all at its surface. A water world adds a water layer
   $w M$ on the isotherm of its equilibrium temperature, which stands for
   the surface temperature until then: the isotherm from 273.31 to 355 K,
   the melting curve colder. From 355 K, past the water laws, its water
   is kept as an inventory without a layer, outside the structure, until
-  the second pull request gives it a steam envelope (as the earlier model's
-  `steam_interior`, after Turbet et al. 2020); its surface gravity and
-  mean density are those of the condensed planet under it.
+  the climate gives it a steam envelope (`interior::steam_interior`,
+  after Turbet et al. 2020; #659); its surface gravity
+  and mean density are those of the condensed planet under it. Its
+  escape and the steam it loses read its whole mass, water included
+  (`Body::whole_mass`).
 - **Outputs.** Radius, surface gravity, mean density, the core, mantle
   and water masses, each shell's outer radius, mass, material and state,
   and the three heats. The structure node is the central pressure the
@@ -1406,7 +1717,11 @@ pull request add these:
   $M_\oplus$, of which 17.4 of ice and rock). No temperature enters the
   boundary. The core's state, a gas layer's state when there is no
   metallic layer, and an envelope's are imposed values, not computed.
-- **Steam worlds are left to the next pull request.** Water beyond the
+- **Steam worlds.** `interior::steam_interior` puts the envelope of a
+  steam world on the iron and rock shells of its rock (the core, its
+  mass the whole less the steam, its radii the condensed structure's); a
+  dry body's rock shells give up the steam's mass (each scaled by `1 -
+  steam / rock`), so the shells add up to the whole. Water beyond the
   range of `science::water` (above 355 K, which is the ice VI-VII-liquid
   triple point, not a steam criterion) is recorded as such: the planet
   that has a bulk is the condensed one (dry mass, dry radius, its
@@ -1416,10 +1731,42 @@ pull request add these:
   Aguichine et al. 2021 from 10 %) need the climate of the 2d pull
   request. A mini-Neptune with such water in its core is the condensed
   planet's bulk plus its envelope, at the radius of core plus
-  envelope.
+  envelope. Study 26
+  ([Wiki](https://github.com/cyboooooorg/map-generator/wiki/26-boiling-and-steam-audit),
+  for PR 2d-3b) read both: Turbet et al.'s Eq. 3 is stated valid to
+  27 kbar of steam (its structures reach 270 kbar), and their
+  `R_core + z` holds while the steam's base stays well under about
+  1e10 Pa, where MgSiO₃ starts to compress (their Appendix A);
+  Aguichine et al.'s fits cover water shares of 0.1 to 1 at irradiation
+  temperatures of 400 to 1300 K, about 4.3 S⊕ and more round a
+  Sun-like star. Neither covers a water-rich planet near the runaway
+  limit, such as the 4.78 M⊕ body of #492 (12 % water, 5.6e5 bar of
+  steam near 1 S⊕). PR 2d-3b keeps Turbet's equations with their
+  inputs clamped to the fit's grid, the core uncompressed by its steam:
+  a documented departure ([planet
+  atmospheres](planet-atmospheres.md#boiling-and-the-steam-envelope-of-the-rewrite-study-26)).
+  Decided with the user (2026-11-24): only a steam world (a runaway
+  whose steam weighs at least water's critical pressure) gets the
+  envelope and its radius;
+  its steam loss and cosmic shoreline read that radius in one pass, the
+  envelope computed on the water handed to the loss, a deliberate upper
+  bound of the loss.
+  Inside the structures of Turbet's § 2.1 (27 bar to 270 kbar), past
+  § 2.2's 27 kbar, the steam world is larger than its condensed twin
+  (a test on 5 M⊕ with 3 % water at 1 S⊕). The #492 body is outside it
+  and comes out at 1.643 R⊕ against its condensed twin's 1.655 R⊕: only
+  its radius above the dry core (1.454 R⊕) holds (Refs #684).
 - **The envelope is the primordial one.** The loss of gas after the disc
   is the job of the escape pull request (2c), so an old, close-in
   planet's drawn envelope is more than it keeps.
+- **Every drawn planet finishes inside the gas.** The draw gives each
+  planet of 0.1 to 5 $M_\oplus$ the envelope of a core fully grown in
+  the nebula; none finishes after the disc, as Earth did. A drawn Earth
+  at 1 au keeps a mini-Neptune's envelope about one draw in three (an
+  estimate, not run per seed). No sourced probability of late formation
+  exists. Decided with the user (2026-11-25): a departure, no law
+  adopted; what a calibration would rest on is in "Planets that finish
+  after the gas (study 31)" (issue #696).
 - **The core of a light giant is bounded by the tables.** The
   heavy-element mass is cut to the cores the tables cover (0 to 10
   $M_\oplus$ at 20 $M_\oplus$), narrower than Thorngren's fit there.
@@ -1428,7 +1775,7 @@ pull request add these:
 | --- | --- | --- | --- |
 | Radius | Zeng et al. 2016 fit, uniform layers | integrated structure | prototype report |
 | Earth $C/MR^2$ | 0.354 | 0.330 | Williams 1994: 0.3307 |
-| Potassium-40 half-life | 1.248 Gyr | 1.277 Gyr | Dye 2012, Table 2 |
+| Potassium-40 half-life | 1.248 Gyr | 1.2522 Gyr (1.277 until #694) | DDEP 2025 (Mougeot 2025); Dye 2012, Table 2 |
 | Iron share | normal, 0.325 + 0.15 per dex of `[Fe/H]`, σ 0.05 | uniform 0 to 0.8, no slope | Elkins-Tanton & Seager 2008; Plotnykov & Valencia 2020 |
 | Water inside the ice line | log-normal around 0.27 % | log-uniform $10^{-5}$ to $10^{-2}$ | Raymond et al. 2007; Izidoro & Piani 2022 |
 | Water beyond the ice line | uniform 0.2 to 0.5 | uniform 0.1 to 0.67 | Marboeuf et al. 2014; Zeng et al. 2019 |
@@ -1440,7 +1787,7 @@ pull request add these:
 | Envelope thickness | power-law fit, thinned by the water share | Lopez & Fortney tables | Lopez & Fortney 2014 |
 | Giant radius | law through Neptune, Saturn and Jupiter, inflated when hot | Fortney et al. tables, uninflated | Fortney et al. 2007 |
 | Rocky tidal $k_2/Q$ | 0.015 (Io's) | $6 \times 10^{-3}$ | Henning et al. 2009 |
-| Earth radiogenic heat | 20 TW | 20.2 TW from abundances | Dye 2012 |
+| Earth radiogenic heat | 20 TW | 20.3 TW from abundances | Dye 2012; DDEP 2025 for potassium |
 
 **Calibrations of the interior and the heat.** Each is a choice, not a
 measurement; this is what was searched and not found.
@@ -1476,9 +1823,6 @@ measurement; this is what was searched and not found.
   water-rich planets that formed beyond the ice line and migrated in was
   searched: none found (Luque & Pallé 2022 say they exist, with no
   fraction in the main text; heat study, section B7).
-- **Water spread $\sigma_{\ln}$ = 0.5**, derived from Marty's 2700 ±
-  1350 ppm read as one sigma (1350/2700, the small-spread approximation
-  of a log-normal).
 - **Twenty steps per layer.** Fitted on a $10^{-4}$ accuracy goal; ten
   steps give $1.03 \times 10^{-4}$ against a 1280-step reference.
 - **Test tolerances against PREM.** 1 % for the core (the study gives no
@@ -1994,7 +2338,7 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      [doi:10.1086/512120](https://doi.org/10.1086/512120)
      ([arXiv:astro-ph/0612671](https://arxiv.org/abs/astro-ph/0612671),
      v4), and the 25 tables of the author's page, as kept in
-     [GIANTS.md](../../crates/science/data/GIANTS.md).
+     [GIANTS.md](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/data/GIANTS.md).
 104. Hubbard, W. B. 2013, index-one polytrope of Jupiter, *The
      Astrophysical Journal* 768, 43,
      [doi:10.1088/0004-637X/768/1/43](https://doi.org/10.1088/0004-637X/768/1/43),
@@ -2033,22 +2377,187 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      2016 (arXiv:1603.06596), Helled et al. 2011 (arXiv:1010.5546), Lopez &
      Fortney 2014 (arXiv:1311.0329), Mankovich & Fuller 2021
      (arXiv:2104.13385), Turbet et al. 2020 and Aguichine et al. 2021 (steam
-     worlds), Guillot 1999, Unterborn et al. 2015 (arXiv:1505.00280).
+     worlds; entries 118 and 119), Guillot 1999, Unterborn et al. 2015
+     (arXiv:1505.00280).
+116. NASA Space Science Data Coordinated Archive, Jupiter Fact Sheet: mass
+     1,898.13 x 10^24 kg and equatorial radius at 1 bar 71,492 km,
+     <https://nssdc.gsfc.nasa.gov/planetary/factsheet/jupiterfact.html>,
+     read 2026-11-23.
+117. NASA Space Science Data Coordinated Archive, Saturn Fact Sheet: mass
+     568.32 x 10^24 kg and equatorial radius at 1 bar 60,268 km,
+     <https://nssdc.gsfc.nasa.gov/planetary/factsheet/saturnfact.html>,
+     read 2026-11-23.
+118. Turbet, M., Bolmont, E., Ehrenreich, D. et al. 2020, "Revised
+     mass-radius relationships for water-rich rocky planets more
+     irradiated than the runaway greenhouse limit", *A&A* 638, A41,
+     [doi:10.1051/0004-6361/201937151](https://doi.org/10.1051/0004-6361/201937151),
+     [arXiv:1911.08878](https://arxiv.org/abs/1911.08878) (v3 read in
+     full, study 26).
+119. Aguichine, A., Mousis, O., Deleuil, M. & Marcq, E. 2021,
+     "Mass-radius relationships for irradiated ocean planets", *ApJ*
+     914, 84,
+     [doi:10.3847/1538-4357/abfa99](https://doi.org/10.3847/1538-4357/abfa99),
+     [arXiv:2105.01102](https://arxiv.org/abs/2105.01102) (read, study
+     26).
+120. Mougeot, X. 2025, "Decay data evaluation of ⁴⁰K", DDEP, poster at
+     ICRM 2025, HAL cea-05087440 (read): the half-life of potassium-40,
+     1.2522(27) Gyr, and its branches (study 29 of the Wiki, issue #694).
+121. Mougeot, X. et al. 2026, *Metrologia* 63, 019001,
+     [doi:10.1088/1681-7575/ae3733](https://dx.doi.org/10.1088/1681-7575/ae3733),
+     the DDEP evaluation of ⁴⁰K as the LNE-LNHB table publishes it
+     (*Table de Radionucléides*, ⁴⁰K, 2025, read on lnhb.fr, which asks
+     to be cited so; the paper itself was not read): the branches, the
+     mean β⁻ and β⁺ energies, the 1460.851 keV transition and the decay
+     constant 17.541e-18 /s, for potassium's heat per kilogram.
+122. CIAAW, standard atomic weight of potassium, 39.0983(1) (ciaaw.org,
+     read for study 29).
+123. Tiesinga et al. 2021, "CODATA recommended values of the
+     fundamental physical constants: 2018", *Rev. Mod. Phys.* 93,
+     025010: the elementary charge and the electron's mass energy.
+124. Naumenko et al. 2013, *Geochim. Cosmochim. Acta* 122, 353:
+     ⁴⁰K, 0.011668 % of potassium's atoms (as the DDEP evaluation of
+     2025 takes it).
+125. Haisch, K. E., Lada, E. A. & Lada, C. J. 2001, "Disk frequencies and
+     lifetimes in young clusters", *ApJ* 553, L153,
+     [doi:10.1086/320685](https://doi.org/10.1086/320685),
+     [arXiv:astro-ph/0104347](https://arxiv.org/abs/astro-ph/0104347) (read,
+     study 31).
+126. Mamajek, E. E. 2009, "Initial conditions of planet formation: lifetimes
+     of primordial disks", *AIP Conference Proceedings* 1158,
+     [doi:10.1063/1.3215910](https://doi.org/10.1063/1.3215910),
+     [arXiv:0906.5011](https://arxiv.org/abs/0906.5011) (read, study 31).
+127. Fedele, D., van den Ancker, M. E., Henning, Th., Jayawardhana, R. &
+     Oliveira, J. M. 2010, "Timescale of mass accretion in pre-main-sequence
+     stars", *A&A* 510, A72,
+     [doi:10.1051/0004-6361/200912810](https://doi.org/10.1051/0004-6361/200912810),
+     [arXiv:0911.3320](https://arxiv.org/abs/0911.3320) (abstract, study
+     31).
+128. Ribas, Á., Bouy, H. & Merín, B. 2015, "Protoplanetary disk lifetimes vs
+     stellar mass and possible implications for giant planet populations",
+     *A&A* 576, A52,
+     [doi:10.1051/0004-6361/201424846](https://doi.org/10.1051/0004-6361/201424846),
+     [arXiv:1502.00631](https://arxiv.org/abs/1502.00631) (read, study 31).
+129. Pfalzner, S., Dincer, F., van der Marel, N. & Wagner, F. W. 2026, "Disc
+     lifetime distribution as a function of the mass of host star", *ApJ*
+     (accepted), Table 2,
+     [arXiv:2604.25277](https://arxiv.org/abs/2604.25277) (read, study 31).
+130. Kenyon, S. J. & Bromley, B. C. 2006, "Terrestrial planet formation. I.
+     The transition from oligarchic growth to chaotic growth", *AJ* 131,
+     1837, [doi:10.1086/499807](https://doi.org/10.1086/499807),
+     [arXiv:astro-ph/0503568](https://arxiv.org/abs/astro-ph/0503568) (read,
+     study 31).
+131. Kokubo, E. & Genda, H. 2010, "Formation of terrestrial planets from
+     protoplanets under a realistic accretion condition", *ApJL* 714, L21,
+     Table 1,
+     [doi:10.1088/2041-8205/714/1/L21](https://doi.org/10.1088/2041-8205/714/1/L21),
+     [arXiv:1003.4384](https://arxiv.org/abs/1003.4384) (read, study 31).
+132. Raymond, S. N., Scalo, J. & Meadows, V. S. 2007, "A decreased
+     probability of habitable planet formation around low-mass stars",
+     *ApJ* 669, 606, § 3.2 and Fig. 5,
+     [doi:10.1086/521587](https://doi.org/10.1086/521587),
+     [arXiv:0707.1711](https://arxiv.org/abs/0707.1711) (read, study 31).
+133. Raymond, S. N., Kokubo, E., Morbidelli, A., Morishima, R. & Walsh, K.
+     J. 2014, "Terrestrial planet formation at home and abroad", *Protostars
+     and Planets VI*,
+     [doi:10.2458/azu_uapress_9780816531240-ch026](https://doi.org/10.2458/azu_uapress_9780816531240-ch026),
+     [arXiv:1312.1689](https://arxiv.org/abs/1312.1689) (read, study 31;
+     Kleine et al. 2009 and Dauphas & Pourmand 2011 as quoted there).
+134. Jacobson, S. A. et al. 2014, "Highly siderophile elements in Earth's
+     mantle as a clock for the Moon-forming impact", *Nature* 508, 84,
+     [doi:10.1038/nature13172](https://doi.org/10.1038/nature13172),
+     [arXiv:1504.01421](https://arxiv.org/abs/1504.01421) (read, study 31).
+135. Lammer, H. et al. 2020, "Loss and fractionation of noble gas isotopes
+     and moderately volatile elements from planetary embryos and early
+     Venus, Earth and Mars", *Space Science Reviews* 216, 74,
+     [doi:10.1007/s11214-020-00701-x](https://doi.org/10.1007/s11214-020-00701-x),
+     [arXiv:2011.01064](https://arxiv.org/abs/2011.01064) (read, study 31).
+136. Lammer, H., Brasser, R., Johansen, A., Scherf, M. & Leitzinger, M.
+     2021, "Formation of Venus, Earth and Mars: constrained by isotopes",
+     *Space Science Reviews* 217, 7,
+     [doi:10.1007/s11214-020-00778-4](https://doi.org/10.1007/s11214-020-00778-4),
+     [arXiv:2102.06173](https://arxiv.org/abs/2102.06173) (read, study 31).
+137. Lee, E. J. & Connors, N. J. 2021, "Primordial radius gap and
+     potentially broad core mass distributions of super-Earths and
+     sub-Neptunes", *ApJ* 908, 32,
+     [doi:10.3847/1538-4357/abd6c7](https://doi.org/10.3847/1538-4357/abd6c7),
+     [arXiv:2008.01105](https://arxiv.org/abs/2008.01105) (read, study 31).
+138. Owen, J. E. & Wu, Y. 2017, "The evaporation valley in the Kepler
+     planets", *ApJ* 847, 29, § 4.7,
+     [doi:10.3847/1538-4357/aa890a](https://doi.org/10.3847/1538-4357/aa890a),
+     [arXiv:1705.10810](https://arxiv.org/abs/1705.10810) (read, study 31).
+139. Neil, A. R. & Rogers, L. A. 2020, "A joint mass-radius-period
+     distribution of exoplanets", *ApJ* 891, 12, Table 1,
+     [doi:10.3847/1538-4357/ab6a92](https://doi.org/10.3847/1538-4357/ab6a92),
+     [arXiv:1911.03582](https://arxiv.org/abs/1911.03582) (read, study 31).
+140. Izidoro, A., Schlichting, H. E., Isella, A. et al. 2022, "The exoplanet
+     radius valley from gas-driven planet migration and breaking of resonant
+     chains", *ApJL* 939, L19,
+     [doi:10.3847/2041-8213/ac990d](https://doi.org/10.3847/2041-8213/ac990d),
+     [arXiv:2210.05595](https://arxiv.org/abs/2210.05595) (read, study 31).
+141. Cloutier, R. & Menou, K. 2020, "Evolution of the radius valley around
+     low mass stars from Kepler and K2", *AJ* 159, 211, Table 6,
+     [doi:10.3847/1538-3881/ab8237](https://doi.org/10.3847/1538-3881/ab8237),
+     [arXiv:1912.02170](https://arxiv.org/abs/1912.02170) (abstract and §
+     6.2 and Table 6, study 31).
+142. Lammer, H., Leitzinger, M., Scherf, M. et al. 2020b, "Constraining the
+     early evolution of Venus and Earth through atmospheric Ar, Ne isotope
+     and bulk K/U ratios", *Icarus* 339, 113551,
+     [doi:10.1016/j.icarus.2019.113551](https://doi.org/10.1016/j.icarus.2019.113551)
+     (record only, as Lammer et al. 2021 quote it, study 31).
+143. Carr, M. H. & Head, J. W. 2015, "Martian surface/near-surface water
+     inventory: sources, sinks, and changes with time", *Geophysical
+     Research Letters* 42, 726–732,
+     [doi:10.1002/2014GL062464](https://doi.org/10.1002/2014GL062464)
+     (abstract, as study 22 reads it; not reached by study 27).
+144. Mazeh, T., Holczer, T. & Faigler, S. 2016, "Dearth of short-period
+     Neptunian exoplanets", *Astronomy & Astrophysics* 589, A75,
+     [doi:10.1051/0004-6361/201528065](https://doi.org/10.1051/0004-6361/201528065),
+     [arXiv:1602.07843](https://arxiv.org/abs/1602.07843).
+145. Helled, R., Nettelmann, N. & Guillot, T. 2020, "Uranus and Neptune:
+     origin, evolution and internal structure", *Space Science Reviews*
+     216, 38,
+     [doi:10.1007/s11214-020-00660-3](https://doi.org/10.1007/s11214-020-00660-3),
+     [arXiv:1909.04891](https://arxiv.org/abs/1909.04891).
+146. Kuskov, O. L. & Kronrod, V. A. 2005, Europa's share of ice and water,
+     as quoted in "Icy worlds: moons and dwarf planets",
+     [arXiv:2511.18776](https://arxiv.org/abs/2511.18776) (search summary,
+     study 27).
+147. Dawson, R. I. & Johnson, J. A. 2018, "Origins of hot Jupiters",
+     *Annual Review of Astronomy and Astrophysics* 56, 175–221,
+     [doi:10.1146/annurev-astro-081817-051853](https://doi.org/10.1146/annurev-astro-081817-051853),
+     preprint [arXiv:1801.06117](https://arxiv.org/abs/1801.06117).
+148. Wang, H. S., Lineweaver, C. H. & Ireland, T. R. 2018, *Icarus* 299,
+     460,
+     [doi:10.1016/j.icarus.2017.08.024](https://doi.org/10.1016/j.icarus.2017.08.024):
+     Earth's core mass fraction, 0.325, as Plotnykov & Valencia 2020 quote
+     it ("the Earth (cmf = 0.325 Wang et al. (2018))", with their
+     Figure 4; read in arXiv:2010.06480).
+
+Entry 148 was read in Plotnykov & Valencia 2020 (entry 89). The values,
+tables and pages read for entries 143 to 147 are in
+[27-life-and-class-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit)
+and, for Carr & Head 2015,
+[22-surface-water (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/22-surface-water).
+
+The values, tables and pages read for entries 125 to 142 are in
+[31-late-formation-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/31-late-formation-audit),
+which says, for each number, the page it was read on or how it was
+derived.
 
 The values, tables and pages read for entries 99 to 115 are in the
-[draw bounds](../superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md)
+[draw bounds](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md)
 and
-[giants and envelopes](../superpowers/studies/2026-11-21-planet-model-2a/giants-and-envelopes.md)
+[giants and envelopes](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/giants-and-envelopes.md)
 studies, which say, for each number, whether it was read in the paper or
 computed from what was read.
 
 The values, tables and pages read for each source of the integrated
 interior and heat (entries 75 to 98) are in the studies
-([equations of state](../superpowers/studies/2026-11-21-planet-interior/equations-of-state.md),
-[core and dynamo](../superpowers/studies/2026-11-21-planet-interior/core-and-dynamo.md),
-[heat and composition](../superpowers/studies/2026-11-21-planet-interior/heat-and-composition.md))
+([equations of state](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md),
+[core and dynamo](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/core-and-dynamo.md),
+[heat and composition](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/heat-and-composition.md))
 and the
-[prototype report](../superpowers/studies/2026-11-21-planet-interior/prototype-report.md);
+[prototype report](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/prototype-report.md);
 their source tables say how much of each paper was read.
 
 ## See also
@@ -2058,7 +2567,7 @@ their source tables say how much of each paper was read.
 - [Why does a world always show the same face to its
   host?](tidal-locking.md): the system's age, now drawn, sets how far
   locking has gone.
-- [docs/superpowers/specs/2026-11-11-physical-planet-model-design.md](../superpowers/specs/2026-11-11-physical-planet-model-design.md):
+- [docs/superpowers/specs/2026-11-11-physical-planet-model-design.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/specs/2026-11-11-physical-planet-model-design.md):
   the design of the model.
 
 For the atmosphere, climate and XUV history of a planet see

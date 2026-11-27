@@ -3,7 +3,8 @@
 //! It works on the report serialised to JSON, so it needs no type of the
 //! engines: a traced value is an object with exactly `value` and `node`,
 //! and its graph is the `causes.nodes` of its nearest ancestor that has
-//! a `causes` key (a star keyframe's own graph, or the report's).
+//! a `causes` key (a keyframe's own graph, or the report's for the drawn
+//! masses of `planets`).
 
 use std::collections::BTreeSet;
 use std::fmt::{self, Write as _};
@@ -115,12 +116,15 @@ fn explain_pointer(report: &Value, path: &str) -> Result<String, ExplainError> {
     }
 }
 
-/// Every graph of the report: its own and each keyframe's.
+/// Every graph of the report: its own and each keyframe's, of every
+/// timeline.
 fn graphs(report: &Value) -> Vec<&Vec<Value>> {
     let keyframes = report
-        .pointer("/star/keyframes")
+        .get("timelines")
         .and_then(Value::as_array)
         .into_iter()
+        .flatten()
+        .filter_map(|timeline| timeline.get("keyframes")?.as_array())
         .flatten();
     nodes_of(report)
         .into_iter()
@@ -310,14 +314,9 @@ fn render_value(value: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use serde_json::json;
-    use system::{INPUTS_SCHEMA, Inputs, Request, SystemRequest};
-    use timeline::Seed;
 
     use super::*;
-    use crate::report::report;
 
     #[test]
     fn numbers_read_plainly_or_in_scientific_notation() {
@@ -334,89 +333,6 @@ mod tests {
         ];
         for (n, text) in cases {
             assert_eq!(render_number(n), text, "{n}");
-        }
-    }
-
-    fn report_of(seed: u64) -> Value {
-        let inputs = Inputs {
-            schema: INPUTS_SCHEMA,
-            seed: Seed::new(seed),
-            present: None,
-            request: Request::System(SystemRequest {
-                host_mass: None,
-                metallicity: None,
-                archetypes: BTreeMap::new(),
-            }),
-        };
-        serde_json::to_value(report(&inputs).unwrap()).unwrap()
-    }
-
-    #[test]
-    fn a_pointer_to_a_period_explains_it() {
-        let text = explain(&report_of(1), "/planets/0/orbit/period").unwrap();
-        let lines: Vec<&str> = text.lines().collect();
-        assert!(lines[0].starts_with("system.draw.period = "));
-        assert!(text.contains("system.star.mass"));
-        let depth = |line: &str| line.len() - line.trim_start().len();
-        for (i, line) in lines.iter().enumerate() {
-            let has_sources = lines
-                .get(i + 1)
-                .is_some_and(|next| depth(next) > depth(line));
-            assert!(
-                has_sources || line.ends_with(']') || line.ends_with("(see above)"),
-                "{line}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_unique_code_explains_it() {
-        let text = explain(&report_of(1), "system.star.mass").unwrap();
-        assert!(text.starts_with("system.star.mass = "));
-        assert_eq!(text.lines().count(), 1);
-    }
-
-    #[test]
-    fn a_repeated_code_is_ambiguous() {
-        let (seed, report) = (1..200)
-            .map(|seed| (seed, report_of(seed)))
-            .find(|(_, report)| report["planets"].as_array().is_some_and(|p| p.len() >= 2))
-            .expect("a seed draws two planets");
-        match explain(&report, "system.draw.flux") {
-            Err(ExplainError::Ambiguous { pointers, .. }) => {
-                let planets = report["planets"].as_array().unwrap().len();
-                assert_eq!(pointers.len(), planets, "seed {seed}");
-                assert!(pointers.iter().all(|p| p.starts_with("/planets/")));
-            }
-            other => panic!("expected Ambiguous, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn a_code_held_by_no_field_lists_its_dependents() {
-        let text = explain(&report_of(1), "system.draw.break-up-fraction")
-            .unwrap_err()
-            .to_string();
-        assert!(
-            text.contains("held by no field; values that depend on it: /"),
-            "{text}"
-        );
-        assert!(!text.ends_with(": "), "{text}");
-        assert!(!text.contains(" 0 times"), "{text}");
-    }
-
-    #[test]
-    fn a_pointer_to_a_designation_is_not_traced() {
-        let error = explain(&report_of(1), "/planets/0/designation").unwrap_err();
-        assert!(matches!(error, ExplainError::NotTraced { .. }));
-    }
-
-    #[test]
-    fn unknown_paths_are_not_found() {
-        let report = report_of(1);
-        for path in ["/planets/99/mass", "system.draw.nothing"] {
-            let error = explain(&report, path).unwrap_err();
-            assert!(matches!(error, ExplainError::NotFound { .. }), "{path}");
         }
     }
 

@@ -1,0 +1,11 @@
+[package]
+name = "stellar-spectra"
+description = "Offline builder of the science crate's table of stellar spectra on the shortwave's bands"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true

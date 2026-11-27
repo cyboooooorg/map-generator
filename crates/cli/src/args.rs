@@ -112,13 +112,6 @@ pub fn parse_archetype(text: &str) -> Result<(ArchetypeId, u32), String> {
 /// The options every command shares: where the store lives and how large
 /// its cache may grow.
 #[derive(clap::Args, Debug)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "flattened into Cli by the world command, pull request B"
-    )
-)]
 pub struct GlobalArgs {
     /// The store's root directory.
     #[arg(long, global = true, default_value = "map-generator-store")]
@@ -138,7 +131,6 @@ pub struct GlobalArgs {
 
 impl GlobalArgs {
     /// The filesystem store these options describe.
-    #[expect(dead_code, reason = "called by the world command, pull request B")]
     pub fn store(&self) -> FsStore {
         FsStore::new(self.root.clone(), self.cache_budget)
     }
@@ -146,13 +138,6 @@ impl GlobalArgs {
 
 /// Parses a size: a whole number of bytes with an optional IEC suffix
 /// (`KiB`, `MiB`, `GiB`, `TiB`). SI suffixes are refused, not guessed.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "used through GlobalArgs, flattened by pull request B"
-    )
-)]
 pub fn parse_size(text: &str) -> Result<u64, String> {
     let digits_end = text
         .find(|c: char| !c.is_ascii_digit())

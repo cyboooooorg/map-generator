@@ -27,18 +27,18 @@ $T$, molecules of mass $m$ move at a typical thermal speed $u$, with
 Boltzmann's constant $k$ and the gravitational constant $G$ (Gronoff et al.
 2020, eq. 1):
 
-```math
+$$
 v_\text{esc} = \sqrt{\frac{2 G M}{r}},
 \qquad
 u = \sqrt{\frac{2 k T}{m}}
-```
+$$
 
 Their ratio, squared, is the Jeans parameter: the gravitational energy of a
 molecule over its thermal energy (Gronoff et al. 2020):
 
-```math
+$$
 \lambda = \frac{G M m}{r\,k T} = \frac{v_\text{esc}^2}{u^2}
-```
+$$
 
 **In words.** The larger $\lambda$, the more tightly the gas is bound. It
 grows with the world's mass and with the molecule's mass, and falls with the
@@ -59,9 +59,9 @@ in the tail of their distribution of speeds, are fast enough to leave. The
 flux that escapes, for a density $N$ of molecules at the exobase, is
 (Gronoff et al. 2020, eq. 5):
 
-```math
+$$
 \Phi = N\,\frac{u}{2\sqrt{\pi}}\,(1 + \lambda)\,e^{-\lambda}
-```
+$$
 
 **In words.** Escape falls off exponentially with $\lambda$. A light gas
 on a warm, small world leaks steadily; a heavy gas on a large, cold one
@@ -94,9 +94,9 @@ starlight they get, the insolation $I$, and by their escape velocity. Those
 with atmospheres and those without "are neatly divided". "The dividing line
 goes as":
 
-```math
+$$
 I \propto v_\text{esc}^4
-```
+$$
 
 **In words.** A world four times closer to its star gets 16 times the light
 and needs twice the escape velocity to keep its air. Exoplanets with known
@@ -159,11 +159,11 @@ back the heat the ground radiates warms the surface to $T_s$ above it. The
 share of the surface's heat it holds back measures the greenhouse effect
 (Méndez & Rivera-Valentín 2017, eq. 5):
 
-```math
+$$
 T_\text{eq} = \left(\frac{(1 - A)\,F}{4\sigma}\right)^{1/4},
 \qquad
 g = 1 - \left(\frac{T_\text{eq}}{T_s}\right)^4
-```
+$$
 
 **In words.** $g = 0$ is no greenhouse at all; $g$ close to 1 means
 almost all the heat the ground radiates is caught on its way out.
@@ -298,7 +298,7 @@ let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
 In the viewer, the halo's thickness and its optical depth grow with the
 pressure: `0.03 + 0.02 log10(1 + p)` of the radius, and a gas depth that
 goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
-([`sky.ts`](../../web/src/lib/sky.ts)).
+([`sky.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/sky.ts)).
 
 The haze's own depth at the zenith is twice its density (0 to 1) up to
 0.5, the density of every look but one: Earth's 0.1, Venus's 0.3, a
@@ -348,6 +348,13 @@ Titan's lakes and seas are the darkest surfaces of its radar and
 near-infrared maps (Stofan et al. 2007 [22]; Brown et al. 2008 [23]).
 Their near-black brown is a calibration with those maps as its target.
 
+This section and the next describe the app before the rewrite. The
+rewrite computes the air from the planet instead: its envelope's
+escape, the gases its mantle outgasses, what the cosmic shoreline keeps
+and the SO₂ that water washes out (`system::planet`, laws in
+`science::escape` and `science::outgassing`); see [Planet atmospheres,
+climate and surface](planet-atmospheres.md#atmosphere).
+
 ### Where it departs from the science
 
 - **The pressure does not follow from the world.** The app draws it from
@@ -383,7 +390,7 @@ Their near-black brown is a calibration with those maps as its target.
   asymmetry of Titan's lakes (Aharonson et al. 2009 [14]). The edge of the
   band is a straight line of latitude.
 - **Nitrogen and ethane keep methane liquid, by a simple rule.** Pure
-  methane freezes at 90.67 K, but a sea under a nitrogen air is a
+  methane freezes at 90.6941 K (`volatiles::METHANE_TRIPLE_TEMPERATURE`; legacy had 90.67 K), but a sea under a nitrogen air is a
   mixture: N₂ dissolves in liquid methane, methane's photolysis makes
   ethane, and the mixture freezes lower. Thompson, Zollweg & Gabis 1992
   [15] find that methane condensing under Titan's air holds 16 to 30 %
@@ -391,15 +398,15 @@ Their near-black brown is a calibration with those maps as its target.
   Leachman 2019 [16] measured two liquids freezing at 71.5 K (61.0 %
   methane, 25.6 % ethane, 13.4 % N₂) and 74.0 K (46.9 %, 45.3 %, 7.9 %),
   more than 15 K below the pure ices (compositions read in their NASA
-  manuscript, NTRS 20180008677). The app (`methane_freezes_k`,
-  `hydrocarbon_freezes_k`, issue #530) takes the N₂ in the sea as half of
+  manuscript, NTRS 20180008677). The app (`surface::methane_freezes`,
+  `surface::hydrocarbon_freezes`, issue #530) takes the N₂ in the sea as half of
   Raoult's law at the surface's N₂ partial pressure and methane's triple
   point (nitrogen's vapour pressure from NIST's Antoine fit), at most
   30 %, its methane as the half the climate's air keeps over it
   (`SEA_METHANE_SHARE`), and the rest as ethane; the sea freezes at the
   higher of two liquidus: ethane's, an ideal solution's (the
   Schröder–van Laar equation, with ethane's triple point, 90.4 K
-  (`ETHANE_TRIPLE_K`), and the 2.79 kJ/mol (`ETHANE_FUSION_L_OVER_R`)
+  (`volatiles::ETHANE_TRIPLE_TEMPERATURE`), and the 2.79 kJ/mol (`ETHANE_FUSION_ENTHALPY`)
   Domalski & Hearing give for melting the solid below its
   plastic phase, through NIST), and methane's, a regular solution's
   (methane's enthalpy of fusion, 0.939 kJ/mol, and an interaction
@@ -411,12 +418,12 @@ Their near-black brown is a calibration with those maps as its target.
   of the sea's fixed half of methane: the nitrogen dissolved in the sea
   takes the place of ethane, not of methane, so it lowers the freezing
   point only by diluting the ethane, until the ethane liquidus falls
-  under methane's (from about 2 bar of N₂). It is a simple fit, not the full phase
+  under methane's (from about 1.6 bar of N₂). It is a simple fit, not the full phase
   diagram: it does not resolve the solid solutions or the ternary
   eutectic, and the sea's composition is fixed, not tracked. Where nitrogen
   itself condenses (below about 84 K under 2 bar of it), the sea is
   nitrogen-rich and stays liquid down to nitrogen's triple point,
-  63.14 K (`sea_freezes_k`, issue #524); nitrogen condensed with no
+  63.14 K (`surface::sea_freezes`, issue #524); nitrogen condensed with no
   methane is a sea of its own (`nitrogen`), and below its triple point
   a frost. Liquid methane
   is stable under any air above its triple-point pressure (0.1169 bar,

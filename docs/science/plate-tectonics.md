@@ -34,9 +34,9 @@ New sea floor is hot and stands high; it cools, contracts and sinks as it
 moves away from the ridge. Parsons & Sclater (1977) fit its depth $d$ (in
 metres) against its age $t$ (in Ma):
 
-```math
+$$
 d(t) = 2500 + 350\,\sqrt{t} \qquad (0 \le t \le 70\ \text{Ma})
-```
+$$
 
 and for older floor a depth that levels off towards 6 400 m.
 
@@ -62,9 +62,9 @@ that fails by friction ("Byerlee's law"). In its simplest form, rock of
 density $\rho$ under a gravity $g$, with a friction coefficient $\mu$,
 breaks at a stress growing with depth $z$:
 
-```math
+$$
 \tau_y = \mu\,\rho\,g\,z
-```
+$$
 
 **In words.** The deeper, the more the rock is pressed together and the
 harder it is to break. "When the yield stress is high, convection is
@@ -226,7 +226,7 @@ id that names it (`terran-past250ma-42`).
 On a planet whose timeline regime is plates, the rewrite lays the
 legacy plate map (below) onto `world::Grid`, the same cube layout, for
 the present only (no drift yet). Its numbers come from the [relief
-study](../superpowers/studies/2026-11-22-relief/plates.md); the laws live
+study](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-22-relief/plates.md); the laws live
 in `science::relief`, the pass in `world::relief`.
 
 1. **Plates.** 8 to 14 plates, Morra et al.'s 8 large plates to Bird's
@@ -285,6 +285,17 @@ The boundary relief is scaled by gravity like the mountains (see [Why
 are mountains lower on heavier
 planets?](mountains-and-gravity.md#the-rewrite-worldrelief)); the ridges
 are not.
+
+#### The rewrite: the regime
+
+The timeline's regime comes from `system::planet::regime`, a port of the
+legacy rule with its calibrations in `science::tectonics`: a heat pipe
+above 1 W/m² of internal heat (`HEAT_PIPE_ONSET_FLUX`, the regime's
+onset), a stagnant lid below
+0.3 Earth masses (`PLATES_MIN_MASS`), plates when the planet kept its
+water and did not run away, episodic otherwise. Why each threshold, and
+what was searched: [Planet atmospheres, climate and
+surface](planet-atmospheres.md#runaway-greenhouse-water-kept-and-tectonic-regime).
 
 #### The legacy generator (`legacy-final`)
 
@@ -406,7 +417,7 @@ and 0 for the other regimes and without liquid water.
 #### The rewrite
 
 Calibrations, each with what was searched in the [relief
-study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list):
+study](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-22-relief/README.md#final-calibration-list):
 
 - **Plate sizes.** `PLATE_WEIGHT` (0.35), the spread of the plate centres,
   is not fitted yet: the legacy's value is kept, and the 0.25 exponent
@@ -605,7 +616,7 @@ study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list
     *Reviews of Geophysics* 24, 217–284,
     [doi:10.1029/RG024i002p00217](https://doi.org/10.1029/RG024i002p00217).
 34. Relief study of the rewrite, 2026-11-22:
-    [plates and boundary relief](../superpowers/studies/2026-11-22-relief/plates.md),
+    [plates and boundary relief](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-22-relief/plates.md),
     with every value's source and the calibration list.
 
 ## See also
@@ -618,6 +629,6 @@ study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list
   shows on worlds without plates.
 - [Why are mountains lower on heavier planets?](mountains-and-gravity.md):
   the gravity scaling of the boundary relief.
-- The README's [Elevation](../../README.md#elevation--continents-coasts-and-mountains)
+- The README's [Elevation](https://github.com/cyboooooorg/map-generator/blob/main/README.md#elevation--continents-coasts-and-mountains)
   section and the `[geology]` table of its [planet
-  presets](../../README.md#planet-presets).
+  presets](https://github.com/cyboooooorg/map-generator/blob/main/README.md#planet-presets).

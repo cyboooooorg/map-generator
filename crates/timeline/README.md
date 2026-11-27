@@ -20,8 +20,17 @@ the kind of the central object.
   since the star's birth in J/m²; `band_total` sums them).
 - `StarState`, `PlanetState` (and their parts: `Orbit`, `Spin`, `Bulk`,
   `Composition`, `Heat`, `Surface`, `Atmosphere`, `GlobalClimate`,
-  `SurfaceLiquid`, `Terrain`, `Life`): the state of a body at a date.
-  A giant has no `Surface`.
+  `SurfaceLiquid`, `Terrain`, `Biosphere`): the state of a body at a date.
+  `Biosphere` is the air life has made, from `Lifeless` (none) through
+  `Anoxic` (the air it found) and `Oxidising` (methane gone) to `Modern`
+  (oxygen); it is a `Traced` leaf of `Surface`, drawn by the planet model,
+  never by the world.
+  A giant has no `Surface`. An `Atmosphere` holds its surface pressure and
+  a weight per `Gas` (N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar; the gas's mass
+  times the gravity over the planet's area, in bar, in the field
+  `partial`), whose sum is the surface pressure. A gas's partial pressure
+  depends on the whole air: a reader converts it
+  (`science::radiation::gases::Weights::partial_pressures`, issue #749).
 - `InteriorProfile`: layers with their stored mass, and radial samples.
 - `Keyframe`: a date, a `BodyState` and the cause graph of its fields.
 - `Timeline`: the keyframes of one body, with its seed, the

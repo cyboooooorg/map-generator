@@ -1,5 +1,5 @@
 //! The primordial spin of a planet: rotation period and obliquity, drawn
-//! from the body's own `spin` stream. This is the birth value: tidal
+//! from the `spin` stream of the planet's trial seed. This is the birth value: tidal
 //! despinning and Cassini states are a later step (#604).
 
 use crate::SystemError;
@@ -44,7 +44,7 @@ const GIANT_FRACTION_RANGE: (f64, f64) = (0.07, 0.40);
 /// spin); every other class takes the rocky law. Ice giants share it for
 /// want of a sourced primordial spin (Uranus 0.17 and Neptune 0.16 lie
 /// inside the range, derived).
-fn is_giant(class: PlanetClass) -> bool {
+pub fn is_giant(class: PlanetClass) -> bool {
     matches!(
         class,
         PlanetClass::GasGiant | PlanetClass::HotJupiter | PlanetClass::IceGiant
@@ -62,7 +62,7 @@ fn isotropic_obliquity(u: f64) -> Degree {
 /// The primordial spin of a planet of mass `mass` and radius `radius`
 /// (the trial's own, which the traced mass cannot give).
 ///
-/// Drawn from `body_seed.derive("spin")`: a rocky planet takes one
+/// Drawn from `seed.derive("spin")`: a rocky planet takes one
 /// 3-vector spin (its length gives the period, its angle to the orbit
 /// normal the obliquity); a giant takes the obliquity then the rate
 /// fraction. The rate as a fraction of break-up is the drawn leaf
@@ -81,10 +81,10 @@ pub(crate) fn spin(
     mass: &Traced<EarthMass>,
     radius: EarthRadius,
     archetype: Option<&ArchetypePlacement>,
-    body_seed: Seed,
+    seed: Seed,
     trace: &mut Trace,
 ) -> Result<Spin, SystemError> {
-    let mut rng = ChaCha8Rng::seed_from_u64(body_seed.derive("spin").get());
+    let mut rng = ChaCha8Rng::seed_from_u64(seed.derive("spin").get());
     let gm = EARTH_MASS_PARAMETER * mass.value().0;
     let radius_metres = EARTH_EQUATORIAL_RADIUS.0 * radius.0;
     // The break-up angular rate, `sqrt(GM / R^3)`: a giant's `v_break / R`.
@@ -94,26 +94,28 @@ pub(crate) fn spin(
         let fraction = log_uniform(&mut rng, GIANT_FRACTION_RANGE.0, GIANT_FRACTION_RANGE.1);
         (fraction, obliquity)
     } else {
-        let sigma = ROCKY_SIGMA_OVER_CRITICAL * critical;
+        // The vector is drawn in units of `omega_cr`, so that neither the
+        // mass nor the radius touches the draw: the obliquity is a
+        // function of the seed alone, the same for every non-giant class.
         let mut vector = [0.0_f64; 3];
         for _ in 0..ROCKY_MAX_DRAWS {
             vector = [
-                sigma * normal(&mut rng),
-                sigma * normal(&mut rng),
-                sigma * normal(&mut rng),
+                ROCKY_SIGMA_OVER_CRITICAL * normal(&mut rng),
+                ROCKY_SIGMA_OVER_CRITICAL * normal(&mut rng),
+                ROCKY_SIGMA_OVER_CRITICAL * normal(&mut rng),
             ];
-            if length(vector) < critical {
+            if length(vector) < 1.0 {
                 break;
             }
         }
         let rate = length(vector);
-        if rate >= critical {
-            let scale = ROCKY_FALLBACK_FRACTION * critical / rate;
+        if rate >= 1.0 {
+            let scale = ROCKY_FALLBACK_FRACTION / rate;
             vector = vector.map(|component| component * scale);
         }
         let rate = length(vector);
         let obliquity = Degree((vector[2] / rate).clamp(-1.0, 1.0).acos().to_degrees());
-        (rate / critical, obliquity)
+        (rate, obliquity)
     };
     let fraction = Fraction::new(fraction).ok_or_else(|| {
         SystemError::Contract(ContractError::NotFinite {
@@ -193,6 +195,45 @@ mod tests {
             EARTH_EQUATORIAL_RADIUS.0 * radius,
         );
         std::f64::consts::TAU * (r.powi(power) / gm).sqrt() / DAY.0
+    }
+
+    #[test]
+    fn the_rocky_obliquity_depends_only_on_the_seed() {
+        let classes = [
+            PlanetClass::Rocky,
+            PlanetClass::SuperEarth,
+            PlanetClass::OceanWorld,
+            PlanetClass::SteamWorld,
+            PlanetClass::MiniNeptune,
+        ];
+        let obliquity = |class, mass: f64, radius: f64, seed: u64| {
+            let mut trace = Trace::new();
+            let mass = trace
+                .leaf(Code::of("test.mass"), EarthMass(mass), Provenance::Input)
+                .unwrap();
+            spin(
+                class,
+                &mass,
+                EarthRadius(radius),
+                None,
+                Seed::new(seed),
+                &mut trace,
+            )
+            .unwrap()
+            .obliquity
+            .value()
+            .0
+        };
+        for seed in 0..200 {
+            let reference = obliquity(PlanetClass::Rocky, 1.0, 1.0, seed);
+            for class in classes {
+                for mass in [0.1, 1.0, 5.0] {
+                    for radius in [0.5, 1.0, 1.643, 2.5] {
+                        assert_eq!(obliquity(class, mass, radius, seed), reference);
+                    }
+                }
+            }
+        }
     }
 
     #[test]

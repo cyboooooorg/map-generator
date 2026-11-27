@@ -68,7 +68,11 @@ Claude and every agent:
    Its doc comment starts with `Source:` (the citation), `Calibration:`
    or `Definition:` (an exact definition or a unit conversion). A tier-1
    test fails otherwise.
-4. `branch-reviewer` flags any new number that is neither sourced nor
+4. **Every page of `docs/science/` lists its references** under a
+   non-empty `## Sources` heading. A tier-1 test fails otherwise; the
+   pages exempted for now are listed, with why, in
+   `tools/guardrails/src/science_pages.rs`.
+5. `branch-reviewer` flags any new number that is neither sourced nor
    calibrated, in the engines too.
 
 ## Tests
@@ -82,10 +86,16 @@ Three tiers with budgets (the user's to change), split by
 | 2. Regression | Shared reference systems, contracts, determinism | `crates/regression` | 8 min |
 | 3. Heavy | 15 km worlds, oracle, censuses, profiles | `#[ignore = "heavy: …"]` | None |
 
+The budgets are measured locally. CI's runners vary by about 2×, so the
+CI job gives tier 1 3 min (`TIER1_BUDGET` in `.github/workflows/ci.yml`).
+
 - `mise run ci` runs what the pipeline runs (format, clippy, tiers 1 and
-  2 with their budgets, markdownlint): run it before every pull request.
+  2 with their budgets, markdownlint, `docs:check`): run it before every
+  pull request.
   `mise run web:check` covers the front-end; never run it in a worktree
   (no `npm ci` there on this machine).
+- A change to a law drawn by a figure regenerates it with
+  `mise run docs:figures`: CI fails on a stale figure.
 - No test generates a system or a world of its own outside tier 3:
   tier-2 tests assert on the shared reference systems.
 - Expected values come from sources, not from the code. A test that pins
@@ -128,6 +138,24 @@ the pull requests being tried, rebuilt from `main` at every cycle.
    git fetch origin
    git push --force-with-lease origin origin/main:develop
    ```
+
+Before opening a pull request, at the end of the branch:
+
+1. Run `mise run ci`.
+2. Run the end-of-branch agents in parallel, each given the branch and
+   its spec or plan, not your conclusions:
+   - `branch-reviewer`, always;
+   - `test-reviewer`, when the branch adds or changes tests;
+   - `science-coherence-checker`, when the branch touches
+     `crates/science`, a law in an engine, `docs/science/` or a Wiki
+     study;
+   - `issue-auditor`, always, last, given the other reports and the
+     draft PR text too.
+3. Fix the findings on the branch, then re-run `mise run ci` (not a new
+   review, unless a fix changes the design). File the issues the audit
+   found missing (`issue-writer`), post its comments, put its closing
+   keywords in the PR text.
+4. Then open the pull request (`pr-shepherd`).
 
 Rules that follow from it:
 
@@ -202,6 +230,8 @@ agents:
 | `branch-syncer` | Merge `main` into open branches and run `mise run ci` | sonnet, medium |
 | `branch-reviewer` | Review a whole branch before its PR (read-only) | opus, high |
 | `test-reviewer` | Check a branch's tests: tiers, duplicates, sources, budgets | sonnet, medium |
+| `science-coherence-checker` | Check code, `docs/science` and Wiki agree before a PR | opus, high |
+| `issue-auditor` | Check no issue was forgotten before a PR (read-only) | sonnet, medium |
 | `develop-rebuilder` | Rebuild `develop` from `main` with the listed PRs | sonnet, low |
 | `generation-profiler` | Time and profile generation before and after | sonnet, medium |
 | `world-coherence-checker` | The oracle: legacy against new, by distributions | sonnet, medium |
@@ -253,8 +283,8 @@ otherwise):
 - implementers run on sonnet; opus only for a task the plan marks as hard
   (physics, formats, concurrency) or for `science-fixer`;
 - no review subagent after each task: the implementer runs `mise run ci`,
-  and `branch-reviewer` and `test-reviewer` review the whole branch once,
-  before the PR;
+  and the end-of-branch agents (Branches and pull requests) review the
+  whole branch once, before the PR;
 - after a fix following that review, re-run `mise run ci`, not a new full
   review, unless the fix changes the design;
 - recon goes to `codebase-mapper`, never to `Explore` or `general-purpose`.

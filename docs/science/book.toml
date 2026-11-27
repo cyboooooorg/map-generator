@@ -1,0 +1,21 @@
+[book]
+title = "The science behind map-generator"
+description = "One article per question a reader asks while looking at the app: the science, the equations, and how the app computes it."
+language = "en"
+src = "."
+
+[build]
+build-dir = "../../target/book"
+
+[output.html]
+site-url = "/map-generator/"
+git-repository-url = "https://github.com/cyboooooorg/map-generator"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[preprocessor.katex]
+# Makes KaTeX report a formula it cannot parse. The build still succeeds:
+# the grep in `mise run docs:build` is what fails on the logged error.
+throw-on-error = true
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"

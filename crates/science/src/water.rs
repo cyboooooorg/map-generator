@@ -1,13 +1,16 @@
 //! Water below 2.2 GPa: liquid water (IAPWS-95), ice Ih (Feistel and Wagner
-//! 2006), the melting curves of ices Ih and VI (IAPWS 2011) and the ice
-//! VI / ice VII boundary (AQUA, Haldemann et al. 2020).
+//! 2006), the melting curves of ices Ih, III, V and VI (IAPWS 2011), the
+//! melting temperature of the ice stable at a pressure
+//! ([`melting_temperature`]) and the ice VI / ice VII boundary (AQUA,
+//! Haldemann et al. 2020). Ice VII's melting curve (IAPWS R14-08 eq. 5) is
+//! not ported: above 2216 MPa the melting temperature is held at 355 K.
 //!
 //! The materials built from these laws are in [`crate::eos`]. Values and
 //! their check tables are in the study
 //! `docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md`,
 //! section 2.7.
 
-use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR};
+use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STANDARD_ATMOSPHERE};
 use crate::units::{Kelvin, KilogramPerCubicMetre, Pascal};
 
 /// Source: ice Ih - ice III - liquid triple point, 251.165 K (IAPWS
@@ -17,6 +20,9 @@ pub const IH_III_LIQUID_TEMPERATURE: Kelvin = Kelvin(251.165);
 /// IAPWS to join its melting curves of ices Ih and III (IAPWS R14-08(2011),
 /// Table 1).
 pub const IH_III_LIQUID_PRESSURE: Pascal = Pascal(208.566e6);
+/// Source: ice III - ice V - liquid triple point, 256.164 K (IAPWS
+/// R14-08(2011), Table 1).
+pub const III_V_LIQUID_TEMPERATURE: Kelvin = Kelvin(256.164);
 /// Source: ice III - ice V - liquid triple point, 350.1 MPa (IAPWS
 /// R14-08(2011), Table 1).
 pub const III_V_LIQUID_PRESSURE: Pascal = Pascal(350.1e6);
@@ -511,10 +517,6 @@ pub fn liquid_pressure(t: Kelvin, rho: KilogramPerCubicMetre) -> Pascal {
 
 // ------------------------------------------------------------------ ice Ih
 
-/// Source: normal pressure p0 = 101 325 Pa, the reference of the pressure
-/// polynomials (IAPWS R10-06(2009), Table 1).
-const NORMAL_PRESSURE: f64 = 101_325.0;
-
 /// Source: `g01` to `g04`, J/kg, the pressure coefficients of `g0(p)`
 /// (IAPWS R10-06(2009), Table 2); `g00` drops out of the density.
 const G0: [f64; 4] = [
@@ -609,7 +611,7 @@ impl Complex {
 pub fn ice_ih_density(t: Kelvin, p: Pascal) -> KilogramPerCubicMetre {
     let pt = TRIPLE_POINT_PRESSURE.0;
     let tau = Complex::real(t.0 / TRIPLE_POINT_TEMPERATURE.0);
-    let excess = (p.0 - NORMAL_PRESSURE) / pt;
+    let excess = (p.0 - STANDARD_ATMOSPHERE.0) / pt;
     // g0_p = sum over k = 1..4 of k g0k / pt (pi - pi0)^(k - 1).
     let (mut g0_p, mut order, mut power) = (0.0, 1.0, 1.0);
     for coefficient in G0 {
@@ -636,12 +638,86 @@ const IH_MELTING_A: [f64; 3] = [0.119_539_337e7, 0.808_183_159e5, 0.333_826_860e
 /// Source: exponents `b1, b2, b3` of the melting pressure of ice Ih (IAPWS
 /// R14-08(2011), eq. 1).
 const IH_MELTING_B: [f64; 3] = [3.0, 25.75, 103.75];
+/// Source: coefficient 0.299948 of the melting pressure of ice III
+/// (IAPWS R14-08(2011), eq. 2).
+const III_MELTING_A: f64 = 0.299_948;
+/// Source: exponent 60 of the melting pressure of ice III (IAPWS
+/// R14-08(2011), eq. 2).
+const III_MELTING_B: f64 = 60.0;
+/// Source: coefficient 1.18721 of the melting pressure of ice V (IAPWS
+/// R14-08(2011), eq. 3).
+const V_MELTING_A: f64 = 1.187_21;
+/// Source: exponent 8 of the melting pressure of ice V (IAPWS
+/// R14-08(2011), eq. 3).
+const V_MELTING_B: f64 = 8.0;
 /// Source: coefficient 1.07476 of the melting pressure of ice VI (IAPWS
 /// R14-08(2011), eq. 4).
 const VI_MELTING_A: f64 = 1.074_76;
 /// Source: exponent 4.6 of the melting pressure of ice VI (IAPWS
 /// R14-08(2011), eq. 4).
 const VI_MELTING_B: f64 = 4.6;
+
+/// Melting pressure of ice III, `pi = 1 - 0.299948 (1 - theta^60)` with
+/// `theta = T / 251.165 K`, `pi = p / 208.566 MPa` (IAPWS R14-08(2011),
+/// eq. 2), valid from 251.165 K to 256.164 K.
+pub fn ice_iii_melting_pressure(t: Kelvin) -> Pascal {
+    let theta = t.0 / IH_III_LIQUID_TEMPERATURE.0;
+    Pascal(IH_III_LIQUID_PRESSURE.0 * (1.0 - III_MELTING_A * (1.0 - theta.powf(III_MELTING_B))))
+}
+
+/// Melting pressure of ice V, `pi = 1 - 1.18721 (1 - theta^8)` with
+/// `theta = T / 256.164 K`, `pi = p / 350.1 MPa` (IAPWS R14-08(2011),
+/// eq. 3), valid from 256.164 K to 273.31 K.
+pub fn ice_v_melting_pressure(t: Kelvin) -> Pascal {
+    let theta = t.0 / III_V_LIQUID_TEMPERATURE.0;
+    Pascal(III_V_LIQUID_PRESSURE.0 * (1.0 - V_MELTING_A * (1.0 - theta.powf(V_MELTING_B))))
+}
+
+/// Inverts `pi = 1 - a (1 - theta^b)` for `T = theta T*`.
+fn invert_melting(p: Pascal, a: f64, b: f64, t_star: Kelvin, p_star: Pascal) -> Kelvin {
+    let pi = p.0 / p_star.0;
+    Kelvin(t_star.0 * (1.0 - (1.0 - pi) / a).powf(1.0 / b))
+}
+
+/// Melting temperature of the ice stable in equilibrium with the liquid
+/// at pressure `p`: ice Ih up to 208.566 MPa, III up to 350.1 MPa, V up
+/// to 632.4 MPa, VI up to 2216 MPa (IAPWS R14-08(2011), Table 1 and eqs.
+/// 1 to 4, III to VI inverted in closed form).
+///
+/// Limit: ice VII (eq. 5) is not ported, a choice; above 2216 MPa the
+/// temperature is held at the ice VI - ice VII - liquid triple point,
+/// 355 K.
+pub fn melting_temperature(p: Pascal) -> Kelvin {
+    if p.0 <= IH_III_LIQUID_PRESSURE.0 {
+        ice_ih_melting_temperature(p)
+    } else if p.0 <= III_V_LIQUID_PRESSURE.0 {
+        invert_melting(
+            p,
+            III_MELTING_A,
+            III_MELTING_B,
+            IH_III_LIQUID_TEMPERATURE,
+            IH_III_LIQUID_PRESSURE,
+        )
+    } else if p.0 <= V_VI_LIQUID_PRESSURE.0 {
+        invert_melting(
+            p,
+            V_MELTING_A,
+            V_MELTING_B,
+            III_V_LIQUID_TEMPERATURE,
+            III_V_LIQUID_PRESSURE,
+        )
+    } else if p.0 <= VI_VII_LIQUID_PRESSURE.0 {
+        invert_melting(
+            p,
+            VI_MELTING_A,
+            VI_MELTING_B,
+            V_VI_LIQUID_TEMPERATURE,
+            V_VI_LIQUID_PRESSURE,
+        )
+    } else {
+        VI_VII_LIQUID_TEMPERATURE
+    }
+}
 
 /// Melting pressure of ice Ih, `pi = 1 + sum a_i (1 - theta^b_i)` with
 /// `theta = T / 273.16 K`, `pi = p / 611.657 Pa` (IAPWS R14-08(2011),
@@ -798,6 +874,30 @@ pub fn saturation_pressure(t: Kelvin) -> Pascal {
     Pascal(saturation_pa(t.0))
 }
 
+/// Boiling temperature of water at pressure `p`: the inverse of
+/// [`saturation_pressure`] by bisection on the triple point to the critical
+/// point (the same IAPWS curve, no second one). `None` under the
+/// triple-point pressure, where water does not boil; the critical
+/// temperature at and above the critical pressure.
+pub fn boiling_temperature(p: Pascal) -> Option<Kelvin> {
+    if p.0 < TRIPLE_POINT_PRESSURE.0 {
+        return None;
+    }
+    if p.0 >= CRITICAL_PRESSURE.0 {
+        return Some(CRITICAL_POINT_TEMPERATURE);
+    }
+    let (mut cold, mut warm) = (TRIPLE_POINT_TEMPERATURE.0, CRITICAL_POINT_TEMPERATURE.0);
+    for _ in 0..BISECTIONS {
+        let mid = 0.5 * (cold + warm);
+        if saturation_pressure(Kelvin(mid)).0 < p.0 {
+            cold = mid;
+        } else {
+            warm = mid;
+        }
+    }
+    Some(Kelvin(0.5 * (cold + warm)))
+}
+
 /// Sublimation pressure of ice Ih at `t` (Wagner et al. 2011, IAPWS
 /// R14-08(2011), eq. 6), valid from 50 K to the triple point; 0 at 0 K.
 pub fn sublimation_pressure(t: Kelvin) -> Pascal {
@@ -810,57 +910,131 @@ pub fn vapour_saturation_pressure(t: Kelvin) -> Pascal {
     Pascal(vapour_saturation_bar(t.0) * PASCALS_PER_BAR)
 }
 
+/// The condensate a vapour is in equilibrium with: water's here, CO2's
+/// and N2's too ([`crate::volatiles::co2_condensate`],
+/// [`crate::volatiles::nitrogen_condensate`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Condensate {
+    /// The solid (water's ice Ih, CO2's and N2's frost): the sublimation
+    /// curve and its latent heat.
+    Ice,
+    /// The liquid: the vaporisation curve and its latent heat.
+    Liquid,
+}
+
+impl Condensate {
+    /// Water's stable condensate at `t_k`: ice Ih below its triple point
+    /// (and at a NaN temperature, read as 0 K), liquid above.
+    pub(crate) fn at(t_k: f64) -> Condensate {
+        if t_k.is_nan() || t_k < TRIPLE_POINT_TEMPERATURE.0 {
+            Condensate::Ice
+        } else {
+            Condensate::Liquid
+        }
+    }
+}
+
 /// Pressure of water vapour in equilibrium with its condensate at `t_k`,
 /// bar: the sublimation curve of ice Ih below the triple point, the
 /// saturation curve over liquid up to the critical point, and the
 /// critical pressure above it, where no liquid exists (the legacy clamp,
 /// `water_saturation_bar`). 0 at and below 0 K.
 pub(crate) fn vapour_saturation_bar(t_k: f64) -> f64 {
-    let pa = if t_k.is_nan() || t_k < TRIPLE_POINT_TEMPERATURE.0 {
-        sublimation_pa(t_k)
-    } else if t_k < CRITICAL_TEMPERATURE {
-        saturation_pa(t_k)
-    } else {
-        CRITICAL_PRESSURE.0
+    vapour_saturation_bar_over(t_k, Condensate::at(t_k))
+}
+
+/// [`vapour_saturation_bar`] over `condensate` whatever the temperature:
+/// either curve read a little past the triple point, where the moist
+/// adiabat's step that crosses it is split ([`crate::radiation::column`]).
+/// Both curves meet at the triple point.
+pub(crate) fn vapour_saturation_bar_over(t_k: f64, condensate: Condensate) -> f64 {
+    let pa = match condensate {
+        Condensate::Ice => sublimation_pa(t_k),
+        Condensate::Liquid if t_k < CRITICAL_TEMPERATURE => saturation_pa(t_k),
+        Condensate::Liquid => CRITICAL_PRESSURE.0,
     };
     pa / PASCALS_PER_BAR
 }
 
-/// Molar latent heat of water, J/mol, at `t_k`, taken from the slope of
-/// [`vapour_saturation_bar`] by Clausius-Clapeyron for an ideal vapour over
-/// a condensate of negligible volume, `L = R T^2 d ln e_s / dT`
-/// (Pierrehumbert 2010, section 2.6), the derivative taken analytically
-/// from the equation of each branch: sublimation below the triple point,
-/// vaporisation above. The moist adiabat that uses it then agrees with the
-/// curve, as the legacy model's single latent heat did. Above the critical
-/// temperature it keeps its value there (the legacy clamp). The ideal-vapour
-/// form does not fall to zero at the critical point as the real latent heat
-/// does: it gives `-R Tc a1`, 42.3 kJ/mol.
+/// [`vapour_latent_j_mol_over`] the condensate stable at `t_k`
+/// ([`Condensate::at`]), for the tests of the latent heat.
+#[cfg(test)]
 pub(crate) fn vapour_latent_j_mol(t_k: f64) -> f64 {
+    vapour_latent_j_mol_over(t_k, Condensate::at(t_k))
+}
+
+/// Molar latent heat of water over `condensate`, J/mol, at `t_k`, taken
+/// from the slope of its curve ([`vapour_saturation_bar_over`]) by
+/// Clausius-Clapeyron for an ideal vapour over a condensate of negligible
+/// volume, `L = R T^2 d ln e_s / dT` (Pierrehumbert 2010, section 2.6),
+/// the derivative taken analytically from the equation of each branch:
+/// sublimation over ice, vaporisation over liquid, which differ by
+/// fusion's at the triple point. The moist adiabat that uses it then
+/// agrees with the curve, as the legacy model's single latent heat did.
+/// Above the critical temperature it keeps its value there (the legacy
+/// clamp). The ideal-vapour form does not fall to zero at the critical
+/// point as the real latent heat does: it gives `-R Tc a1`, 42.3 kJ/mol.
+pub(crate) fn vapour_latent_j_mol_over(t_k: f64, condensate: Condensate) -> f64 {
     // A NaN temperature reads as 0 K, like the pressure's.
     let t = if t_k.is_nan() {
         0.0
     } else {
         t_k.clamp(0.0, CRITICAL_TEMPERATURE)
     };
-    if t < TRIPLE_POINT_TEMPERATURE.0 {
-        // d ln p / dT = (1/Tt) sum a_i (b_i - 1) theta^(b_i - 2).
-        let theta = t / TRIPLE_POINT_TEMPERATURE.0;
-        let mut sum = 0.0;
-        for (a, b) in SUBLIMATION_A.iter().zip(SUBLIMATION_B) {
-            sum += a * (b - 1.0) * theta.powf(b);
+    match condensate {
+        Condensate::Ice => {
+            // d ln p / dT = (1/Tt) sum a_i (b_i - 1) theta^(b_i - 2).
+            let theta = t / TRIPLE_POINT_TEMPERATURE.0;
+            let mut sum = 0.0;
+            for (a, b) in SUBLIMATION_A.iter().zip(SUBLIMATION_B) {
+                sum += a * (b - 1.0) * theta.powf(b);
+            }
+            MOLAR_GAS_CONSTANT * TRIPLE_POINT_TEMPERATURE.0 * sum
         }
-        MOLAR_GAS_CONSTANT * TRIPLE_POINT_TEMPERATURE.0 * sum
-    } else {
-        // d ln p / dT = -(Tc f) / T^2 - f'(tau) / T.
-        let (f, slope) = saturation_sum(t);
-        MOLAR_GAS_CONSTANT * (-CRITICAL_TEMPERATURE * f - t * slope)
+        Condensate::Liquid => {
+            // d ln p / dT = -(Tc f) / T^2 - f'(tau) / T.
+            let (f, slope) = saturation_sum(t);
+            MOLAR_GAS_CONSTANT * (-CRITICAL_TEMPERATURE * f - t * slope)
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Source: normal boiling point of water, 373.124 K at 101 325 Pa
+    /// (IAPWS SR1-86(1992), Table 1 of the saturation line).
+    const NORMAL_BOILING: (f64, f64) = (373.124, 101_325.0);
+    /// Definition: tolerance on the normal boiling point, 0.01 K.
+    const NORMAL_BOILING_TOLERANCE: f64 = 0.01;
+    /// Definition: pressures, Pa, of the round trip: 1 kPa, 100 kPa,
+    /// 10 MPa.
+    const BOILING_ROUND_TRIP: [f64; 3] = [1e3, 1e5, 1e7];
+
+    #[test]
+    fn water_boils_at_its_normal_point() {
+        let t = boiling_temperature(Pascal(NORMAL_BOILING.1)).unwrap();
+        assert!(
+            (t.0 - NORMAL_BOILING.0).abs() < NORMAL_BOILING_TOLERANCE,
+            "{}",
+            t.0
+        );
+        assert!(boiling_temperature(Pascal(TRIPLE_POINT_PRESSURE.0 * 0.999)).is_none());
+        assert_eq!(
+            boiling_temperature(CRITICAL_PRESSURE),
+            Some(CRITICAL_POINT_TEMPERATURE)
+        );
+        assert_eq!(
+            boiling_temperature(Pascal(2.0 * CRITICAL_PRESSURE.0)),
+            Some(CRITICAL_POINT_TEMPERATURE)
+        );
+        for p in BOILING_ROUND_TRIP {
+            let t = boiling_temperature(Pascal(p)).unwrap();
+            let back = saturation_pressure(t).0;
+            assert!(((back - p) / p).abs() < 1e-9, "{p} Pa -> {back}");
+        }
+    }
 
     /// Source: IAPWS R6-95(2018), Table 7: (T in K, rho in kg/m3, p in Pa)
     /// in the single-phase region.
@@ -1019,9 +1193,153 @@ mod tests {
         assert!(close(vi.0, VI_VII_LIQUID_PRESSURE.0, SIX_DIGITS), "{vi:?}");
     }
 
+    /// Source: melting pressure of ice III, 268.685 MPa at 254 K (IAPWS
+    /// R14-08(2011), Table 3).
+    const III_MELTING_CHECK: (f64, f64) = (254.0, 268.685e6);
+    /// Source: melting pressure of ice V, 479.640 MPa at 265 K (IAPWS
+    /// R14-08(2011), Table 3).
+    const V_MELTING_CHECK: (f64, f64) = (265.0, 479.640e6);
+    /// Definition: relative tolerance on the triple points the curves
+    /// join (IAPWS rounds them to four digits).
+    const TRIPLE_POINT_TOLERANCE: f64 = 1e-4;
+    /// Definition: relative tolerance of a round trip through a curve.
+    const ROUND_TRIP: f64 = 1e-6;
+    /// Source: melting temperature of the stable ice at 300 MPa, 254.96 K
+    /// (ice III, IAPWS R14-08(2011), eq. 2 inverted by hand).
+    const MELTING_AT_300_MPA: (f64, f64) = (300e6, 254.96);
+    /// Definition: tolerance on that temperature, 0.01 K.
+    const MELTING_TOLERANCE: f64 = 0.01;
+    /// Definition: a pressure in the field of ice V, 500 MPa.
+    const ICE_V_PRESSURE: f64 = 500e6;
+    /// Definition: a pressure in the field of ice VI, 1 GPa.
+    const ICE_VI_PRESSURE: f64 = 1e9;
+    /// Definition: a pressure over the ice VI - ice VII triple point,
+    /// 3 GPa.
+    const ICE_VII_PRESSURE: f64 = 3e9;
+    /// Definition: the continuity tolerance at a triple point, 1e-4 K.
+    /// The published curves are consistent to this: ice V and VI differ
+    /// by 3.2e-5 K at their triple point, ice VI and VII by 7.7e-5 K.
+    const CONTINUITY: f64 = 1e-4;
+    /// Definition: the sweep of the minimum, 0.1 to 2000 MPa in 0.1 MPa
+    /// steps.
+    const SWEEP: (f64, f64, f64) = (0.1e6, 2000e6, 0.1e6);
+
+    #[test]
+    fn ices_iii_and_v_melt_on_the_iapws_curves() {
+        let (t, p) = III_MELTING_CHECK;
+        let iii = ice_iii_melting_pressure(Kelvin(t));
+        assert!(close(iii.0, p, SIX_DIGITS_TABLE), "{iii:?}");
+        let (t, p) = V_MELTING_CHECK;
+        let v = ice_v_melting_pressure(Kelvin(t));
+        assert!(close(v.0, p, SIX_DIGITS_TABLE), "{v:?}");
+        let ends = [
+            (
+                ice_iii_melting_pressure(IH_III_LIQUID_TEMPERATURE),
+                IH_III_LIQUID_PRESSURE,
+            ),
+            (
+                ice_iii_melting_pressure(III_V_LIQUID_TEMPERATURE),
+                III_V_LIQUID_PRESSURE,
+            ),
+            (
+                ice_v_melting_pressure(III_V_LIQUID_TEMPERATURE),
+                III_V_LIQUID_PRESSURE,
+            ),
+            (
+                ice_v_melting_pressure(V_VI_LIQUID_TEMPERATURE),
+                V_VI_LIQUID_PRESSURE,
+            ),
+        ];
+        for (got, want) in ends {
+            assert!(
+                close(got.0, want.0, TRIPLE_POINT_TOLERANCE),
+                "{got:?} {want:?}"
+            );
+        }
+    }
+
+    /// Definition: relative tolerance on a Table 3 check value, 1e-5.
+    const SIX_DIGITS_TABLE: f64 = 1e-5;
+
+    /// The pressure of the curve of the ice stable at `p`, at `t`.
+    fn own_curve(p: f64, t: Kelvin) -> Pascal {
+        if p <= IH_III_LIQUID_PRESSURE.0 {
+            ice_ih_melting_pressure(t)
+        } else if p <= III_V_LIQUID_PRESSURE.0 {
+            ice_iii_melting_pressure(t)
+        } else if p <= V_VI_LIQUID_PRESSURE.0 {
+            ice_v_melting_pressure(t)
+        } else {
+            ice_vi_melting_pressure(t)
+        }
+    }
+
+    #[test]
+    fn melting_follows_the_stable_ice() {
+        assert_eq!(
+            melting_temperature(STANDARD_ATMOSPHERE),
+            ice_ih_melting_temperature(STANDARD_ATMOSPHERE)
+        );
+        let (p, t) = MELTING_AT_300_MPA;
+        let got = melting_temperature(Pascal(p));
+        assert!((got.0 - t).abs() < MELTING_TOLERANCE, "{got:?}");
+        let v = melting_temperature(Pascal(ICE_V_PRESSURE));
+        assert!(
+            v.0 > III_V_LIQUID_TEMPERATURE.0 && v.0 < V_VI_LIQUID_TEMPERATURE.0,
+            "{v:?}"
+        );
+        let vi = melting_temperature(Pascal(ICE_VI_PRESSURE));
+        assert!(
+            vi.0 > V_VI_LIQUID_TEMPERATURE.0 && vi.0 < VI_VII_LIQUID_TEMPERATURE.0,
+            "{vi:?}"
+        );
+        for p in [300e6, ICE_V_PRESSURE, ICE_VI_PRESSURE] {
+            let t = melting_temperature(Pascal(p));
+            let back = own_curve(p, t).0;
+            assert!(close(back, p, ROUND_TRIP), "{p} Pa -> {back}");
+        }
+        // Continuous at the three triple points, to the published curves'
+        // own consistency (see CONTINUITY).
+        for p in [
+            IH_III_LIQUID_PRESSURE,
+            III_V_LIQUID_PRESSURE,
+            V_VI_LIQUID_PRESSURE,
+        ] {
+            let below = melting_temperature(Pascal(p.0 * (1.0 - 1e-9)));
+            let above = melting_temperature(Pascal(p.0 * (1.0 + 1e-9)));
+            assert!(
+                (below.0 - above.0).abs() < CONTINUITY,
+                "{p:?}: {below:?} {above:?}"
+            );
+        }
+        // The grid of the sweep does not hold 208.566 MPa: add it.
+        let (mut p, mut min, mut at) = (SWEEP.0, f64::MAX, 0.0);
+        let mut pressures = vec![IH_III_LIQUID_PRESSURE.0];
+        while p <= SWEEP.1 {
+            pressures.push(p);
+            p += SWEEP.2;
+        }
+        for p in pressures {
+            let t = melting_temperature(Pascal(p)).0;
+            if t < min {
+                (min, at) = (t, p);
+            }
+        }
+        assert!(
+            (min - IH_III_LIQUID_TEMPERATURE.0).abs() < CONTINUITY,
+            "{min}"
+        );
+        assert_eq!(at, IH_III_LIQUID_PRESSURE.0);
+        // Ice VII is not ported: the melting temperature is held.
+        assert_eq!(
+            melting_temperature(Pascal(ICE_VII_PRESSURE)),
+            VI_VII_LIQUID_TEMPERATURE
+        );
+    }
+
     #[test]
     fn ice_ih_melts_at_its_normal_melting_point_at_one_atmosphere() {
-        let t = ice_ih_melting_temperature(Pascal(NORMAL_PRESSURE));
+        let t = ice_ih_melting_temperature(STANDARD_ATMOSPHERE);
         assert!(close(t.0, NORMAL_MELTING_TEMPERATURE, SIX_DIGITS), "{t:?}");
         assert_eq!(
             ice_ih_melting_temperature(Pascal(0.0)),

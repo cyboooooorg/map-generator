@@ -1,0 +1,11 @@
+[package]
+name = "rfmip-shortwave"
+description = "Offline builder of the science crate's RFMIP clear-sky shortwave field and its line-by-line fluxes"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true
