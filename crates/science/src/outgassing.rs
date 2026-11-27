@@ -171,6 +171,14 @@ pub fn column_pressure(mass: Kilogram, gravity: MetrePerSecondSquared, radius: M
     Pascal(mass.0 * gravity.0 / area).into()
 }
 
+/// Mass of gas that puts `pressure` on the surface of a body of surface
+/// `gravity` and `radius`: `m = 4π R² P / g`, the inverse of
+/// [`column_pressure`]. Takes a positive gravity.
+pub fn column_mass(pressure: Bar, gravity: MetrePerSecondSquared, radius: Metre) -> Kilogram {
+    let area = 4.0 * std::f64::consts::PI * radius.0 * radius.0;
+    Kilogram(Pascal::from(pressure).0 * area / gravity.0)
+}
+
 /// Share of the volatiles a body outgasses that reaches the air under a
 /// water layer whose floor bears `seafloor`:
 /// `1 / (1 + (P / P½)^k)` ([`SEAFLOOR_HALF_PRESSURE`],

@@ -18,19 +18,25 @@
 use super::air::air;
 use super::boil_off::boiled_off;
 use super::core::{CoreRecord, core};
-use super::draws::{Drawn, draw};
+use super::draws::Drawn;
+#[cfg(test)]
+use super::draws::draw;
 use super::enveloped::{Body, Exposed};
 use super::escape::escaped;
 use super::heat::heat;
 use super::interior::{Interior, InteriorError, interior};
 use super::regime::regime;
 use super::volcanism::volcanism;
-use super::water::{after_steam, surface_water, water};
+#[cfg(test)]
+use super::water::water;
+use super::water::{after_steam, surface_water};
 use crate::Trial;
 use science::escape::MIN_ENVELOPE;
 use science::units::Kilogram;
 use science::units::{Bar, Fraction};
-use timeline::{Atmosphere, Heat, Seed, TectonicRegime, Trace, Traced, Water};
+#[cfg(test)]
+use timeline::Seed;
+use timeline::{Atmosphere, Heat, TectonicRegime, Trace, Traced, Water};
 
 /// A planet from its draw to its bare air.
 #[derive(Clone, Debug, PartialEq)]
@@ -86,6 +92,7 @@ pub(crate) struct BareSurface {
 /// # Errors
 ///
 /// The errors of [`draw`] and [`bare_with`].
+#[cfg(test)]
 pub(crate) fn bare(trial: &Trial, seed: Seed, trace: &mut Trace) -> Result<Bare, InteriorError> {
     let drawn = draw(seed, trial, trace)?;
     bare_with(trial, &drawn, trace)
@@ -115,6 +122,7 @@ pub(crate) fn bare(trial: &Trial, seed: Seed, trace: &mut Trace) -> Result<Bare,
 /// # Errors
 ///
 /// The errors of each step.
+#[cfg(test)]
 pub(crate) fn bare_with(
     trial: &Trial,
     drawn: &Drawn,

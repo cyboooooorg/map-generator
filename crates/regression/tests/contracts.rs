@@ -9,6 +9,21 @@ fn workspace_builds() {
 }
 
 #[test]
+fn the_reference_seeds_are_those_of_the_requests() {
+    // Definition: `REFERENCE_SEEDS` lists the seeds of
+    // `reference_requests()`, in order (no draw, so no tier-2 cost).
+    let seeds: Vec<timeline::Seed> = regression::reference_requests()
+        .iter()
+        .map(|inputs| inputs.seed)
+        .collect();
+    let expected: Vec<timeline::Seed> = regression::REFERENCE_SEEDS
+        .iter()
+        .map(|&seed| timeline::Seed::new(seed))
+        .collect();
+    assert_eq!(seeds, expected);
+}
+
+#[test]
 fn the_system_id_of_a_fixed_input_is_pinned() {
     // A regression net, not a source: it pins the current output. A
     // change means every stored system id changes, which orphans the

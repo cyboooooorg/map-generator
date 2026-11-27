@@ -51,7 +51,7 @@ const LAMMER_2014: [(f64, f64, f64); 6] = [
 /// is a fundamental change in the relationship around ~10 M_earth", above
 /// which the envelope fraction rises steadily toward the gas giants. The
 /// upper edge of the mini-Neptune regime (`draw-bounds.md` section 4b).
-const MINI_NEPTUNE_MAX_MASS: f64 = 10.0;
+pub(crate) const MINI_NEPTUNE_MAX_MASS: f64 = 10.0;
 
 /// Source: Helled et al. 2011, "Interior Models of Uranus and Neptune"
 /// (arXiv:1010.5546) p. 8: hydrogen and helium are 9 % to 25 % of

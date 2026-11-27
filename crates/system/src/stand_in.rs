@@ -1,5 +1,5 @@
-//! A provisional classifier for the draw, until the planet model's
-//! `class_of` is public. The CLI and the tests use it.
+//! A provisional classifier for the draw's own tests; the CLI and the
+//! regression tests classify with the planet model's `class_of`.
 
 use science::units::{EarthRadius, KilogramPerCubicMetre};
 use timeline::{PlanetClass, Trace};
@@ -10,7 +10,7 @@ use crate::{SystemError, Trial, TrialOutcome};
 /// sheet), to turn a stand-in density into Earth radii.
 const EARTH_DENSITY: f64 = 5514.0;
 
-/// A stand-in for the planet model until mapgen1's lands: below 2 M⊕
+/// A stand-in for the planet model, for the draw's tests: below 2 M⊕
 /// rocky, below 10 a super-Earth, below 30 a mini-Neptune, else a gas
 /// giant (a hot Jupiter inside 0.1 au); small planets of radius M^0.27,
 /// giants of density 1 300 kg/m³.

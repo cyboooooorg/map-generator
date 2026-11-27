@@ -21,10 +21,10 @@ Matricardi 2020; RFMIP's field). Methane and N₂O take about 1.5 to
 1.9 W/m² each at present-day amounts. Two findings matter more than the
 numbers:
 
-- The model's Earth carries **no N₂O** and, until planet PR 2d-4 calls
-  study 37's law of a modern biosphere's methane (now in `science`),
-  **no methane**: their lines change nothing for the reference Earth
-  until then, and N₂O waits for a law of its own (#737). The nitrogen
+- The model's Earth carries **no N₂O** and, before planet PR 2d-4's life
+  step calls study 37's law of a modern biosphere's methane, carried
+  **no methane**: its lines changed nothing for the reference Earth
+  then, and N₂O waits for a law of its own (#737). The nitrogen
   and oxygen pairs act at once: about +0.1 to +0.2 K.
 - The **nitrogen and methane pairs** of HITRAN's collision-induced files
   put a spectral Titan at 92.30 K without any fitted constant (measured:
@@ -277,8 +277,8 @@ do now.
   under an equilibrium temperature of 150 K (`METHANE_SURVIVES`), capped
   by its saturation: Titan's chain air keeps 0.091 bar. The `Modern`
   biosphere's law (`science::life_gases::modern_methane`, study 37,
-  [life-gases.md](life-gases.md)) is in `science`, called by no engine
-  until planet PR 2d-4; N₂O is not a gas of the model.
+  [life-gases.md](life-gases.md)) is in `science`, called by the planet
+  model since planet PR 2d-4 (the `life` step); N₂O is not a gas of the model.
 - **What the second pull request measured** (the branch
   `feat/climate-methane-ozone-lines`, before #741's N₂ pseudo-adiabat;
   Earth's clear column of the CERES test: measured air, 288 K, 280 ppm,
@@ -367,10 +367,11 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give
 
 ## Where it departs, and what is next
 
-- **Earth's methane waits for planet PR 2d-4.** The column has
+- **Earth's methane came with planet PR 2d-4.** The column has
   methane's lines, and study 37's law of a `Modern` biosphere's methane
-  is in `science` (`life_gases::modern_methane`), but no engine calls it
-  yet, so the reference Earth's air holds none. N₂O has its lines in the
+  (`life_gases::modern_methane`) is called by the planet model's life
+  step, so an Earth drawn alive holds it (before, the reference Earth's
+  air held none). N₂O has its lines in the
   table since #704 but needs a gas of its own and its law (#737); until
   then only the tests' columns hold it.
 - **Weights and moles (issue #749, fixed).** The chain's gases are

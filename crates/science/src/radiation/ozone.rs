@@ -134,7 +134,7 @@ fn host_ratio(star_k: f64) -> f64 {
 /// Calibration (calibration 1 of `docs/science/ozone.md`, "Where it
 /// departs", decided with the user on 2026-11-25): the ozone column of an
 /// air holding `o2` of O₂ under a host of effective temperature `star`.
-/// An air with O₂ (the `Modern` air of planet PR 2d-4) holds
+/// An air with O₂ (the `Modern` air of the planet model's life step) holds
 /// [`EARTH_OZONE_COLUMN`] times the ratio of the host's column to the
 /// Sun's at present O₂: Rugheimer et al. 2013's grid over 4250 to 7000 K,
 /// Segura et al. 2005's quiescent M dwarfs over 3100 to 3650 K (45, 89

@@ -288,15 +288,6 @@ traced_fields!(SurfaceLiquid {
     ocean_share
 });
 
-/// Life on the planet.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Life {
-    pub arose: Traced<bool>,
-    pub oxygenated: Traced<bool>,
-}
-
-traced_fields!(Life { arose, oxygenated });
-
 /// What a planet with a solid surface has.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Surface {
@@ -307,7 +298,7 @@ pub struct Surface {
     pub climate: GlobalClimate,
     pub liquid: Option<SurfaceLiquid>,
     pub terrain: Terrain,
-    pub life: Life,
+    pub life: Traced<Biosphere>,
 }
 
 traced_fields!(Surface {
@@ -320,6 +311,16 @@ traced_fields!(Surface {
     terrain,
     life
 });
+
+contract_enum! {
+    /// The air life has made: none, the air it found, CH4 gone, modern O2.
+    Biosphere {
+        Lifeless => "lifeless",
+        Anoxic => "anoxic",
+        Oxidising => "oxidising",
+        Modern => "modern",
+    }
+}
 
 contract_enum! {
     /// Whether the archetype's backward search reached one of its
@@ -412,5 +413,19 @@ mod tests {
         assert_eq!(seen, expected);
         let graph = trace.freeze(&mut vec![orbit]).unwrap();
         assert_eq!(graph.nodes.len(), 4);
+    }
+
+    #[test]
+    fn biosphere_keys_are_kebab_case() {
+        for (stage, key) in [
+            (Biosphere::Lifeless, "lifeless"),
+            (Biosphere::Anoxic, "anoxic"),
+            (Biosphere::Oxidising, "oxidising"),
+            (Biosphere::Modern, "modern"),
+        ] {
+            let json = serde_json::to_string(&stage).unwrap();
+            assert_eq!(json, format!("\"{key}\""));
+            assert_eq!(serde_json::from_str::<Biosphere>(&json).unwrap(), stage);
+        }
     }
 }

@@ -2,11 +2,11 @@
 //! contract (behind the `fixtures` feature, and in this crate's tests).
 
 use crate::{
-    Atmosphere, BandLight, Bulk, ClimateState, Code, Composition, Core, CoreState, Gas,
-    GlobalClimate, Heat, InteriorProfile, Layer, Life, LiquidKind, Material, MatterState,
-    NodeValueOf, Orbit, PlanetClass, PlanetState, Provenance, RadialSample, RadialSamples, Renewal,
-    Spin, StellarSource, StellarSources, Surface, SurfaceLiquid, TargetOutcome, TectonicRegime,
-    Terrain, TerrainUnit, Trace, Traced, Transport, Water,
+    Atmosphere, BandLight, Biosphere, Bulk, ClimateState, Code, Composition, Core, CoreState, Gas,
+    GlobalClimate, Heat, InteriorProfile, Layer, LiquidKind, Material, MatterState, NodeValueOf,
+    Orbit, PlanetClass, PlanetState, Provenance, RadialSample, RadialSamples, Renewal, Spin,
+    StellarSource, StellarSources, Surface, SurfaceLiquid, TargetOutcome, TectonicRegime, Terrain,
+    TerrainUnit, Trace, Traced, Transport, Water,
 };
 use science::units::{
     AstronomicalUnit, Bar, Day, Degree, EarthFlux, EarthMass, EarthRadius, Fraction, Gyr,
@@ -117,10 +117,7 @@ pub fn earth_like_fixture(trace: &mut Trace, age: f64) -> PlanetState {
                 renewal: leaf(trace, "terrain.renewal", Renewal::Plates),
             }],
         },
-        life: Life {
-            arose: leaf(trace, "life.arose", true),
-            oxygenated: leaf(trace, "life.oxygenated", true),
-        },
+        life: leaf(trace, "life", Biosphere::Modern),
     };
     PlanetState {
         sources: StellarSources::new(vec![source]).unwrap(),

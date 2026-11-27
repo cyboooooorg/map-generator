@@ -86,6 +86,9 @@ Three tiers with budgets (the user's to change), split by
 | 2. Regression | Shared reference systems, contracts, determinism | `crates/regression` | 8 min |
 | 3. Heavy | 15 km worlds, oracle, censuses, profiles | `#[ignore = "heavy: …"]` | None |
 
+The budgets are measured locally. CI's runners vary by about 2×, so the
+CI job gives tier 1 3 min (`TIER1_BUDGET` in `.github/workflows/ci.yml`).
+
 - `mise run ci` runs what the pipeline runs (format, clippy, tiers 1 and
   2 with their budgets, markdownlint, `docs:check`): run it before every
   pull request.

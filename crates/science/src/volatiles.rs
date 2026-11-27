@@ -48,7 +48,7 @@
 //! Clausius-Clapeyron from its triple point with a constant enthalpy.
 
 use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STANDARD_ATMOSPHERE};
-use crate::units::{AstronomicalUnit, Dex, Kelvin, Kilogram, Pascal, SolarLuminosity};
+use crate::units::{AstronomicalUnit, Bar, Dex, Kelvin, Kilogram, Pascal, SolarLuminosity};
 use crate::water::Condensate;
 
 /// Calibration: kg of CO2 per kg of rock and iron, fitted on Venus's air,
@@ -516,6 +516,14 @@ pub fn methane_saturation_pressure(t: Kelvin) -> Pascal {
 /// [`methane_saturation_pressure`] at `t_k` in bar.
 pub(crate) fn methane_saturation_bar(t_k: f64) -> f64 {
     METHANE.pressure_pa(t_k) / PASCALS_PER_BAR
+}
+
+/// Methane's triple-point pressure, 0.117 bar: its saturation at
+/// `METHANE_TRIPLE_TEMPERATURE` (Setzmann and Wagner 1991), under which no
+/// liquid methane is stable. The Titan-like air and the hydrocarbon world
+/// read it.
+pub fn methane_triple_pressure() -> Bar {
+    Bar(methane_saturation_bar(METHANE_TRIPLE_TEMPERATURE))
 }
 
 /// Pressure of CO2 over its frost at `t`, the sublimation branch of the

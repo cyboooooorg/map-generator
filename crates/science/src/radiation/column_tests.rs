@@ -289,7 +289,7 @@ const CERES_CO2_PPM: f64 = 389.0;
 
 /// Definition: the surface temperatures, K, over which the smoothness
 /// test sweeps Earth's column, 284 to 292 K: the climate's thermostat
-/// (288 K) and the reference Earth's 285.82 K in planet PR 2d-4 inside,
+/// (288 K) and the reference Earth's 285.82 K at 280 ppm inside,
 /// the 273.16 K level sweeping 1.5 km of its troposphere.
 const SMOOTH_RANGE_K: (f64, f64) = (284.0, 292.0);
 

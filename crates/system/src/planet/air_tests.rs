@@ -101,7 +101,7 @@ const TITAN_N2: f64 = TITAN_SURFACE_PRESSURE * (1.0 - TITAN_METHANE_BY_VOLUME) *
 /// chain is fitted on (`science::outgassing::AMMONIA_DECOMPOSED`), so
 /// that an input of the reference Titan can move without pinning the fit
 /// to its digits.
-const TITAN_N2_TOLERANCE: f64 = 0.1;
+pub(super) const TITAN_N2_TOLERANCE: f64 = 0.1;
 
 /// Definition: legacy's own test band on Titan's surface pressure, 0.5
 /// to 5 bar round its 1.467 bar (`legacy-final` `atmosphere.rs`,

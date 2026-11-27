@@ -94,10 +94,12 @@ pub(crate) struct Interior {
     pub structure: Structure,
 }
 
-/// Why an interior or its heat could not be computed. Crate-internal
-/// until the `SystemError` of the draw lands; then a variant of it.
+/// Why the planet chain could not compute a planet: its interior, its
+/// heat, its envelope or a trace error. A variant of the system's error,
+/// `SystemError::Planet`.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum InteriorError {
+#[non_exhaustive]
+pub enum InteriorError {
     Contract(ContractError),
     Structure(StructureError),
     Eos(EosError),

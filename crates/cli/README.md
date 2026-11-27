@@ -27,17 +27,23 @@ same bytes.
 
 ## Output
 
-stdout is one pretty-printed JSON document (`schema` 1):
+stdout is one pretty-printed JSON document (`schema` 2: schema 1 had a
+`classifier` field, no `state` and each planet's orbit, spin and sources
+at its top level):
 
 - `inputs`: the draw's inputs as given, to rerun it;
 - `engine`, `family`: the engine version and the family of the system;
-- `classifier`: `"stand-in"`. The planet classes are not printed yet; the
-  draw uses a stand-in classifier until the planet engine's `class_of` is
-  public (see the [system crate](../system/README.md));
 - `star`: the star's timeline, one keyframe at the present. The keyframe
   has its own `causes` graph, used by the `/star/...` pointers;
 - `planets`: the planets in the draw's order (closest first), each with its
-  designation, seed, archetype, mass, orbit, spin and stellar sources;
+  designation, seed, archetype and drawn mass, and its `state`: the planet
+  model's `PlanetState` (orbit, spin, stellar sources, class, climate,
+  liquid, biosphere...) on the drawn orbit. The drawn orbit, spin and
+  sources are in `state` only, so each of their codes names one field per
+  planet. The draw itself classifies each planet with `planet::class_of`
+  (its class is in `causes`, as `system.draw.class`); `state` runs the
+  chain a second time per planet, on the drawn, possibly eccentric,
+  orbit, so for an eccentric planet its class may differ from the draw's;
 - `causes`: the cause graph of `planets` only (not of the star); the
   traced values of the planets hold ids of its nodes.
 
@@ -47,7 +53,7 @@ stdout is one pretty-printed JSON document (`schema` 1):
 `PATH` is either a JSON pointer into the output, or a cause code:
 
 ```bash
-map-generator system --seed 1 --explain /planets/0/orbit/period
+map-generator system --seed 1 --explain /planets/0/state/orbit/period
 ```
 
 ```text

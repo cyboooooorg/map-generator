@@ -23,14 +23,16 @@ use timeline::{
 /// 9.80665 m/s^2.
 const STANDARD_GRAVITY: f64 = 9.80665;
 
-/// Source: Marty 2012, bulk Earth water 2700 ppm of the mass (Earth
-/// Planet. Sci. Lett. 313-314, 56-66; arXiv:1405.6336 author copy,
-/// p. 18).
-pub(super) const EARTH_WATER_FRACTION: f64 = 2.7e-3;
+/// Source: Marty 2012, bulk Earth water 2700 ppm of the mass
+/// (`science::habitable::EARTH_BULK_WATER_FRACTION`, which the earth-like
+/// archetype imposes too).
+pub(super) const EARTH_WATER_FRACTION: f64 = science::habitable::EARTH_BULK_WATER_FRACTION;
 
 /// Source: Wang et al. 2018 core mass fraction of Earth, as quoted by
-/// Plotnykov & Valencia 2020, 0.325.
-pub(super) const EARTH_CORE_MASS_FRACTION: f64 = 0.325;
+/// Plotnykov & Valencia 2020, 0.325
+/// (`science::constants::EARTH_CORE_MASS_FRACTION`, which the earth-like
+/// archetype imposes too).
+pub(super) const EARTH_CORE_MASS_FRACTION: f64 = science::constants::EARTH_CORE_MASS_FRACTION;
 
 /// Definition: a water world's water fraction for the tests, 0.5, the
 /// lower bound of Zeng et al. 2019's icy planets (a test choice).
@@ -131,8 +133,8 @@ fn the_same_seed_draws_the_same_composition() {
 
 #[test]
 fn the_draw_follows_the_seed_it_is_given_not_the_trials() {
-    // `model` passes the body seed, `class_of` the trial seed: the draw
-    // reads only the seed it is given.
+    // `class_of` and `model` both pass the trial seed: the draw reads
+    // only the seed it is given.
     let mut a = Trace::new();
     let mut b = Trace::new();
     let ta = trial(&mut a, 7, 1.0, 1.0, 0.0);
@@ -932,14 +934,13 @@ fn a_jupiter_trial() {
     assert_eq!(heat.radiogenic.value().0, 0.0);
 }
 
-#[test]
-fn a_neptune_trial() {
-    let (mass, au, envelope) = NEPTUNE;
-    let mut trace = Trace::new();
-    let t = trial(&mut trace, 1, mass, au, 0.0);
+/// Neptune's mass and envelope at `au`.
+pub(super) fn neptune_at(trace: &mut Trace, au: f64) -> (Trial, Drawn) {
+    let (mass, _, envelope) = NEPTUNE;
+    let t = trial(trace, 1, mass, au, 0.0);
     let drawn = Drawn::fixed(
         &t,
-        &mut trace,
+        trace,
         EARTH_CORE_MASS_FRACTION,
         EARTH_WATER_FRACTION,
         0.0,
@@ -948,6 +949,14 @@ fn a_neptune_trial() {
         None,
         None,
     );
+    (t, drawn)
+}
+
+#[test]
+fn a_neptune_trial() {
+    let mut trace = Trace::new();
+    let (mass, au, envelope) = NEPTUNE;
+    let (t, drawn) = neptune_at(&mut trace, au);
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let ratio = km(*body.bulk().radius.value()) / NEPTUNE_RADIUS_KM;
     let (low, high) = NEPTUNE_RADIUS_RANGE;
@@ -1305,7 +1314,7 @@ pub(super) const VENUS: ReferenceBody = ReferenceBody {
 /// (`science::habitable::SURFACE_WATER_SHARE`) is its ocean.
 pub(super) const EARTH: ReferenceBody = ReferenceBody {
     mass: 1.0,
-    core_mass_fraction: 0.325,
+    core_mass_fraction: EARTH_CORE_MASS_FRACTION,
     water_fraction: EARTH_WATER_FRACTION,
     orbit: 1.0,
     eccentricity: 0.0167,

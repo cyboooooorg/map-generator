@@ -133,7 +133,7 @@ const EARTH_OCEAN_FRACTION: f64 = 2.3e-4;
 /// 2700 ± 1350 ppm, "10 ± 5 ocean masses"): Earth's bulk water, the
 /// reference the surface share is calibrated on (the engine draws a dry
 /// planet's water log-uniform from 1e-5 to 1e-2, not around it).
-const EARTH_BULK_WATER_FRACTION: f64 = 2.7e-3;
+pub const EARTH_BULK_WATER_FRACTION: f64 = 2.7e-3;
 
 /// Calibration: share of a rocky planet's bulk water that is at its
 /// surface (its ocean), the rest bound in its mantle: Earth's ocean over

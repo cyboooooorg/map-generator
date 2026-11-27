@@ -9,13 +9,14 @@ use super::{ClimateInputs, Rotation};
 use crate::planet::bare::Bare;
 use crate::planet::codes;
 use crate::planet::interior::InteriorError;
+use science::habitable::OCEAN_MASS;
 use science::radiation::gases::Weights;
 use science::steam::{hides_surface, past_published_profiles};
-use science::surface::Liquid;
+use science::surface::{Liquid, ocean_fraction};
 use science::units::{Bar, Fraction, Kelvin};
 use std::collections::BTreeMap;
 use timeline::{
-    Atmosphere, Code, Gas, GlobalClimate, LiquidKind, NodeId, Provenance, Trace, Traced,
+    Atmosphere, Code, Gas, GlobalClimate, LiquidKind, NodeId, Provenance, Trace, Traced, Water,
 };
 
 /// The recorded climate of a planet with a surface.
@@ -38,8 +39,9 @@ pub(crate) struct Climate {
     pub atmosphere: Atmosphere,
     /// The N2 and CH4 on the ground, recorded when positive.
     pub condensate: BTreeMap<Gas, Traced<Bar>>,
-    /// What fills the oceans; `None` without a liquid. The inventory and
-    /// the ocean share of `SurfaceLiquid` are 2d-4's.
+    /// What fills the oceans; `None` without a liquid. The water is the
+    /// inventory node of the surface, and its share under water is
+    /// [`sea_share`]'s.
     pub liquid: Option<Traced<LiquidKind>>,
     /// The snowball branch of a bistable body.
     pub snowball: Option<SnowballNodes>,
@@ -456,4 +458,28 @@ pub(crate) fn record_hides_surface(
         hides_surface(*runaway.value(), steam, *temperature.value()),
         &from,
     )?)
+}
+
+/// The share of the surface under water: [`ocean_fraction`] of the water
+/// kept, in Earth oceans ([`OCEAN_MASS`]), the sea term the cover law
+/// reads. `None` unless the liquid is water. The share derives from the
+/// water inventory and the liquid node.
+///
+/// # Errors
+///
+/// The errors of the trace.
+pub(crate) fn sea_share(
+    water: &Water,
+    liquid: Option<&Traced<LiquidKind>>,
+    trace: &mut Trace,
+) -> Result<Option<Traced<Fraction>>, InteriorError> {
+    let Some(liquid) = liquid.filter(|l| *l.value() == LiquidKind::Water) else {
+        return Ok(None);
+    };
+    let share = ocean_fraction(water.inventory.value().0 / OCEAN_MASS.0);
+    Ok(Some(trace.record(
+        Code::of(codes::SURFACE_OCEAN_SHARE),
+        share,
+        &[water.inventory.node(), liquid.node()],
+    )?))
 }

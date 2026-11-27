@@ -10,10 +10,14 @@
 //! `legacy-final:crates/mapgen/src/planet/mod.rs` (`chain`, l.517-604,
 //! and `bare`, l.880-893).
 //!
-//! Not wired into the generation chain yet (2d-4). Not in it: life, the
-//! class, the volcanic SO2 frost (#678) and the non-thermal loss (#658).
+//! The planet chain (`super::chain`) forms the ground, draws the spin
+//! from it and settles it here ([`settled_on`]); life and the class
+//! follow there. Not in it: the volcanic SO2 frost (#678) and the
+//! non-thermal loss (#658).
 
-use super::bare::{Bare, Formed, Ground, bare_air, formed, rock_of, surface_pass};
+use super::bare::{Bare, Formed, bare_air, rock_of, surface_pass};
+#[cfg(test)]
+use super::bare::{Ground, formed};
 use super::climate::ClimateInputs;
 use super::climate::Rotation;
 use super::climate::branches::solve;
@@ -23,15 +27,17 @@ use super::climate::record::{
 use super::climate::settle::Settle;
 use super::climate::wet::boils;
 use super::codes;
-use super::draws::{LABELS, draw, snowball_draw};
+#[cfg(test)]
+use super::draws::{Drawn, LABELS, draw, snowball_draw};
 use super::enveloped::Body;
 use super::interior::{InteriorError, steam_interior};
 use super::water::{boiled, recondensed, water};
+#[cfg(test)]
 use crate::Trial;
 use science::units::Bar;
-use timeline::{Code, Gas, Seed, Trace, Traced, Water};
-
-use super::draws::Drawn;
+#[cfg(test)]
+use timeline::Seed;
+use timeline::{Code, Gas, Trace, Traced, Water};
 
 /// A planet chained to its climate.
 ///
@@ -89,6 +95,7 @@ pub(super) struct Run {
 /// # Errors
 ///
 /// The errors of [`draw`] and [`settled_with`].
+#[cfg(test)]
 pub(crate) fn settled(
     trial: &Trial,
     seed: Seed,
@@ -100,25 +107,15 @@ pub(crate) fn settled(
 }
 
 /// The planet `trial` of composition `drawn`, chained to its climate
-/// under `rotation`, with the snowball draw of `snowball`, and judged by
-/// the boil loop (legacy `chain`, l.517-571):
-///
-/// 1. the ground ([`formed`]); a planet that kept an envelope stops there;
-/// 2. a first [`run`] from the water its light leaves ([`water`]), and
-///    its [`verdict`];
-/// 3. no boil: that run stands, its `boiled` recorded false from the
-///    verdict (the imposed leaf of [`water`] is replaced);
-/// 4. a boil: a run from the steam forced on the ground's water
-///    ([`boiled`], runaway and boiled from the verdict), then
-///    [`after_boil`];
-/// 5. the steam world line, read on the kept run and, past it, the pass
-///    on the steam envelope ([`steam_world`]).
-///
-/// Each run's nodes stay in the trace, as 2c's rebuilt bodies do.
+/// under `rotation`, with the snowball draw of the seed `snowball`
+/// (`snowball_draw`): its ground ([`formed`]), a planet that kept an
+/// envelope stopping there, then [`settled_on`]. The tests' entry; the
+/// chain forms the ground itself, so that it draws the spin in between.
 ///
 /// # Errors
 ///
 /// The errors of each step.
+#[cfg(test)]
 pub(crate) fn settled_with(
     trial: &Trial,
     drawn: &Drawn,
@@ -126,17 +123,49 @@ pub(crate) fn settled_with(
     snowball: Seed,
     trace: &mut Trace,
 ) -> Result<Settled, InteriorError> {
-    let f = match formed(trial, drawn, trace)? {
-        Ground::Enveloped(bare) => {
-            return Ok(Settled {
-                bare: *bare,
-                climate: None,
-                hides_surface: None,
-            });
-        }
-        Ground::Formed(f) => f,
-    };
-    let draw = snowball_draw(snowball);
+    match formed(trial, drawn, trace)? {
+        Ground::Enveloped(bare) => Ok(enveloped(*bare)),
+        Ground::Formed(f) => settled_on(*f, rotation, snowball_draw(snowball), trace),
+    }
+}
+
+/// A planet that kept an envelope, settled as it is: no climate, no
+/// steam line.
+pub(super) fn enveloped(bare: Bare) -> Settled {
+    Settled {
+        bare,
+        climate: None,
+        hides_surface: None,
+    }
+}
+
+/// The ground `formed` of a planet with a surface, chained to its climate
+/// under `rotation`, with the snowball draw `snowball` (the value), and
+/// judged by the boil loop (legacy `chain`, l.517-571):
+///
+/// 1. a first [`run`] from the water its light leaves ([`water`]), and
+///    its [`verdict`];
+/// 2. no boil: that run stands, its `boiled` recorded false from the
+///    verdict (the imposed leaf of [`water`] is replaced);
+/// 3. a boil: a run from the steam forced on the ground's water
+///    ([`boiled`], runaway and boiled from the verdict), then
+///    [`after_boil`];
+/// 4. the steam world line, read on the kept run and, past it, the pass
+///    on the steam envelope ([`steam_world`]).
+///
+/// Each run's nodes stay in the trace, as 2c's rebuilt bodies do.
+///
+/// # Errors
+///
+/// The errors of each step.
+pub(crate) fn settled_on(
+    formed: Formed,
+    rotation: &Rotation,
+    snowball: f64,
+    trace: &mut Trace,
+) -> Result<Settled, InteriorError> {
+    let f = formed;
+    let draw = snowball;
     let light = water(&f.trial, &f.body.exposed(), f.surface, trace)?;
     let first = run(&f, light, rotation, draw, trace)?;
     let v = verdict(&first, trace)?;

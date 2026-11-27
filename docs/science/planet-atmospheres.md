@@ -732,7 +732,7 @@ the post-steam body, then the photolysis, the reducing test, the cold trap
 and the photochemistry. The non-thermal loss waits for #658;
 the fallback and the climate are the solver's (2d-3a, see "The climate
 solver of the rewrite" below), and the climate is solved again after
-oxygenation in 2d-4 (#659). The carbonate
+oxygenation (planet PR 2d-4, #659). The carbonate
 thermostat of the climate takes Earth's CO₂ away afterwards, and life
 adds the oxygen.
 
@@ -1237,9 +1237,8 @@ reducing node only. Legacy solved the air without CO₂, then solved it
 again with CO₂ when the climate did not leave a Titan's air. The
 rewrite does the same in `system::planet::settled`: the test on the
 climate's result (the fallback to the air with CO₂, `titan_like_air`)
-exists, but `settled` is not wired into generation until 2d-4 (#659), so
-the planets the engine produces still keep a reducing air without CO₂
-until then. The frozen CO₂ is
+is wired into generation since planet PR 2d-4 (#659): `class_of` and
+`model` run `settled` on every trial. The frozen CO₂ is
 booked as legacy does, a frost of what the cold trap removes, which
 gives Callisto 5 bar of it (#590).
 
@@ -1477,8 +1476,9 @@ Earth's O₂ by volume) reads the O₂'s partial pressure, with the SO₂ the
 shoreline kept before it and as its column the surface pressure, the
 sum of the weights; then the cold trap (`cold_trapped`, *How the
 rewrite computes the cold trap*), with the SO₂ washed. The chain's O₂ is 0 until
-life gives it some (2d-4), so the wash-out's reading moves no reference
-body today; the trap moves Callisto's CO₂ alone among them.
+life gives it some (the second solve, which runs after this step), so the
+wash-out's reading moves no reference body; the trap moves Callisto's CO₂
+alone among them.
 
 **Calibration of `NITROGEN_RECYCLED_UNDER_PLATES`** (0.7965; studies 23,
 part 5, and 28). Study 23 fitted it first: legacy's 0.8 gave the
@@ -2742,7 +2742,8 @@ legacy's `OCEAN_LAYER_KM` is not ported.
 `k = −ln(1 − 0.71)`: the sea level of a body follows its hypsometry,
 which the planet model does not draw. Searched and not found: a
 published law from a water inventory to the share of a planet under
-sea (study 24, part 7; Cowan & Abbot 2014 are 2d-4's study).
+sea (study 24, part 7). Cowan & Abbot 2014 give the basins' capacity, which
+the ocean-world class reads (*The ocean world*), not the share under sea.
 
 **Calibration of `SOIL_ALBEDO`** (0.25, kept): Mars's Bond albedo,
 0.250 (NASA Mars fact sheet, read), a thin air over dust. Searched and
@@ -3346,7 +3347,7 @@ their measured air (see "Test air and Solar System bounds" below):
 | Body | Result | Target | Observed |
 |---|---|---|---|
 | Earth | 288 K, water, regulated, thermostat CO₂ 0.010605 bar by weight, a partial pressure of 6.819e-3 bar, Bond albedo 0.3066 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone in the light and in the infrared (#704), Bond albedo 0.2907 and 289.38 K at 280 ppm (before #749, which keeps the air in weights: 6.910e-3 bar read as a partial pressure, 0.3064, 0.2906 and 289.39 K; before #704 and the clouds' infrared emissivity of #705: 4.071e-3 bar, 0.3071, 0.2914 and 288.18 K; before the N₂ and O₂ pairs of #703: 4.206e-3 bar and 288.02 K; on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
-| Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the 577 K pin, the model's output (#594), moves to the tier-2 net in 2d-4 | 737 K |
+| Venus | 579.282 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the model's own 579.282 K, its tier-3 output (printed by the tier-3 `venus_prints_its_temperature`, release, on this branch, #594) is a tier-3 number, not a tier-2 pin | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
 | Titan | 92.36 K on the measured air, hydrocarbons; the reference Titan settles at 92.39 K on the chain's own air (92.33 K and 92.62 K before #749, whose chain methane, 2.11 bar by weight, the column read as a partial pressure; 92.64 K and 92.97 K before N₂ condensed in the column, #741; 93.86 K and 94.24 K under methane's grey stand-in, before #703; 104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | its equilibrium temperature, dry, temperate | within 1 K of it | airless |
@@ -3358,10 +3359,11 @@ Since #679 (*Titan's nitrogen*) the chain gives it 1.422 bar of N₂ and it
 settled at 94.24 K, 1.512 bar, with 0.091 bar of CH₄ over its seas under
 methane's grey stand-in; since its greenhouse is its pairs only (#703)
 it settled at 92.97 K, and since N₂ condenses in its column (#741) at
-92.61 K; 2d-4 moves the test onto the chain's own air.
+92.61 K; planet PR 2d-4 moved the test onto the chain's own air, 1.4643 bar
+and 92.39 K (`titan_has_its_seas`).
 Earth's O₂ comes from life, which the chain adds later: its reference air
-has none, and the climate is solved again after oxygenation in 2d-4
-(#659), so the 280 ppm check runs on Earth's measured air (N₂ 78.08 %,
+has none, and the climate is solved again after oxygenation (planet PR 2d-4,
+#659), so the 280 ppm check runs on Earth's measured air (N₂ 78.08 %,
 O₂ 20.95 % of 1.014 bar), under that air's own Bond albedo with the
 ozone its O₂ holds (`ozone_column`, [ozone.md](ozone.md)), taken at
 the reference Earth's temperature. Since #705 the cloud albedo is
@@ -3403,7 +3405,7 @@ against an observed 210 K it took as target (the NASA fact sheet gives
 about 214 K, see study 25), Titan 99 K, `titan-like` 93.7 K. Legacy's
 `mars-like` reached 215 K on the distance sweep and 213.3 to 214.1 K
 over seeds 1 to 40, and `venus-like` 552 to 601 K (median 575 K) under
-75 to 98 bar. Venus reaches 577 K under its 85 bar of CO₂ and its Bond
+75 to 98 bar. Venus reaches 577 K (579.28 K, the model's tier-3 output in the rewrite, #594) under its 85 bar of CO₂ and its Bond
 albedo 0.76 (739 K on the grey column, whose CO₂ opacity was calibrated
 on it): the infrared opacity of its H₂SO₄ clouds and its SO₂ are not
 modelled, and the hot bands of the line list above 700 K are unchecked
@@ -4489,9 +4491,9 @@ solar days is zonal for any non-locked rotator, so the flag is
   the fact sheet (decided with the user on 2026-11-24).
 - **Earth** 288 K (fact sheet), **Titan** 93.65 ± 0.25 K (Fulchignoni
   et al. 2005), **Venus** Bond albedo 0.76 ± 0.05 (NASA Venus fact sheet) and no
-  liquid, held in tier 1. The model's own 577 K is not a source: it is
-  pinned as a regression net in tier 2 once 2d-4 makes the chain
-  reachable from `crates/regression` (#594).
+  liquid, held in tier 1. The model's own Venus (579.282 K, the model's tier-3 output, the
+  tier-3 `venus_prints_its_temperature` in release) is not a source and not
+  a tier-2 pin: it stays a printed tier-3 number (#594).
 
 #### The reducing-air fallback
 
@@ -4885,7 +4887,7 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | Thick steam (≥ 260 bar) past the limit; 30 % water at 0.7 AU, `a_thick_steam_runaway_settles_past_the_end_of_the_plateau` | 1500 to 2500 K, a steam world | Kasting 1988 (over 1500 K for a full ocean), Goldblatt et al. 2013 (a stable steam state from about 1600 K), Boukrouche et al. 2021 § 4.3 (1835 K under 311 W/m² incoming, 2364 to 2451 K under 1343 W/m², 260 bar) |
 | Turbet's worked example | 1.2 R⊕ ± 5 % on Zeng's 0.750 R⊕ core ("around"; the fit errs by up to about 10 %) | Turbet et al. 2020 § 3.1 |
 | A steam world's radius | over its condensed radius, inside the structures of Turbet's § 2.1 (27 bar to 270 kbar), past § 2.2's 27 kbar | Turbet et al. 2020 § 3.1 (property) |
-| The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; 1.61 R⊕ and 1679 K are the old code's output (tier-2 net only) |
+| The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; the model's own output on this branch is 1.64297 R⊕ and 1468.00 K (printed by the tier-3 test, release; not a source, not pinned) |
 | A wet Venus under an XUV fluence of 1e14 J/m², `thin_steam_over_rock_stays_a_runaway` | a runaway under 220.64 bar of steam, no envelope | Pierrehumbert 2023 § 1 (no surface hides under the critical pressure); legacy `thin_steam_over_rock_stays_a_runaway_greenhouse` |
 | A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
 | F0V (7220 K) at 1.2963 S⊕, a hundredth of the N₂, half Earth's mass, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light over the saturated column's peak (at Earth's mass 291.0 over 289.9 W/m²; at a tenth of the N₂, Earth's argon raises the peak to 292.3, #694), Kasting 1988, Goldblatt et al. 2013. Since the cloud albedo's refit (#705, 0.322) an Earth-mass planet there has a Bond albedo of 0.3515 and absorbs 286.0 W/m², under any peak the N₂ cut gives; half Earth's mass, whose lower gravity lowers the peak, boils at 282.7 W/m² (0.7 Earth masses does not); legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
@@ -4897,42 +4899,135 @@ at 295 bar and find the plateau's end constant past it, to columns of
 
 ## Life
 
-`life` decides from the climate whether life arose, and `oxygenate` gives
-the air of a world with oxygenic life its oxygen. Life is possible when
-the surface liquid is water now and the system is at least `LIFE_MIN_GYR`
-(1.0 Gyr, calibration, no source: the spec's "order of a billion years")
-old. It then arises when the last draw of the inputs, `life_draw`, is
-below `LIFE_CHANCE` = 1/3.
+`science::life::stage` decides from the climate whether life arose and
+where it stands (`Stage`: `Lifeless`, `Anoxic`, `Oxidising`, `Modern`),
+and `science::life::oxygenate` gives the air of a living world what its
+stage makes of it. The values below come
+from [study 27](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit),
+which read the sources; the user decided its open choices on
+2026-11-24.
 
-`LIFE_CHANCE` is a game choice, set with the user on 2026-11-12. No
-measured rate exists: the only world known to have life is Earth, and one
-case gives no probability. Nothing in the model is calibrated on it, and
-it can be changed without touching any physics.
+**When life can arise.** Life is possible when the surface liquid is
+water now and the system is at least `LIFE_MIN_GYR` old. It then arises
+when the planet's life draw, from its own seed (`planet/life`, beside
+the snowball draw), is below `LIFE_CHANCE`.
 
-Life has oxygenated the air once the system is `OXYGEN_AFTER_GYR` old,
-2.2 Gyr, Earth's Great Oxidation Event about 2.4 Ga (Lyons, Reinhard &
-Planavsky 2014, doi:10.1038/nature13068: 2.3 to 2.4 Ga, checked in the
-authors' EGU 2014 abstract, the Nature text not read). The oxygenated air holds O₂ at `0.27` of its
-N₂ (calibration on Earth: 0.21 over 0.78) and no methane, which the
-oxygen oxidises.
+- `LIFE_MIN_GYR`, the oldest generally accepted evidence of life after
+  Earth formed. The Solar System's age is that of its first solids, the
+  CAIs, 4567.30 ± 0.16 Myr (Connelly et al. 2012, abstract). The rock
+  record "indicates the presence of a microbial biosphere by at least
+  3.4 billion years ago — and disputably earlier" (Javaux 2019,
+  abstract); Nutman et al. 2016 call the 3.48 Ga Dresser Formation "the
+  previous most convincing and generally accepted" evidence. So life is
+  attested 1.09 to 1.17 Gyr after formation. Older claims are disputed:
+  graphite in a 4.10 Ga zircon (Bell et al. 2015, 0.47 Gyr after
+  formation), 3.77 to 4.28 Ga microfossils (Dodd et al. 2017), 3.95 Ga
+  graphite (Tashiro et al. 2017), 3.7 Ga stromatolites (Nutman et al.
+  2016, reinterpreted as deformation by Allwood et al. 2018). The
+  molecular clock puts the last universal common ancestor at 4.2 Ga
+  (4.09 to 4.33; Moody et al. 2024, abstract), 0.24 to 0.48 Gyr after
+  formation. Legacy's 1.0 Gyr was a calibration with no source; the
+  rewrite takes 1.17 Gyr, 4.567 minus Javaux's 3.4 Ga, a `Source:`
+  (decided 2026-11-24): the time by which Earth certainly had life.
+- The literature counts the time life took from when the planet became
+  habitable (Spiegel & Turner 2012: "after the young planet had cooled
+  to the point that it could support water-based organisms"; Lineweaver
+  & Davis 2002: after the last sterilising impact, 4.44 to 3.7 Ga), not
+  from formation. The model has no history of its climate, so it uses
+  the system's age and the liquid of today: a declared simplification.
+- `LIFE_CHANCE` = 1/3 is a game choice, set with the user on
+  2026-11-12 (`Definition:`). No measured rate exists: the only world
+  known to have life is Earth, and one case gives no probability
+  (Spiegel & Turner 2012 find Earth's early life "consistent with an
+  arbitrarily low intrinsic probability of abiogenesis"). Nothing in the
+  model is calibrated on it, and it can be changed without touching any
+  physics.
 
-`Surface.gases` is that air after life, but `Surface.climate` was solved
-with the air before it, methane included: removing a greenhouse gas
-would cool the surface a little, and the temperature is not solved
-again. This simplification is dropped in 2d-4, which solves the climate
-again after oxygenation (spec 2d, #659); until then it holds. Earth's
-O₂ comes from life, so the climate of 2d-3a runs on an air without it.
+**When life oxygenates the air.** Lyons, Reinhard & Planavsky 2014
+(Nature 506, 307; read in full) date the "permanent rise to appreciable
+concentrations of O₂ in the atmosphere some time between 2.4 and 2.1
+billion years (Gyr) ago" (p. 307), narrowed by the loss of the sulphur
+isotope signal "to between 2.4 and 2.3 Gyr ago" (p. 314). That is 2.17
+to 2.27 Gyr after the CAIs: `OXYGEN_AFTER_GYR` = 2.2 Gyr is a
+`Source:`. The same paper says the rise was not one step to modern air:
+
+- after a high excursion 2.3 to 2.1 Ga (the Lomagundi excursion), O₂ was
+  "persistently or transiently very low in the atmosphere, perhaps even
+  less than 0.1% of that present today" through the mid-Proterozoic
+  (p. 311), against older estimates of more than 1 % to less than 40 %
+  of the present level (p. 312);
+- oxygen "rose to something like modern values about 600 million years
+  (Myr) ago" (p. 307), about 3.97 Gyr after formation.
+
+Legacy's single step to modern O₂ at 2.2 Gyr gives a Proterozoic world
+modern air for 1.8 Gyr. The rewrite takes two steps (decided
+2026-11-24), so a living planet has three states of air:
+
+- before `OXYGEN_AFTER_GYR` (2.2 Gyr), the air life found;
+- from 2.2 Gyr, an oxidising air: the methane is gone (Zahnle, Claire &
+  Catling 2006 tie the GOE to the collapse of methane) and the O₂ is
+  under 0.1 % of modern, taken as none (a declared simplification inside
+  the paper's bound, not a calibration);
+- from `MODERN_OXYGEN_AFTER_GYR`, 4.0 Gyr (3.97: 4.567 Ga minus the
+  "about 600 million years" of p. 307, a `Source:`), modern O₂.
+
+**The oxygenated air.** From 4.0 Gyr its O₂ is `O2_PER_N2` of its N₂:
+0.306, the ratio by weight of O₂ to N₂ in the reference dry air of the
+CIPM-2007 formula: the mole fractions of O₂ (0.209 390) and N₂
+(0.780 848) (Picard et al. 2008, Table 1) times the molar masses
+(31.998 and 28.014 g/mol), a `Definition:` computed in `science`, which
+the tests recompute. It is a weight because the chain's partial
+pressures are weights (a gas's mass share times the surface pressure,
+see "Earth's N₂ target"): the ratio of the mole fractions, 0.2682, would
+give the reference Earth 0.200 bar of O₂ instead of 0.228. Legacy's 0.27
+rounded 0.21 over 0.78, by volume. The ratio to N₂ is the model's choice of how Earth's air carries over to another planet:
+the O₂ of a planet is set by its biology and its sinks, which the model
+does not have. In an oxygenated air OH destroys methane within 9.1 ±
+0.9 years (Prather, Holmes & Hsu 2012), and what is left is a steady
+state of the biological and other fluxes (Zahnle, Claire & Catling
+2006), 1.9 ppm on today's Earth (NOAA GML). The oxidising air models no
+such flux, so its methane is zero (a `Definition:` of the model's
+scope, #717). A modern air keeps the methane of a modern biosphere:
+Earth's pre-industrial natural flux per square metre held against the
+lifetime its stars give it, on its gravity
+(`science::life_gases::modern_methane`, study 37,
+[Life gases](life-gases.md)), 3.678e-7 bar by weight around the Sun on
+Earth's gravity, 672.8 ppb of the moles in Earth's air.
+
+**The climate solved again.** The climate is solved again on the
+oxygenated air: climate, life, oxygenation, climate (decided on
+2026-11-24 in 2d-3a). Legacy kept the climate solved on the air before
+life and gave the oxygenated air only to the surface. Before life the
+reference Earth's air has no O₂, and its thermostat holds 288 K with
+0.010605 bar of CO₂ by weight (the table of the climate solver's
+targets above); on Earth's measured air (N₂ 78.08 %, O₂ 20.95 % of
+1.014 bar) the solver gives 289.38 K at 280 ppm, inside the 286 to
+290 K window of the tests (a test definition: Myhre et al. 1998 give the
+280 ppm, not a temperature). After life, at the modern stage, the
+reference Earth's air holds 0.2285 bar of O₂ by weight (`O2_PER_N2`,
+0.306 of its N₂, "The oxygenated air"), 0.01294 bar of argon (the
+chain's own, `earth_weighs_its_argon`, "Argon (study 29)") and the methane of
+`modern_methane` (above); the second solve settles at 288.000 K with its
+thermostat's CO₂ at 2.4058e-4 bar by weight. These are the model's
+outputs for an Earth drawn alive, printed by the tier-3
+`the_reference_earth_lives_and_reaches_its_climate`; the tier-2
+`the_reference_planets` net does not pin them, as no reference planet is
+alive (reference 7's earth-like drew lifeless). The class does not read
+the O₂; the climate does, through the pressure. The second solve takes no
+boil verdict (a declared simplification): the class and the surface
+liquid read the second climate, the biosphere the first.
 
 | Case | Result |
-|---|---|
-| Earth, `life_draw` 0, 4.6 Gyr | life, O₂ between 0.15 and 0.3 bar, no CH₄ |
+| --- | --- |
+| Earth, life draw 0, 4.6 Gyr | life, O₂ at 0.306 of the N₂ by weight, CH₄ of `modern_methane`, climate solved again |
 | Earth at 0.5 Gyr | no life |
 | Earth at 1.5 Gyr | life, no oxygen yet |
-| Earth, `life_draw` 0.99 | habitable, lifeless |
+| Earth at 3.0 Gyr | life, an oxidising air: no CH₄, no O₂ |
+| Earth, life draw 0.99 | habitable, lifeless |
 | Venus, Mars | no life, whatever the draw (no liquid water) |
 
-`life_draw` is appended as the last draw of `draw_inputs`, so every
-earlier input of a body keeps its value.
+The life draw derives from the planet's seed, never from the trace, so
+the class and the model of a planet draw the same value.
 
 ## The chain and the surface classes
 
@@ -4960,7 +5055,9 @@ mass), the water kept and the runaway check, the tectonic regime, the
 core and dynamo, the air (`outgassed`, `atmosphere`,
 `methane_photolysis`, `cold_trap`, then `photochemistry`, which reads
 the cold trap's air), the climate and
-surface liquid, and life with the oxygen it makes. If a wet surface
+surface liquid, then life and the oxygen it makes, and the climate
+solved again on the oxygenated air (the rewrite, planet PR 2d-4; legacy
+kept the first climate). If a wet surface
 has no wet balance (`climate::boils`: its absorbed light and internal
 heat exceed the moist limit; Goldblatt et al. 2013,
 doi:10.1038/ngeo1892), the body has run away after all, in one pass
@@ -4970,9 +5067,14 @@ the air), flagged `boiled`, on the body that water leaves
 (`planet::after_steam`: its mass, layers and heat derived again). If
 escape leaves water and that leftover has a wet balance of its own (too
 little vapour to hold the moist limit), it condenses again and a third
-run keeps it as an ocean (`boiled`, no runaway; the water cause tree
-says so in a `boiled_recondensed` note that carries the water lost,
-issue #517); otherwise the steam run stands, dry when escape took all the
+run keeps it as an ocean. The chain shows it without a note: `boiled` is
+true (from the verdict) and `runaway` false (from the leftover's
+inventory), and the boiled-off envelope node is in the cause tree, read by
+`planet.mass.after-boil-off`; the water lost would be a difference
+computed only to explain, against one code path per value (the legacy
+`boiled_recondensed` note is not ported, issue #517). An F0V Earth that
+boils and recondenses ends with 1.4050e17 kg of water at 288.0005 K
+(the model's output); otherwise the steam run stands, dry when escape took all the
 water. There is no temperature condition, so a boil whose dry air is
 under 647 K still ends dry (issue #442). A body
 that keeps an envelope has no surface: `PlanetModel.surface` is `None`.
@@ -4980,20 +5082,25 @@ Otherwise the `Surface` holds the water, regime, core, final gases,
 climate and life, and `classify` reads the class off it. Nothing derives
 from the class.
 
-The first rule that holds wins:
+The first rule that holds wins. Its thresholds are in `science::classes`:
+`HOT_GIANT_MAX_PERIOD`, `SUPER_EARTH_MIN_RADIUS`, `DENSE_AIR_BAR`,
+`ICE_WORLD_MIN_OCEANS` and the basins' capacity `basin_capacity_oceans`
+(`BASIN_OCEANS`); methane's triple-point pressure is
+`science::volatiles::methane_triple_pressure`, which `titan_like_air`
+reads too.
 
 | Order | Class | Rule |
-|---|---|---|
-| 1 | `hot-jupiter`, `gas-giant`, `ice-giant` | giant rules of part 1 |
-| 2 | `mini-neptune` | envelope of at least 0.1 % and radius of at least 1.6 R⊕ |
+| --- | --- | --- |
+| 1 | `hot-jupiter`, `gas-giant`, `ice-giant` | the body kinds the chain decides: a gas giant is a `Body::Giant` (20 M⊕ and up), an ice giant a `Body::MiniNeptune` of at least 10 M⊕ (`MINI_NEPTUNE_MAX_MASS`); hot within 10 days (Wright et al. 2012); see [What are planets made of?](planet-interiors.md#classes) |
+| 2 | `mini-neptune` | a `Body::MiniNeptune` under 10 M⊕ (it kept at least 0.1 % of its mass in gas, `MIN_ENVELOPE`); no radius rule |
 | 3 | `steam-world` | in water runaway, at least 220.64 bar of steam (water's critical pressure) and a surface at 647 K or more (`climate::hides_surface`) |
 | 4 | `lava-world` | surface liquid is lava (at least 1673 K, no water kept) |
 | 5 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
 | 6 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
-| 7 | `ocean-world` | surface liquid is water and at least 10 Earth oceans are kept |
-| 8 | `ice-world` | at least 5 % water and ices |
+| 7 | `ocean-world` | surface liquid is water and the oceans kept exceed the basins' capacity, `3.7 (R/R⊕)² (g⊕/g)` Earth oceans (Cowan & Abbot 2014, below) |
+| 8 | `ice-world` | at least 5 % water and ices (`ICY_MIN_WATER`, the tides' line) in the water fraction the chain kept (`drawn.water_fraction`, the node the class reads, not the trial's draw), and at least 0.01 Earth ocean kept at the surface (`ICE_WORLD_MIN_OCEANS`) |
 | 9 | `volcanic-world` | a solid surface in the heat-pipe regime, none of the classes above, no ice world |
-| 10 | `super-earth`, `rocky` | radius of at least 1.25 R⊕, rocky below |
+| 10 | `super-earth`, `rocky` | radius of at least 1.25 R⊕ (Borucki et al. 2011), rocky below |
 
 A `steam-world` (issue #492) is a runaway whose water stands as a deep
 supercritical column over the rock. Above water's critical point there
@@ -5044,21 +5151,49 @@ stays one whatever its regime. It also comes after the classes that name
 what covers the surface (magma, a dense greenhouse air, a sea). Its
 interim base look is `volcanic`, as for any heat-pipe body.
 
-Two constants are calibrations. `OCEAN_WORLD_OCEANS` is 10 Earth oceans:
-Cowan & Abbot 2014 (doi:10.1088/0004-637X/781/1/27) study how much water
-drowns all land; ten is a round figure above the few oceans their basins
-hold, not a value from the paper. `DENSE_AIR_BAR` is 1 bar, for the
-runaway greenhouse (Venus has 90 bar; a runaway that lost its air is a
-bare rock). The hydrocarbon world needs its air above methane's
-triple-point pressure (`METHANE_TRIPLE_BAR`, 0.1169 bar, NIST), under
-which no liquid methane is stable; it took the 1 bar until part 4, when
+**The ocean world** (study 27). Legacy's `OCEAN_WORLD_OCEANS`, 10 Earth
+oceans, was a round figure, not a value of Cowan & Abbot 2014 (ApJ 781,
+27, arXiv:1401.0720, read in full). The paper gives what the code
+needs. An Earth-size planet's basins hold at most "5.2x10^18 m^3, or a
+mass of 3.7 M_o" (§ 2.4: basins over 90 % of the surface, zero
+freeboard, the continents' crust at most 70 km thick); past that, no
+land shows. The basins' depth scales as the inverse of the gravity
+(Eq. 11, `d_o^max ≈ 11.4 km (g/g⊕)^-1`) and their area as the radius
+squared, so the water that drowns all land is `3.7 (R/R⊕)² (g⊕/g)`
+Earth oceans, about 3.7 at Earth's mass and gravity. Their headline
+"water mass fraction less than ~0.2%" counts the water of the mantle
+too, which the model's surface water does not: it is not the line. With
+the basin capacity, a `Source:`, more planets become ocean worlds than
+with 10 (from 3.7 instead of 10 oceans on an Earth). The paper assumes
+plate tectonics; the rewrite applies it in every regime (decided
+2026-11-24): the basins' depth is set by isostasy under gravity (Eq. 6),
+not by plate motion. The model has two laws for water on the surface:
+`ocean_share` of the surface liquid is `ocean_fraction` of the water
+inventory (the share of the surface under water, which the world reads
+for its sea level), and the basin capacity above is a second law, for
+where the land drowns. They are not reconciled: `ocean_fraction` does not
+read the basins' capacity, so the two can disagree on a low-gravity
+planet, whose basins hold more (#774).
+
+**The dense air.** `DENSE_AIR_BAR` is 1 bar, for the runaway greenhouse
+(Venus has 92 bar; a runaway that lost its air is a bare rock). No
+source sets a pressure that parts a runaway greenhouse from a bare rock:
+the published criteria are the absorbed light (Goldblatt et al. 2013)
+or the distance to the star (Hamano et al. 2013), so it stays a
+calibration (study 27). The hydrocarbon world needs its air above methane's
+triple-point pressure (`methane_triple_pressure`, 0.117 bar: Setzmann
+and Wagner 1991's saturation at their triple point, 90.6941 K, with
+NIST's 0.1169 bar as a cross-check), under which no liquid methane is
+stable; it took the 1 bar until part 4, when
 Titans drawn with 0.6 to 1 bar kept lakes but were classed ice worlds.
 It keeps a cold body with a trace of methane over its ice under a thin
-air an ice world. Titan has 2.1 bar in the model.
+air an ice world. Titan has 1.4643 bar in the model, on its chain's own air
+(92.39 K).
 
 The case of issue #492 (4.78 M⊕, 12 % water, an M9V star at 0.018 AU)
-is a `steam-world`: 4.1e5 bar of steam over a surface at 1679 K, and
-1.700 R⊕ (1.641 with its water condensed).
+is a `steam-world`: over 1e5 bar of steam over a surface at 1468.00 K,
+and 1.64297 R⊕ (the model's output, printed by the tier-3 test; the old
+code gave 1679 K and 1.700 R⊕).
 
 The Solar System classifies as itself: Venus `runaway-greenhouse`, Earth
 and Mars `rocky`, Titan `hydrocarbon-world`, Ganymede and Europa
@@ -5353,6 +5488,9 @@ another paper, from memory) is said where it is used.
 - Allègre, Hofmann and O'Nions 1996, *Geophys. Res. Lett.* 23, 3555,
   doi:10.1029/96GL03373, about half of Earth's ⁴⁰Ar still in the solid
   Earth (abstract read).
+- Allwood, Rosing, Flannery, Hurowitz and Heirwegh 2018, *Nature* 563,
+  241, doi:10.1038/s41586-018-0610-4, the Isua "stromatolites" as
+  deformation (abstract read).
 - Anderson et al. 2011, doi:10.1126/science.1211001, Mercury's
   dipole.
 - Anderson, Mousis and Ronnet 2021, *PSJ*, arXiv:2102.03230, Titan's
@@ -5395,6 +5533,9 @@ another paper, from memory) is said where it is used.
 - Barrett and Meyer 1965, *J. Chem. Phys.* 42, 107,
   doi:10.1063/1.1695654, the argon-nitrogen phase diagram (abstract
   read).
+- Bell, Boehnke, Harrison and Mao 2015, *PNAS* 112, 14518,
+  doi:10.1073/pnas.1517557112, carbon in a 4.10 Ga zircon (abstract
+  read).
 - Bell, Wronski, Quoilin and Lemort 2014, *Ind. Eng. Chem. Res.* 53,
   2498, doi:10.1021/ie4033999, CoolProp, whose saturation ancillaries
   give argon's liquid vapour pressure.
@@ -5406,6 +5547,8 @@ another paper, from memory) is said where it is used.
   doi:10.1016/j.pss.2024.105863, arXiv:2403.09917, NH₃'s sublimation
   pressure at 80 to 120 K.
 - Bono et al. 2019, the age of Earth's inner core.
+- Borucki et al. 2011, *ApJ* 736, 19, doi:10.1088/0004-637X/736/1/19,
+  arXiv:1102.0541, the Kepler size classes (read).
 - Borysow and Frommhold 1987, *Astrophys. J.* 318, 940,
   doi:10.1086/165426, the CH₄–CH₄ pairs of HITRAN's `CH4-CH4_2011.cia`
   (through HITRAN's references, not read).
@@ -5450,6 +5593,8 @@ another paper, from memory) is said where it is used.
   (as radiative-transfer.md reads it), and the potassium page of
   ciaaw.org, potassium's standard atomic weight 39.0983(1) (read for
   study 29).
+- Connelly et al. 2012, *Science* 338, 651, doi:10.1126/science.1226919,
+  the age of the CAIs, 4567.30 ± 0.16 Myr (abstract read).
 - CoolProp, `dev/fluids/Argon.json` (read 2026-11-25): Tegeler et al.
   1999's triple and critical points and the ancillary `pS` of argon's
   liquid vapour pressure (its largest error 0.0077 %).
@@ -5457,8 +5602,9 @@ another paper, from memory) is said where it is used.
 - Courtin, Gautier and McKay 1995, Titan's collision-induced
   bands.
 - Coustenis et al. 2010, doi:10.1016/j.icarus.2009.11.027, Titan's CO₂.
-- Cowan and Abbot 2014, doi:10.1088/0004-637X/781/1/27, Table 1:
-  Earth's ocean as a share of its mass.
+- Cowan and Abbot 2014, doi:10.1088/0004-637X/781/1/27,
+  arXiv:1401.0720, Table 1: Earth's ocean as a share of its mass; § 2.4
+  and Eq. 11: the basins' capacity (read in full, study 27).
 - Cruikshank et al. 1993, *Science* 261, 742, Triton's CO₂ ice.
 - Dai 2006, *J. Climate* 19, 3589, doi:10.1175/JCLI3816.1, Earth's
   surface relative humidity (abstract read).
@@ -5470,6 +5616,8 @@ another paper, from memory) is said where it is used.
 - de Kok et al. 2007, Titan's CO₂ from Cassini CIRS.
 - Dello Russo et al. 2016, cometary abundances, as updated in Biver et
   al. 2022.
+- Dodd et al. 2017, *Nature* 543, 60, doi:10.1038/nature21377,
+  Nuvvuagittuq microfossils (abstract read).
 - Domalski and Hearing 1996, the enthalpy of melting of ethane (2.79
   kJ/mol at 89.5 K), through the NIST Chemistry WebBook.
 - Dorn, Noack and Rozel 2018, *A&A* 614, A18,
@@ -5601,6 +5749,8 @@ another paper, from memory) is said where it is used.
 - Jakosky, Slipski, Benna, Mahaffy et al. 2017, *Science* 355, 1408,
   doi:10.1126/science.aai7721, 66 % of Mars's argon lost (abstract
   read).
+- Javaux 2019, *Nature* 572, 451, doi:10.1038/s41586-019-1436-4, the
+  earliest traces of life, a review (abstract read).
 - Jin et al. 2004, *Geophys. Res. Lett.* 31(22), doi:10.1029/2004GL021180,
   ocean surface albedo (abstract read).
 - Jochum et al. 1983, a silicate Earth K/U of about 12 000 (as Marty
@@ -5696,6 +5846,9 @@ another paper, from memory) is said where it is used.
   arXiv:2105.09789, Mars's non-thermal escape and its argon isotopes,
   eq. 32 (read).
 - Lillis et al. 2013, Mars's dynamo.
+- Lineweaver and Davis 2002, *Astrobiology* 2, 293,
+  doi:10.1089/153110702762027871, arXiv:astro-ph/0205014, the rapidity
+  of biogenesis (read).
 - Lipiński et al. 2007, *Int. J. Thermophys.* 28, 1904,
   doi:10.1007/s10765-007-0267-y, nitrogen's alpha-beta transition
   (closed).
@@ -5711,8 +5864,10 @@ another paper, from memory) is said where it is used.
   thickness, through `science::envelope`).
 - Lora and Ádámkovics 2017, arXiv:1610.06277, Titan's near-surface
   methane humidity (read).
-- Lyons, Reinhard and Planavsky 2014,
-  doi:10.1038/nature13068, the Great Oxidation Event.
+- Lyons, Reinhard and Planavsky 2014, *Nature* 506, 307,
+  doi:10.1038/nature13068, the Great Oxidation Event and the
+  Proterozoic's low O₂ (read in full, the authors' lab copy through the
+  Internet Archive; study 27).
 - Lyubetskaya and Korenaga 2007; McDonough and Arevalo 2008; Palme and
   O'Neill 2014: models of the primitive mantle's potassium (as Wang,
   Lineweaver and Ireland 2018 combine them).
@@ -5762,6 +5917,9 @@ another paper, from memory) is said where it is used.
 - Modirrousta-Galian and Korenaga 2026, *Icarus* 444, 116827,
   doi:10.1016/j.icarus.2025.116827, arXiv:2509.16046, the energy-limited
   cap of core-powered loss (abstract read).
+- Moody et al. 2024, *Nat. Ecol. Evol.* 8, 1654,
+  doi:10.1038/s41559-024-02461-1, the age of the last universal common
+  ancestor (abstract read).
 - Moore et al. 1999, Callisto.
 - Moore and Webb 2013, doi:10.1038/nature12473, "Heat-pipe
   Earth".
@@ -5783,6 +5941,9 @@ another paper, from memory) is said where it is used.
   doi:10.1006/icar.2001.6782.
 - Mumma and Charnley 2011,
   doi:10.1146/annurev-astro-081309-130811.
+- Myhre, Highwood, Shine and Stordal 1998, *GRL* 25, 2715,
+  doi:10.1029/98GL01908, the preindustrial 280 ppm of CO₂ (as
+  `docs/science/radiative-transfer.md`).
 - Nadeau and McGehee 2017, *Icarus* 291, 46,
   doi:10.1016/j.icarus.2017.01.040, the mean annual insolation by
   latitude (read in arXiv:1510.04542).
@@ -5819,11 +5980,17 @@ another paper, from memory) is said where it is used.
 - Nimmo and Stevenson 2000, doi:10.1029/1999JE001216.
 - NIST Atomic Spectra Database, the H I Lyman α multiplet.
 - NIST CODATA, the Planck constant (exact).
+- NOAA Global Monitoring Laboratory, trends in atmospheric methane,
+  gml.noaa.gov/ccgg/trends_ch4/ (read 2026-11-24): 1936 ppb, August
+  2026.
 - Noack et al. 2016, *Icarus* 277, 215,
   doi:10.1016/j.icarus.2016.05.009.
 - North, Cahalan and Coakley 1981, *Rev. Geophys. Space Phys.* 19, 91,
   doi:10.1029/RG019i001p00091, energy balance climate models (read).
 - NSIDC, the sea ice pages (quick facts; sea ice), read 2026-11-24.
+- Nutman, Bennett, Friend, Van Kranendonk and Chivas 2016, *Nature*
+  537, 535, doi:10.1038/nature19355, Isua structures and the Dresser
+  Formation as the generally accepted oldest life (abstract read).
 - O'Rourke and Korenaga 2015, *Icarus* 260, 128, Venus's argon
   degassing (as Warren and Kite 2023 and Krissansen-Totton et al. 2021
   quote it).
@@ -5854,8 +6021,9 @@ another paper, from memory) is said where it is used.
 - Petigura et al. 2022, *AJ*, doi:10.3847/1538-3881/ac51e3,
   arXiv:2201.10020, the radius gap against stellar mass (abstract read).
 - Picard, Davis, Gläser and Fujii 2008, *Metrologia* 45, 149,
-  doi:10.1088/0026-1394/45/2/004, the CIPM-2007 air density formula and
-  its argon (abstract read).
+  doi:10.1088/0026-1394/45/2/004, the CIPM-2007 formula for the density
+  of moist air, Table 1, the composition of dry air and its argon (read,
+  NIST copy).
 - Pierrehumbert 2010, section 4.4.
 - Pierrehumbert 2023, *ApJ* 944, 20, doi:10.3847/1538-4357/acafdf,
   arXiv:2212.02644, the supercritical column of a post-runaway
@@ -5865,11 +6033,16 @@ another paper, from memory) is said where it is used.
   RRTMGP's data; study 32).
 - Plaut et al. 2007, *Science* 316, 92, doi:10.1126/science.1139672,
   Mars's south polar layered deposits (abstract read).
+- Prather, Holmes and Hsu 2012, *GRL* 39, L09803,
+  doi:10.1029/2012GL051440, methane's lifetime, 9.1 ± 0.9 years
+  (read).
 - Quirico et al. 1999, *Icarus* 139, 159, Triton's CO₂ ice.
 - Ribas et al. 2005, *ApJ* 622, 680, doi:10.1086/427977, Table 5.
 - Robinson and Catling 2012, *ApJ* 757, 104, section 4.3.
 - Robinson and Catling 2014, doi:10.1038/ngeo2020, the
   tropopause.
+- Rogers 2015, *ApJ* 801, 41, doi:10.1088/0004-637X/801/1/41,
+  arXiv:1407.4457, most planets over 1.6 R⊕ are not rocky (read).
 - Rogers, Gupta, Owen and Schlichting 2021, *MNRAS* 508, 5886,
   doi:10.1093/mnras/stab2897, arXiv:2105.03443, the valley's slopes
   predicted by each loss (read in part).
@@ -5926,6 +6099,9 @@ another paper, from memory) is said where it is used.
   point (Sec. 2.2, eq. 3), the vapour-pressure ancillary (Sec. 2.6,
   eq. 4) and the saturation tables (pp. 1405-1407).
 - Spencer 1987, dark moons.
+- Spiegel and Turner 2012, *PNAS* 109, 395,
+  doi:10.1073/pnas.1111694108, arXiv:1107.3835, life's early emergence
+  and its probability (read).
 - Stansberry, Pisano and Yelle 1996,
   *Planet. Space Sci.* 44, 945, doi:10.1016/0032-0633(96)00001-3;
   Pluto's pure CH₄ deposits (as Lellouch et al. 2010 quote it).
@@ -5941,6 +6117,8 @@ another paper, from memory) is said where it is used.
   and Shock 2013, Table 4).
 - Tang, Fortney and Murray-Clay 2024, arXiv:2410.08577, boil-off and
   the core-powered loss after it, Table 2 (read).
+- Tashiro et al. 2017, *Nature* 549, 516, doi:10.1038/nature24019,
+  Saglek graphite (abstract read).
 - Tegeler, Span and Wagner 1999, *J. Phys. Chem. Ref. Data* 28, 779,
   doi:10.1063/1.556037, argon's reference equation of state, its triple
   point (as Xiao et al. 2025 and CoolProp take it).
@@ -6013,6 +6191,8 @@ another paper, from memory) is said where it is used.
   of vaporisation, through the NIST Chemistry WebBook.
 - Wolf and Toon 2014, doi:10.1089/ast.2013.1112.
 - Wright et al. 2011, *ApJ* 743, 48.
+- Wright et al. 2012, *ApJ* 753, 160, doi:10.1088/0004-637X/753/2/160,
+  the frequency of hot Jupiters and their period under 10 days.
 - Xiao, Sriskandaruban and Maynard-Casely 2025, *Int. J. Thermophys.*
   46, 14, doi:10.1007/s10765-024-03469-2, solid argon's equation of
   state and its sublimation pressure, eq. 55 (read in the Research
@@ -6027,6 +6207,9 @@ another paper, from memory) is said where it is used.
   occultation (as Steffl et al. 2020 quote it).
 - Yung, Allen and Pinto 1984, *ApJS* 55, 465,
   doi:10.1086/190963, Titan's photochemistry, Tables 2A and 5B.
+- Zahnle, Claire and Catling 2006, *Geobiology* 4, 271,
+  doi:10.1111/j.1472-4669.2006.00085.x, methane and the rise of oxygen
+  (read).
 - Zeng, Sasselov and Jacobsen 2016, *ApJ* 819, 127,
   doi:10.3847/0004-637X/819/2/127, the mass-radius tables of rocky
   planets Turbet et al. build on (the MgSiO₃ and Earth-like tables of

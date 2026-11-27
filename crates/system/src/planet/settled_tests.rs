@@ -7,18 +7,17 @@
 //! (the snowball branches), so its tests are tier 3; so are the thin
 //! steam Venus's (about 7 s each, a wet Venus's climate).
 
-use super::bare::{Bare, Ground, bare_with, formed};
+use super::air_tests::TITAN_N2_TOLERANCE;
+use super::bare::{Ground, bare_with, formed};
 use super::climate::Rotation;
 use super::climate::branches::{Bistable, Solved, solve};
 use super::climate::fixture::{EARTH_OBLIQUITY, MARS_OBLIQUITY, TITAN_OBLIQUITY, rotation};
-use super::climate::record::{Climate, record, record_hides_surface};
+use super::climate::record::{Climate, record, record_hides_surface, sea_share};
 use super::climate::{ClimateInputs, Light, Numerics};
 use super::codes;
 use super::draws::{Drawn, LABELS, draw};
 use super::enveloped::Body;
-use super::settled::{
-    Entry, Settled, after_boil, climate_of, run, settled, settled_with, steam_world,
-};
+use super::settled::{Entry, Settled, after_boil, run, settled, settled_with, steam_world};
 use super::tests::{
     EARTH, MARS, MERCURY, ReferenceBody, TITAN, VENUS, WET_VENUS, ancestry, derived_from,
     reference_trial, with_fluence,
@@ -26,10 +25,11 @@ use super::tests::{
 use super::water::water;
 use crate::Trial;
 use science::constants::STEFAN_BOLTZMANN;
+use science::habitable::OCEAN_MASS;
 use science::radiation::gases::{PartialPressures, Weights};
 use science::radiation::ozone::ozone_column;
 use science::steam::STEAM_WORLD_MIN_BAR;
-use science::surface::{condense, titan_like_air};
+use science::surface::{condense, ocean_fraction, titan_like_air};
 use science::units::{
     Bar, Degree, DobsonUnit, EarthFlux, Fraction, Kelvin, Kilogram, WattPerSquareMetre,
 };
@@ -76,17 +76,6 @@ const SAME_LIGHT: f64 = 1e-9;
 /// Source: Titan's surface pressure, 1.467 bar (1467 hPa; Fulchignoni et
 /// al. 2005, *Nature* 438, 785, doi:10.1038/nature04314).
 const TITAN_PRESSURE: f64 = 1.467;
-
-/// Source: the methane share of Titan's air near its surface, 5.65 %
-/// (Niemann et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
-/// doi:10.1029/2010JE003659).
-const TITAN_METHANE_SHARE: f64 = 0.0565;
-
-/// Definition: the methane a test inventory holds above what Titan's air
-/// keeps, 0.5 bar (a weight), so that the sea can form. A test input chosen to
-/// exceed the saturation of the air at Titan's temperature, not a
-/// measurement: the measured air is what the sea leaves in the air.
-const TITAN_METHANE_SURPLUS: f64 = 0.5;
 
 /// Source: Titan's surface temperature, 93.65 ± 0.25 K (Fulchignoni et
 /// al. 2005, *Nature* 438, 785), the centre of the validation window.
@@ -156,7 +145,7 @@ const EARTH_CLOUDS_WINDOW: f64 = 0.03;
 
 /// Source: Earth's preindustrial CO₂, 280 ppm, 2.8e-4 bar (Myhre et al.
 /// 1998, doi:10.1029/98GL01908).
-const PREINDUSTRIAL_CO2: Bar = Bar(2.8e-4);
+pub(super) const PREINDUSTRIAL_CO2: Bar = Bar(2.8e-4);
 
 /// Source: Earth's surface pressure, 1.014 bar (NASA Earth fact sheet,
 /// nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html; as
@@ -198,7 +187,7 @@ const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
 /// Myhre et al. 1998 (doi:10.1029/98GL01908) give the 280 ppm of CO₂,
 /// not this window, and no published preindustrial global mean surface
 /// temperature with its uncertainty was found to replace it.
-const PREINDUSTRIAL_RANGE: (Kelvin, Kelvin) = (Kelvin(286.0), Kelvin(290.0));
+pub(super) const PREINDUSTRIAL_RANGE: (Kelvin, Kelvin) = (Kelvin(286.0), Kelvin(290.0));
 
 /// Definition: the bracket of the search for the CO₂ that gives a
 /// temperature, 1e-6 to 1e-2 bar, and its 30 bisection steps (legacy).
@@ -287,9 +276,21 @@ fn settled_draws_then_settles_from_its_snowball_seed() {
     assert_eq!(whole, parts);
 }
 
-// The model's own 577 K for Venus (#594) is not a source: it is a pin of
-// the code's output, so it belongs to the tier-2 net, added in 2d-4
-// because `settled` is not reachable from crates/regression before then.
+// The model's own Venus (579.282 K, its tier-3 output, printed by this
+// test in release) is not a source: it is the code's output, so it stays
+// a tier-3 number for the documentation and is not pinned in tier 2
+// (plan 2d-4, D4).
+#[test]
+#[ignore = "heavy: prints Venus's surface temperature, a settled Venus, under 1 s in release"]
+fn venus_prints_its_temperature() {
+    // Printed, not asserted (D4): the code's output is no source.
+    let (venus, ..) = settled_of(&VENUS, NO_ICE_OBLIQUITY);
+    println!(
+        "Venus: surface temperature {:?}",
+        climate(&venus).global.surface_temperature.value()
+    );
+}
+
 #[test]
 fn venus_is_bright_and_has_no_liquid() {
     let (venus, ..) = settled_of(&VENUS, NO_ICE_OBLIQUITY);
@@ -339,63 +340,31 @@ fn mercury_sits_at_its_equilibrium_temperature() {
     );
 }
 
-/// Titan's measured air as the inventory of a reference Titan, with a
-/// methane inventory above what the air keeps (an imposed test input, as
-/// Mars's air is; #679: the reference trial's 2d-2 air held 2.876 bar of
-/// N₂ against the measured 1.384 bar, which settled it at 104.8 K; it now
-/// holds 1.422 bar, and 2d-4 moves this test onto the chain's own air).
-fn titan_on_its_measured_air() -> (Bare, Rotation, Trace) {
-    let mut trace = Trace::new();
-    let (t, d) = reference_trial(&mut trace, &TITAN);
-    let rot = rotation(&mut trace, TITAN_OBLIQUITY, false);
-    let mut bare = bare_with(&t, &d, &mut trace).unwrap();
-    // Refs #679: the measured air replaces the reference trial's, in the
-    // weights the chain records (#749): the measured shares by volume read
-    // as weights, and the surplus, an amount, added to the methane's.
-    let weights = PartialPressures {
-        n2: TITAN_PRESSURE * (1.0 - TITAN_METHANE_SHARE),
-        ch4: TITAN_PRESSURE * TITAN_METHANE_SHARE,
-        ..PartialPressures::default()
-    }
-    .weights();
-    let measured = [
-        (Gas::N2, "test.titan.n2", weights.n2),
-        (
-            Gas::Ch4,
-            "test.titan.ch4",
-            weights.ch4 + TITAN_METHANE_SURPLUS,
-        ),
-        (Gas::Co2, "test.titan.co2", 0.0),
-        (Gas::H2o, "test.titan.h2o", 0.0),
-        (Gas::Nh3, "test.titan.nh3", 0.0),
-        (Gas::So2, "test.titan.so2", 0.0),
-        (Gas::O2, "test.titan.o2", 0.0),
-    ];
-    let surface = bare.surface.as_mut().unwrap();
-    for (gas, code, p) in measured {
-        let leaf = trace
-            .leaf(Code::of(code), Bar(p), Provenance::Imposed)
-            .unwrap();
-        surface.atmosphere.partial.insert(gas, leaf);
-    }
-    (bare, rot, trace)
-}
-
 #[test]
 fn titan_has_its_seas() {
-    let (bare, rot, mut trace) = titan_on_its_measured_air();
-    let (c, _, settle) = climate_of(&bare, &rot, DRAW, &mut trace).unwrap();
-    let air = settle.air;
+    // Titan on the air its chain makes (#679): no measured air
+    // substituted.
+    let (titan, rot, trace) = settled_of(&TITAN, TITAN_OBLIQUITY);
+    let c = climate(&titan);
+    let air = air_of(c);
     let t = c.global.surface_temperature.value().0;
     assert!(
         (t - TITAN_SURFACE.0).abs() <= TITAN_WINDOW.0,
         "{t} K, {c:?}"
     );
+    // The surface pressure of the chain's air, within the tolerance of
+    // the nitrogen test (`TITAN_N2_TOLERANCE`) of the measured 1.467 bar.
+    let pressure = c.atmosphere.surface_pressure.value().0;
+    println!("Titan: {pressure} bar, {t} K");
+    assert!(
+        (pressure / TITAN_PRESSURE - 1.0).abs() < TITAN_N2_TOLERANCE,
+        "{pressure} bar against {TITAN_PRESSURE}, {c:?}"
+    );
     assert_eq!(c.liquid.map(|l| *l.value()), Some(LiquidKind::Hydrocarbons));
     assert!(c.condensate.contains_key(&Gas::Ch4), "{c:?}");
     // The air keeps at most what condense lets it keep at that
-    // temperature, the inventory being the measured air and the surplus.
-    let inventory = ClimateInputs::of(&bare, &rot, Bar(0.0)).unwrap().air;
+    // temperature, the inventory being the air the chain made.
+    let inventory = ClimateInputs::of(&titan.bare, &rot, Bar(0.0)).unwrap().air;
     let cap = condense(&inventory, Kelvin(t)).air.ch4;
     assert!(air.ch4 <= cap * (1.0 + CAP_SLACK), "{} over {cap}", air.ch4);
     assert_eq!(*c.global.state.value(), ClimateState::Temperate);
@@ -536,7 +505,7 @@ fn the_climate_records_its_causes() {
 /// An air with O₂ records the ozone column each star's light crosses,
 /// the column the solve took, from the O₂ and the star's temperature; the
 /// Bond albedo derives from it. Mars's bare air given Earth's O₂, an input
-/// of the test (the reference bodies hold none until planet PR 2d-4).
+/// of the test (`settled` alone gives the reference bodies none: life adds it).
 #[test]
 fn an_oxygen_air_records_its_ozone() {
     let mut trace = Trace::new();
@@ -726,9 +695,9 @@ fn earth_has_its_climate() {
         "{clouds}"
     );
 
-    // Earth's measured air (Refs #659: 2d-4 gives the reference Earth its
-    // oxygen from life and solves its climate again on it, so that the
-    // reference Earth reaches this air). 280 ppm under that air's albedo
+    // Earth's measured air (Refs #659: `life` gives the reference Earth its
+    // oxygen and solves its climate again on it, so that the reference
+    // Earth reaches this air). 280 ppm under that air's albedo
     // gives 286 to 290 K, and the thermostat's CO₂ lies between the CO₂s
     // that give 286 and 290 K, all on that one air. Its O₂ holds the ozone
     // the reference air, without O₂, lacks (`ozone_column`, #705): its
@@ -1042,6 +1011,73 @@ fn a_steam_world_that_loses_its_steam_keeps_its_rock() {
     let h2o = *s.bare.surface.as_ref().unwrap().atmosphere.partial[&Gas::H2o].value();
     assert!(h2o < STEAM_WORLD_MIN_BAR, "{h2o:?}");
     assert!(!has_steam(&s.bare.body));
+}
+
+/// Definition: a water inventory of 0.7 Earth oceans, a test value
+/// (the recorder reads only the inventory and the liquid kind).
+const TEST_WATER: Kilogram = Kilogram(0.7 * OCEAN_MASS.0);
+
+#[test]
+fn a_wet_surface_records_its_sea_share() {
+    let mut trace = Trace::new();
+    let leaf = |trace: &mut Trace, code: &'static str, kg: Kilogram| {
+        trace.leaf(Code::of(code), kg, Provenance::Input).unwrap()
+    };
+    let flag = |trace: &mut Trace, code: &'static str| {
+        trace
+            .leaf(Code::of(code), false, Provenance::Input)
+            .unwrap()
+    };
+    let water = timeline::Water {
+        inventory: leaf(&mut trace, "test.inventory", TEST_WATER),
+        runaway: flag(&mut trace, "test.runaway"),
+        boiled: flag(&mut trace, "test.boiled"),
+    };
+    let liquid = trace
+        .record(
+            Code::of(codes::SURFACE_LIQUID),
+            LiquidKind::Water,
+            &[water.inventory.node()],
+        )
+        .unwrap();
+    let share = sea_share(&water, Some(&liquid), &mut trace)
+        .unwrap()
+        .expect("water is the liquid");
+    assert_eq!(
+        share.value().get(),
+        ocean_fraction(TEST_WATER.0 / OCEAN_MASS.0).get()
+    );
+    let mut from = derived_from(&trace, share.node());
+    from.sort();
+    let mut expected = vec![water.inventory.node(), liquid.node()];
+    expected.sort();
+    assert_eq!(from, expected);
+    assert_eq!(
+        trace.node(share.node()).unwrap().code.as_str(),
+        codes::SURFACE_OCEAN_SHARE
+    );
+
+    // A sea of another liquid has no sea share.
+    let methane = trace
+        .record(
+            Code::of(codes::SURFACE_LIQUID),
+            LiquidKind::Hydrocarbons,
+            &[water.inventory.node()],
+        )
+        .unwrap();
+    assert!(
+        sea_share(&water, Some(&methane), &mut trace)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn a_surface_without_liquid_has_no_sea_share() {
+    let (mut venus, _, mut trace) = settled_of(&VENUS, NO_ICE_OBLIQUITY);
+    assert!(climate(&venus).liquid.is_none());
+    let water = venus.bare.surface.take().unwrap().water;
+    assert!(sea_share(&water, None, &mut trace).unwrap().is_none());
 }
 
 #[test]

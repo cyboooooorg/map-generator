@@ -30,8 +30,8 @@ pub use interior::{
 };
 pub use keyframe::{BodyState, EngineVersion, Keyframe, Timeline};
 pub use planet::{
-    Atmosphere, Bulk, ClimateState, Composition, Core, CoreState, Gas, GlobalClimate, Heat, Life,
-    LiquidKind, Orbit, PlanetClass, PlanetState, Renewal, Spin, Surface, SurfaceLiquid,
+    Atmosphere, Biosphere, Bulk, ClimateState, Composition, Core, CoreState, Gas, GlobalClimate,
+    Heat, LiquidKind, Orbit, PlanetClass, PlanetState, Renewal, Spin, Surface, SurfaceLiquid,
     TargetOutcome, TectonicRegime, Terrain, TerrainUnit, Water,
 };
 pub use seed::{Seed, fnv1a64};

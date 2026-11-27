@@ -137,7 +137,7 @@ pub(crate) const THAW_STEPS: usize = 13;
 /// albedo's fixed point has settled, 0.1 K (legacy `ALBEDO_TOLERANCE_K`).
 /// Study 25 ("Solver constants"): at 0.01 K the reference climates move
 /// under 0.1 K, a convergence test in tier 1.
-pub(crate) const ALBEDO_TOLERANCE_K: Kelvin = Kelvin(0.1);
+pub const ALBEDO_TOLERANCE_K: Kelvin = Kelvin(0.1);
 
 /// Definition: the most steps of the albedo's fixed point, 200 (legacy
 /// `ALBEDO_ITERATIONS`), a cap the reference climates settle under
@@ -344,7 +344,7 @@ impl ClimateInputs {
 
 /// The weights of the gases of `atmosphere`, bar, as the chain keeps
 /// them; a gas it lacks is none.
-fn weights(atmosphere: &Atmosphere) -> Weights {
+pub(crate) fn weights(atmosphere: &Atmosphere) -> Weights {
     let w = |gas: Gas| atmosphere.partial.get(&gas).map_or(0.0, |p| p.value().0);
     Weights {
         n2: w(Gas::N2),

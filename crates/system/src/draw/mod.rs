@@ -48,8 +48,9 @@ pub struct Drawn {
 /// the asked archetypes' host), then the family on
 /// `seed.derive("family")`, then the planets, sorted by semi-major axis:
 /// the closest is rank 0 (`Designation::planet(system, rank)`), its body
-/// seed is `seed.derive(<designation text>)` and its spin is drawn from
-/// that body seed.
+/// seed is `seed.derive(<designation text>)`; its spin is drawn from the
+/// trial's seed, the one the planet chain draws from, so that both see
+/// the same obliquity.
 ///
 /// # Errors
 ///
@@ -73,7 +74,7 @@ pub fn draw_with(
             &planet.trial.mass,
             planet.outcome.radius,
             archetype,
-            seed,
+            planet.trial.seed,
             trace,
         )?;
         drawn.placements.push(Placement {

@@ -7,7 +7,7 @@ use crate::radiation::gases::{AR_MOLAR_MASS, CH4_MOLAR_MASS, N2_MOLAR_MASS, O2_M
 
 /// Source: Earth's surface gravity as study 37 takes it, 9.798 m/s²:
 /// [`EARTH_MASS_PARAMETER`] over [`EARTH_EQUATORIAL_RADIUS`] squared.
-fn earth_gravity() -> MetrePerSecondSquared {
+pub(crate) fn earth_gravity() -> MetrePerSecondSquared {
     MetrePerSecondSquared(EARTH_MASS_PARAMETER / EARTH_EQUATORIAL_RADIUS.0.powi(2))
 }
 
@@ -31,7 +31,11 @@ const PRATHER_COLUMN_PPB: (f64, f64) = (680.0, 24.0);
 /// Source: study 37's derivation of the law around the Sun on Earth,
 /// 3.68e-7 bar by weight (202 Tg/yr over 5.112e14 m², × 9.5 yr × 9.798
 /// m/s²), to its three digits.
-const STUDY_37_BAR: f64 = 3.68e-7;
+pub(crate) const STUDY_37_BAR: f64 = 3.68e-7;
+
+/// Definition: how close the law comes to [`STUDY_37_BAR`], 0.5 % of it,
+/// within the rounding of the study's three digits and its inputs'.
+pub(crate) const STUDY_37_WITHIN: f64 = 5e-3;
 
 /// Source: the K2V and K7V hosts of Rugheimer & Kaltenegger 2018's grid,
 /// 5000 and 4250 K (Table 1, as study 37 reads it).
@@ -64,7 +68,7 @@ fn modern_methane_around_the_sun_is_prathers_column() {
     let p = modern_methane(&sun, earth_gravity());
     let ppb = ppb_in_reference_air(p);
     println!("{:.4e} bar by weight, {ppb:.1} ppb", p.0);
-    assert!((p.0 / STUDY_37_BAR - 1.0).abs() < 5e-3, "{p:?}");
+    assert!((p.0 / STUDY_37_BAR - 1.0).abs() < STUDY_37_WITHIN, "{p:?}");
     let (mid, sigma) = PRATHER_COLUMN_PPB;
     assert!(
         (ppb - mid).abs() <= sigma,

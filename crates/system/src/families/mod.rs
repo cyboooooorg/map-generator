@@ -6,6 +6,7 @@
 use crate::random::uniform;
 use crate::{ArchetypeId, Trial, TrialOutcome};
 use rand_chacha::ChaCha8Rng;
+use science::classes::HOT_GIANT_MAX_PERIOD;
 use science::constants::{ASTRONOMICAL_UNIT, SOLAR_RADIUS};
 use science::orbit::{self, ICE_LINE_OF_THE_SUN};
 use science::units::{AstronomicalUnit, Day, EarthMass, SolarMass};
@@ -41,9 +42,6 @@ const COMPACT_MAX_PERIOD: Day = Day(640.0);
 /// scaling in axis, a constant period, Mulders 2015 measured (study
 /// § 1.2). A compact chain ends at its first proposal beyond it.
 pub(crate) const COMPACT_OUTER_EDGE: Day = Day(1071.0);
-
-/// Source: Dawson & Johnson 2018, hot Jupiters up to 10 d (study G 1.1).
-const HOT_JUPITER_MAX_PERIOD: Day = Day(10.0);
 
 /// Source: Fulton 2021, the broken power law's support reaches 30 AU for
 /// the Sun (study G 3.1); scaled by the ice line (a Definition). No
@@ -111,7 +109,7 @@ pub(crate) fn possible(family: Family, star: &StarState) -> bool {
     let surface = orbit::period(stellar_radius(star), mass);
     let longest = match family {
         Family::Compact => COMPACT_MAX_PERIOD,
-        Family::HotJupiter => HOT_JUPITER_MAX_PERIOD,
+        Family::HotJupiter => HOT_GIANT_MAX_PERIOD,
         Family::SolarLike | Family::EccentricGiants | Family::Sparse => orbit::period(
             FULTON_OUTER_SUPPORT * (orbit::ice_line(mass).0 / ICE_LINE_OF_THE_SUN.0),
             mass,

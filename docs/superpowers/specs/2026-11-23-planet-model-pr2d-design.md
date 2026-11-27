@@ -249,7 +249,8 @@ Decisions taken with the user on 2026-11-24 for 2d-3a:
   after the class, from the designation's seed), and tidal locking comes
   with #604. The solver therefore takes the obliquity and a "locked"
   flag as parameters; 2d-4 decides where `class_of` gets them, so that
-  `class_of` and `model` still give the same answer.
+  `class_of` and `model` give the same answer on the same trial (see
+  "Same trial, same answer").
 
 From `climate.rs` l.1-2423: `wet_balance`, `first_balance` (the #600
 secant scan), `settle` and `settle_steps` (the #600 secant step of the
@@ -318,8 +319,10 @@ settles, not a law); the laws it calls stay in `science`.
   `MARS_CO2_FACTOR` (from memory) is not ported.
 - **Venus:** the tier-1 test keeps the sourced checks (Bond albedo
   0.76 ± 0.05, no liquid). The 577 K pin is the model's own output
-  (#594): it goes to the tier-2 net in 2d-4, because `settled` is not
-  reachable from `crates/regression` before then.
+  (#594). `settled` is not reachable from `crates/regression` with a
+  fixed composition, so the pin stays a tier-3 test (`#[ignore =
+  "heavy: …"]`), as do #492's values and the two heavy settled tests
+  (user, 2026-11-25); the tier definitions do not change.
 - **#646:** `CH4_OPACITY` is refitted on Titan with the new methane
   curve here, since 2d-3 is the column's first caller.
 
@@ -340,25 +343,82 @@ regression net.
   Legacy's declared simplification (the climate solved on the air
   before life) is dropped, decided on 2026-11-24 in 2d-3a: without its
   O₂ the reference Earth's air is 0.75 bar, 283.8 K at 280 ppm of CO₂
-  against 286 to 290 K (Myhre et al. 1998), and its thermostat needs
-  about 2 000 ppm. With N₂ 0.78 and O₂ 0.21 bar the solver gives
+  (Myhre et al. 1998 give the 280 ppm; the 286 to 290 K window is the
+  tests' definition, legacy's 288 ± 2 K, not Myhre's), and its
+  thermostat needs about 2 000 ppm. With N₂ 0.78 and O₂ 0.21 bar the solver gives
   286.9 K. 2d-3a tests that check on Earth's measured air; 2d-4 makes
   the reference Earth reach it and updates `docs/science` (section
   Life of `planet-atmospheres.md`).
+- **Life's values** (study 27, decided by the user on 2026-11-24):
+  `LIFE_MIN_GYR` 1.17 Gyr (`Source:` Javaux 2019's 3.4 Ga against
+  Connelly et al. 2012's 4.567 Ga); `LIFE_CHANCE` 1/3 (`Definition:`,
+  a game choice). Oxygen in two steps, so a living planet's air has
+  three states: the air life found; from `OXYGEN_AFTER_GYR` 2.2 Gyr an
+  oxidising air, no CH₄ and O₂ taken as none (Lyons et al. 2014
+  pp. 307, 311, 314); from 4.0 Gyr modern O₂ (Lyons p. 307, about
+  600 Myr ago). The third state changes `timeline::Life`, agreed with
+  the other sessions. The modern air holds `O2_PER_N2` × N₂, the ratio
+  computed in `science` from the CIPM-2007 shares (Picard et al. 2008,
+  `Source:`), 0.306 by weight (the chain keeps its gases as weights),
+  and the methane of `modern_methane` (Task 7b, #717): the CH₄ a modern
+  biosphere keeps under its stars on its gravity.
 - **Class** (`classify.rs`): the 14 classes of `timeline::PlanetClass`
   in legacy's order (giants, mini-Neptune, the surface classes, ice
   world, volcanic, super-Earth, rocky). `AIRLESS_BAR` is not a class
-  threshold; it stays a test definition (#659).
+  threshold; it stays a test definition (#659). Decided on 2026-11-24
+  (study 27): the giants and the mini-Neptune read the body kinds the
+  chain decides, no legacy envelope line: a gas giant is a
+  `Body::Giant` (20 M⊕ and up), an ice giant a `Body::MiniNeptune` at or
+  above `MINI_NEPTUNE_MAX_MASS`, a mini-Neptune one under it (legacy's
+  1.6 R⊕ rule dropped); hot within 10 days (Wright et al. 2012), with
+  the one 20 M⊕ line. The ocean world takes Cowan & Abbot 2014's basin
+  capacity, `3.7 (R/R⊕)² (g⊕/g)` Earth oceans, in every regime. The
+  ice world reads `ICY_MIN_WATER`; `METHANE_TRIPLE_BAR` is the rewrite's
+  methane saturation at its triple point. Two new calibrations:
+  `DENSE_AIR_BAR` (1 bar) and `ICE_WORLD_MIN_OCEANS` (0.01).
 - **`class_of`** runs the chain on a scratch clone of the trace and
   returns the class, the radius and the mean density as plain values
   (split design). **`model`** runs the same chain on the real trace and
   builds `PlanetState`. One private `chain` serves both.
+- **Seeds and spin** (decided by the user on 2026-11-24, with mapgen3's
+  agreement): `class_of` and `model` both draw the chain from the
+  trial's seed (`placement.trial.seed` in `model`; the trial labels are
+  unique per slot, `<id>/<k>` and `slot-<n>`). The spin of every planet
+  is drawn from the trial's seed too (`draw/mod.rs`, instead of the body
+  seed), so the chain calls the same `spin::spin` to get the obliquity
+  its climate reads (#677); `locked` stays false until #604. The
+  generated spins change. `placement.rs`'s doc and `spin.rs`'s are
+  corrected.
+- **Life contract** (agreed with mapgen2 and mapgen3 on 2026-11-24):
+  `timeline::Surface.life` becomes `Traced<Biosphere>`, with `enum
+  Biosphere { Lifeless, Anoxic, Oxidising, Modern }` (kebab-case),
+  replacing `struct Life { arose, oxygenated }`: one node whose parents
+  are the liquid, the age and the life draw. The climate is solved again
+  on an oxidising air (CH₄ removed) as on a modern one (O₂ added); the
+  steam envelope stays after the loss (`after_steam`'s `debug_assert`).
+- **Titan's N₂ (#679)** is fixed in its own pull request
+  (`fix/titan-nitrogen-inventory`), merged before 2d-4's; 2d-4 rebases
+  on it. Titan's climate test then runs on the chain's own air, and the
+  bound on Titan's total pressure (1.467 bar) goes to 2d-4's
+  settled-climate test.
 - **Wiring:** `cli`, `regression` and the determinism tests pass
   `planet::class_of` to `draw_with`. The `stand_in` module stays for the
-  draw's unit tests.
+  draw's unit tests. The tests that draw whole systems with the real
+  classifier (`system/tests/determinism.rs`, the CLI's drawing tests)
+  move to tier 2, into `crates/regression`; no build profile changes
+  (user, 2026-11-25). The CLI's system report prints each planet's
+  class in place of its `classifier` field.
 - **Tier-2 net:** `REFERENCE_SEEDS` is filled, and the shared reference
-  systems get assertions on their planets' classes, climates and
-  liquids, pinned as a regression net.
+  systems get assertions on their planets' classes, climates, liquids
+  and biospheres, pinned as a regression net. It also counts the
+  reference planets whose class changes between the draw (circular
+  trial) and the model (eccentric trial), and the living planets whose
+  second climate has no liquid water.
+- **Develop cycle** (user, 2026-11-25): no world exists yet
+  (`system::generate` is a later step), so the cycle delivers a census
+  of classes, climates and biospheres from the CLI report on the
+  oracle's seeds, before and after and against legacy, with the
+  timings. No 2:1 projections.
 - **Timing:** `generation-profiler` measures the draw of the reference
   systems before and after, on the same inputs. The result goes in the
   PR description, with the share of the column in it.
@@ -389,9 +449,9 @@ section.
 | 2d-3 | `RUNAWAY_ALBEDO` bounds, `STEAM_ALBEDO_BAR`, `STEAM_WORLD_MIN_BAR` | Their reason, or a calibration section each |
 | 2d-3 | `boils` | Kasting 1988 read |
 | 2d-3 | Solver constants (tolerances, step counts, `SCAN_RATIO`, `RUNAWAY_PROBE_K`, `PLATEAU_SURFACES_K`, `THERMOSTAT_TOLERANCE`, `GREENHOUSE_*`, `THAW_STEPS`, `ALBEDO_*`, `COLLAPSE_*`, `CONDENSE_ITERATIONS`) | Labelled by the rule of #648 (a guard is a `Definition:`, a discretisation a `Calibration:` held by a convergence test); a convergence test each, tier 3 if slow |
-| 2d-4 | `LIFE_MIN_GYR` 1 Gyr | The oldest evidence of life after a planet's formation |
-| 2d-4 | `OXYGEN_AFTER_GYR` 2.2, `O2_PER_N2` | Lyons, Reinhard & Planavsky 2014 read in full; the O₂ ratio as an Earth calibration |
-| 2d-4 | `GAS_GIANT_MIN_ENVELOPE`, `MINI_NEPTUNE_MIN_ENVELOPE`, `ICE_WORLD_MIN_WATER`, `DENSE_AIR_BAR`, `OCEAN_WORLD_OCEANS` | A source each, or a calibration section; Cowan & Abbot 2014 read |
+| 2d-4 | `LIFE_MIN_GYR` 1 Gyr | The oldest evidence of life after a planet's formation. Done, study 27: 1.17 Gyr, `Source:` |
+| 2d-4 | `OXYGEN_AFTER_GYR` 2.2, `O2_PER_N2` | Lyons, Reinhard & Planavsky 2014 read in full; the O₂ ratio as an Earth calibration. Done, study 27: 2.2 Gyr kept, modern O₂ at 4.0 Gyr, the ratio a `Source:` (CIPM-2007) |
+| 2d-4 | `GAS_GIANT_MIN_ENVELOPE`, `MINI_NEPTUNE_MIN_ENVELOPE`, `ICE_WORLD_MIN_WATER`, `DENSE_AIR_BAR`, `OCEAN_WORLD_OCEANS` | A source each, or a calibration section; Cowan & Abbot 2014 read. Done, study 27: the envelope lines replaced by the body kinds, the ice world on `ICY_MIN_WATER`, the ocean world on Cowan & Abbot's capacity; `DENSE_AIR_BAR` stays a calibration |
 
 `LIFE_CHANCE` (1/3) is a game choice made with the user on 2026-11-12:
 it is a `Definition:` that says so, not a result of science.
@@ -415,7 +475,7 @@ rewrite's value holds.
 | #659 | Steps in 2d-1 and 2d-3, closed by 2d-4 | The deferred steps |
 | #654 | No | Changes the humidity profile and the cloud fit: its own study and pull request; 2d uses 0.77, the path the cloud fit was made on |
 | #655 | No | A stellar spectral library: its own study and data |
-| #594, #643 | No | Missing opacities and a forcing bias in `science::radiation`; 2d keeps Venus's sourced checks in tier 1 and pins the 577 K in tier 2 (2d-4) |
+| #594, #643 | No | Missing opacities and a forcing bias in `science::radiation`; 2d keeps Venus's sourced checks in tier 1 and pins the 577 K in a tier-3 test (2d-4) |
 | #647 | No | Declared simplification; to check against #595 later |
 | #648 | Its labelling rule only, for 2d's solver constants | The column-top convergence test stays with the column |
 | #649, #650 | No | Opacity data provenance |
@@ -431,10 +491,16 @@ open to the user's correction):
   returns is the one after the `boils` loop and the steam envelope. No
   cheaper path skips the climate: one chain serves `class_of` and
   `model`.
-- **Same planet, same answer.** Every draw (snowball, life) derives from
-  the planet's seed, never from the trace: `class_of` on its scratch
-  trace and `model` on the real one draw the same values and give the
-  same class, radius and density. A tier-1 test checks it.
+- **Same trial, same answer** (reworded by the user on 2026-11-25).
+  Every draw (snowball, life) derives from the trial's seed, never from
+  the trace: `class_of` on its scratch trace and `model` on the real one
+  draw the same values and give the same class, radius and density for
+  the same trial. The draw classifies the circular trial (`e = 0`),
+  while `model` runs on `placement.trial`, the drawn eccentric orbit and
+  its higher mean flux: for an eccentric planet the two may differ. A
+  tier-1 test checks equality at `e = 0`; tier 2 counts and pins the
+  reference planets whose class changes. A follow-up issue asks the
+  draw to classify the eccentric trial again.
 - **Several stars.** The shortwave budget is computed per source at its
   own effective temperature, with the ground and clouds of the current
   surface, and the absorbed light is the flux-weighted sum; the

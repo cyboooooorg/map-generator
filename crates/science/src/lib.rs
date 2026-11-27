@@ -6,6 +6,7 @@
 //! README). The laws arrive with the pull requests that use them.
 
 pub mod balance;
+pub mod classes;
 pub mod constants;
 pub mod dynamo;
 pub mod envelope;
@@ -15,6 +16,7 @@ pub mod giants;
 pub mod habitable;
 pub mod heat;
 pub mod hydrogen;
+pub mod life;
 pub mod life_gases;
 pub mod orbit;
 pub mod outgassing;

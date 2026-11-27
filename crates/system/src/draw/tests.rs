@@ -712,7 +712,7 @@ fn designations_follow_distance() {
 }
 
 #[test]
-fn a_planet_spin_comes_from_its_body_seed() {
+fn a_planet_spin_comes_from_its_trial_seed() {
     let mut trace = Trace::new();
     let drawn = draw_with(&asking(5, &[("earth-like", 1)]), &mut trace, model).unwrap();
     let planet = drawn
@@ -726,7 +726,7 @@ fn a_planet_spin_comes_from_its_body_seed() {
         &planet.trial.mass,
         outcome.radius,
         crate::archetype::placement(&id("earth-like")),
-        planet.seed,
+        planet.trial.seed,
         &mut trace,
     )
     .unwrap();

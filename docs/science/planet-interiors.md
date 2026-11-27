@@ -144,6 +144,19 @@ interpolates log-linearly in mass between the grid masses:
 | 3 | $2.0 \times 10^{-4}$ | 0.33 |
 | 5 | $8.7 \times 10^{-4}$ | 0.35 |
 
+**An asked archetype.** A planet asked as `earth-like` draws none of
+this: its envelope is 0, an input in the trace, as are Earth's core
+(0.325, `EARTH_CORE_MASS_FRACTION`: Wang, Lineweaver & Ireland 2018, as
+Plotnykov & Valencia 2020 quote it, and Zeng et al. 2016, Table 1) and
+bulk water (Marty 2012's 2700 ppm, one ocean at the surface). Lammer et
+al. (2014) keep a nebular envelope round a 1 $M_\oplus$ core at 1 au in
+8 of their 12 cases, but take Earth's lack of one ("for the Earth there
+is no evidence that it was surrounded by a dense hydrogen envelope since
+the past 3.5 Gyr") as the constraint on its nebula: the archetype
+promises that Earth, not a drawn planet of its mass. Legacy's other pins
+of `earth-like` (life, the temperate branch, CO₂, N₂, NH₃, radiogenic
+abundance) are not ported yet (#695).
+
 The grid is by core mass, and the draw reads it at the planet's total
 mass: the two differ by the envelope's share, at most 35 % (the 0.35
 maximum at 5 $M_\oplus$; 20 % under the cap below). No grid by total
@@ -488,7 +501,9 @@ was found for ices III, V and VI beyond Journaux et al.'s parameters.
 | 5 $M_\oplus$, 50 % water, 300 K | 12 175 km (1.911 $R_\oplus$, Zeng et al. 2019) | 12 059.9 km | −0.95 % |
 
 The Earth, Venus, Mars, Mercury and Moon rows use the core mass
-fractions 0.325 (PREM), 0.30 (Skinner et al. 2026, citing Shah et al.
+fractions 0.325 (`EARTH_CORE_MASS_FRACTION`: Wang, Lineweaver &
+Ireland 2018, as Plotnykov & Valencia 2020 quote it; Zeng et al. 2016,
+Table 1), 0.30 (Skinner et al. 2026, citing Shah et al.
 2022), 0.21 (Khan et al. 2023), 0.7136 (Genova et al. 2019) and 0.0168
 (Viswanathan et al. 2019). Ganymede takes the split 0.085 core, 0.46
 rock and 0.455 ice of Rodriguez-Mozos & Moya (2022), along the melting
@@ -1384,18 +1399,88 @@ stay lava.
 ### Classes
 
 The class is read off the result, in this order; the first rule that holds
-wins.
+wins. The table gives the rules the rewrite ports in planet PR 2d-4, as
+[study 27](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit)
+checked them and the user decided on 2026-11-24, with the giant and
+small-planet rules only; the surface classes are in
+[the atmospheres page](planet-atmospheres.md#the-chain-and-the-surface-classes).
+The thresholds are in `science::classes` (`HOT_GIANT_MAX_PERIOD`,
+`SUPER_EARTH_MIN_RADIUS`, `ICE_WORLD_MIN_OCEANS`); the families draw
+their hot Jupiters within the same `HOT_GIANT_MAX_PERIOD`.
 
 | Class | Rule | Source of the threshold |
 | --- | --- | --- |
-| Giant: gas giant | at least 10 Earth masses and 5 % gas; at least 50 % of the mass in gas | calibration (parts Jupiter and Saturn from Uranus and Neptune) |
-| Giant: hot Jupiter | a gas giant with a period of 10 days or less | Wright et al. 2012 |
-| Giant: hot Neptune | an ice giant with a period of 10 days or less (the sparse "Neptune desert") | Wright et al. 2012; Mazeh, Holczer & Faigler 2016, doi:10.1051/0004-6361/201528065 |
-| Giant: ice giant | a giant with less than 50 % gas | same calibration |
-| Mini-Neptune | at least 0.1 % gas and 1.6 $R_\oplus$ or more | Rogers 2015; the gas share is a calibration |
-| Ice world | at least 5 % water and ices | calibration (Europa about 8 %, Earth 0.02 %) |
-| Super-Earth | 1.25 $R_\oplus$ or more | Borucki et al. 2011 |
+| Giant: gas giant | a `Body::Giant`: 20 $M_\oplus$ or more, with an envelope | Thorngren et al. 2016's sample bound (`GAS_GIANT_MIN_MASS`, the user's decision of 2026-11-21) |
+| Giant: hot Jupiter | a gas giant with a period of 10 days or less | Wright et al. 2012, § 3: "P < 10 d" |
+| Giant: ice giant | a `Body::MiniNeptune` drawn at 10 $M_\oplus$ or more (the trial's mass, see below) | Lopez & Fortney 2014 p. 8 (`MINI_NEPTUNE_MAX_MASS`) |
+| Giant: hot Neptune | an ice giant with a period of 10 days or less (the sparse "Neptune desert") | Wright et al. 2012; Mazeh, Holczer & Faigler 2016 put the desert "below ~5–10 d" |
+| Mini-Neptune | a `Body::MiniNeptune` under 10 $M_\oplus$: it kept at least 0.1 % of its mass in gas | `MIN_ENVELOPE`, a calibration of the escape |
+| Ice world | at least 5 % water and ices, and 0.01 Earth ocean kept at the surface | `ICY_MIN_WATER`, the tides' calibration; `ICE_WORLD_MIN_OCEANS`, a calibration (#452) |
+| Super-Earth | 1.25 $R_\oplus$ or more | Borucki et al. 2011: "Earth-size (Rp < 1.25 R⊕)" |
 | Rocky | the rest | |
+
+Legacy's rules, and why the rewrite departs from them:
+
+- **The giants.** Legacy took a giant from 10 $M_\oplus$ and 5 % of gas,
+  and a gas giant from 50 % of gas. Its 10 $M_\oplus$ cited Pollack et
+  al. 1996, whose abstract gives no critical core mass; Lopez & Fortney
+  2014 (p. 8) give the "fundamental change ... around ~10 M⊕", which the
+  rewrite already reads as the edge of the mini-Neptunes' envelope draw.
+  No source gives a share of hydrogen and helium that parts gas giants
+  from ice giants: Helled et al. 2020 only say that the ice giants'
+  compositions "are not dominated by" it. The rewrite parts them at
+  20 $M_\oplus$, and its envelope draw gives a 20 $M_\oplus$ giant about
+  46 % of gas at the fit's centre: legacy's 50 % line would have made
+  half of those ice giants. The class reads the body kinds the chain
+  already decides, so no second constant holds either line, and the
+  5 % and 50 % lines are gone.
+- **Which mass the 10 $M_\oplus$ line reads.** The trial's mass, the
+  one the envelope draw read to choose its regime: the line splits the
+  draw's regimes (Lammer's grid and the mini-Neptunes below, the ice
+  giants' 9 to 20 % above), so a planet drawn an ice giant's envelope is
+  classed an ice giant. The bulk would not do: when a hot core's water
+  is beyond the laws, the bulk is the condensed planet without that
+  water, and a 13.5 $M_\oplus$ water-rich hot Neptune would read
+  6.7 $M_\oplus$ and become a mini-Neptune. The mass kept after escape
+  would not either: the escape thins the envelope the draw gave, it does
+  not redraw its regime.
+- **The hot giants.** Wright et al. 2012 define a hot Jupiter by its
+  period under 10 days and a mass over 0.1 $M_J$ (about 32 $M_\oplus$),
+  "not ... presumed 'ice giants' with M < 0.1MJup". The rewrite keeps
+  its one 20 $M_\oplus$ line: a 20 to 32 $M_\oplus$ giant within 10 days
+  is a hot Jupiter for the model, a hot Neptune for Wright.
+- **The mini-Neptune.** Legacy also asked for 1.6 $R_\oplus$. Rogers
+  2015 is a statement on a population, the Kepler planets within 50 days
+  that have measured masses; the 1.6 $R_\oplus$ is the 95 % upper bound
+  of its transition (median 1.48). Fulton et al. 2017 find the gap
+  between 1.5 and 2.0 $R_\oplus$, and Lopez & Fortney 2014 suggest
+  1.75 $R_\oplus$. The model knows the envelope itself, and a body that
+  keeps at least 0.1 % of its mass in gas has no surface: legacy's rule
+  gave a rocky class to a body with no ground. The radius rule is
+  dropped.
+- **The ice world.** No source sets a share of water that makes an ice
+  world: Europa holds 6 to 9 % of ice and water by mass (Kuskov &
+  Kronrod 2005, as a 2025 review quotes them), and the definitions found
+  are by volume of the crust. The 5 % is the calibration the rewrite
+  already has for the tides, which legacy said is the same share; the
+  class reads that one.
+- **The super-Earth.** Borucki et al. 2011 say what legacy cites.
+
+**Calibration of the ice world's surface water.** `ICE_WORLD_MIN_OCEANS`,
+0.01 Earth ocean (#452), is ported as legacy had it. What it was fitted
+against: Mars's water ice. Carr & Head 2015 put its polar deposits and
+shallow ground ice at about 34 m of global equivalent layer, about
+4.9e18 kg, 0.0035 of the rewrite's `OCEAN_MASS` (1.4e21 kg; derived,
+about 0.004). How: by hand, a little over twice that one body's share,
+so that a body keeping a Mars's worth of ice is not yet an ice world;
+no distribution was fitted. What was searched and not found
+([study 27](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit),
+its table of the class constants and item 2 of its "New
+calibrations"): a surface water that makes an ice world; the definitions
+found (the COSPAR draft's icy worlds) are by the crust's volume. Carr &
+Head 2015 itself was not reached by study 27 (a 403 and an empty ADS
+record): the 34 m is the figure as study 22 reads it in the abstract,
+and as legacy quotes it.
 
 ## In the app
 
@@ -2419,6 +2504,40 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      and bulk K/U ratios", *Icarus* 339, 113551,
      [doi:10.1016/j.icarus.2019.113551](https://doi.org/10.1016/j.icarus.2019.113551)
      (record only, as Lammer et al. 2021 quote it, study 31).
+143. Carr, M. H. & Head, J. W. 2015, "Martian surface/near-surface water
+     inventory: sources, sinks, and changes with time", *Geophysical
+     Research Letters* 42, 726–732,
+     [doi:10.1002/2014GL062464](https://doi.org/10.1002/2014GL062464)
+     (abstract, as study 22 reads it; not reached by study 27).
+144. Mazeh, T., Holczer, T. & Faigler, S. 2016, "Dearth of short-period
+     Neptunian exoplanets", *Astronomy & Astrophysics* 589, A75,
+     [doi:10.1051/0004-6361/201528065](https://doi.org/10.1051/0004-6361/201528065),
+     [arXiv:1602.07843](https://arxiv.org/abs/1602.07843).
+145. Helled, R., Nettelmann, N. & Guillot, T. 2020, "Uranus and Neptune:
+     origin, evolution and internal structure", *Space Science Reviews*
+     216, 38,
+     [doi:10.1007/s11214-020-00660-3](https://doi.org/10.1007/s11214-020-00660-3),
+     [arXiv:1909.04891](https://arxiv.org/abs/1909.04891).
+146. Kuskov, O. L. & Kronrod, V. A. 2005, Europa's share of ice and water,
+     as quoted in "Icy worlds: moons and dwarf planets",
+     [arXiv:2511.18776](https://arxiv.org/abs/2511.18776) (search summary,
+     study 27).
+147. Dawson, R. I. & Johnson, J. A. 2018, "Origins of hot Jupiters",
+     *Annual Review of Astronomy and Astrophysics* 56, 175–221,
+     [doi:10.1146/annurev-astro-081817-051853](https://doi.org/10.1146/annurev-astro-081817-051853),
+     preprint [arXiv:1801.06117](https://arxiv.org/abs/1801.06117).
+148. Wang, H. S., Lineweaver, C. H. & Ireland, T. R. 2018, *Icarus* 299,
+     460,
+     [doi:10.1016/j.icarus.2017.08.024](https://doi.org/10.1016/j.icarus.2017.08.024):
+     Earth's core mass fraction, 0.325, as Plotnykov & Valencia 2020 quote
+     it ("the Earth (cmf = 0.325 Wang et al. (2018))", with their
+     Figure 4; read in arXiv:2010.06480).
+
+Entry 148 was read in Plotnykov & Valencia 2020 (entry 89). The values,
+tables and pages read for entries 143 to 147 are in
+[27-life-and-class-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit)
+and, for Carr & Head 2015,
+[22-surface-water (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/22-surface-water).
 
 The values, tables and pages read for entries 125 to 142 are in
 [31-late-formation-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/31-late-formation-audit),

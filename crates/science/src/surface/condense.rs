@@ -18,8 +18,8 @@ use crate::radiation::gases::{
 };
 use crate::units::{Bar, Kelvin};
 use crate::volatiles::{
-    METHANE_TRIPLE_TEMPERATURE, ammonia_frost_pressure, argon_saturation_pressure,
-    co2_frost_pressure, methane_saturation_bar, nitrogen_saturation_pressure,
+    ammonia_frost_pressure, argon_saturation_pressure, co2_frost_pressure, methane_saturation_bar,
+    methane_triple_pressure, nitrogen_saturation_pressure,
 };
 
 /// What a surface leaves of an inventory of gases: the air and the
@@ -191,12 +191,12 @@ pub fn condensables(air: &Weights, inventory: &Weights) -> Weights {
 
 /// Whether the air a climate leaves (bar, weights) is a Titan's: it
 /// still holds methane, which makes its haze, and its total pressure is
-/// over methane's triple-point pressure (0.117 bar, the saturation at
-/// `METHANE_TRIPLE_TEMPERATURE`), dense enough for a hydrocarbon liquid.
+/// over methane's triple-point pressure (0.117 bar,
+/// [`methane_triple_pressure`]), dense enough for a hydrocarbon liquid.
 /// A Triton's thin nitrogen air, a few microbar, is not one. A
 /// `Definition:` (study 25, "The reducing-air fallback").
 pub fn titan_like_air(air: &Weights) -> bool {
-    air.ch4 > 0.0 && air.total() > methane_saturation_bar(METHANE_TRIPLE_TEMPERATURE)
+    air.ch4 > 0.0 && air.total() > methane_triple_pressure().0
 }
 
 #[cfg(test)]

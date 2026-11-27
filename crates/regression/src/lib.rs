@@ -5,17 +5,18 @@
 //! Test-only crate: it may depend on every engine, which a domain crate
 //! may not, even as a dev-dependency.
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use science::units::{Dex, SolarMass};
+use system::planet::{ClassRead, class_read, model};
 use system::{ArchetypeId, Drawn, INPUTS_SCHEMA, Inputs, Request, SystemRequest, draw_with};
-use timeline::{Code, Seed, Trace, fnv1a64};
+use timeline::{Code, PlanetState, Seed, Trace, fnv1a64};
 
-/// Seeds of the shared reference systems; filled in with slice 1, PR 2.
-pub const REFERENCE_SEEDS: &[u64] = &[];
-
-pub use system::stand_in::classify as stand_in_model;
+/// Definition: the seeds of the shared reference systems, those of
+/// [`reference_requests`] in order.
+pub const REFERENCE_SEEDS: &[u64] = &[1, 2, 3, 4, 5, 6, 7, 8];
 
 fn inputs(seed: u64, host: Option<f64>, archetypes: &[(&'static str, u32)]) -> Inputs {
     Inputs {
@@ -49,20 +50,81 @@ pub fn reference_requests() -> Vec<Inputs> {
     ]
 }
 
-/// The systems of [`reference_requests`], drawn once per run with
-/// [`stand_in_model`].
+/// One call of the draw's classifier: the circular trial it classified
+/// (its seed, and the bits of its mass and semi-major axis, which tell
+/// the tries of a slot apart: they share the slot's seed) and what the
+/// planet model read of it.
+#[derive(Clone, Copy, Debug)]
+pub struct LoggedRead {
+    pub seed: Seed,
+    pub mass_bits: u64,
+    pub axis_bits: u64,
+    pub read: ClassRead,
+}
+
+/// A reference system, drawn and modelled.
+#[derive(Debug)]
+pub struct Reference {
+    pub inputs: Inputs,
+    pub drawn: Drawn,
+    /// The draw's trace, then the model's nodes, in the draw's order.
+    pub trace: Trace,
+    /// One state per placement of `drawn`, in order.
+    pub planets: Vec<PlanetState>,
+    /// Every classification the draw made, in order, rejected tries
+    /// included.
+    pub reads: Vec<LoggedRead>,
+}
+
+/// The reference systems, drawn once per process with the planet model's
+/// classifier (every read logged), then each placement modelled with the
+/// draw's trace. Nextest runs each test in its own process: a test that
+/// calls this pays the whole draw and model.
 ///
 /// # Panics
 ///
-/// When a reference request fails to draw.
-pub fn reference_systems() -> &'static [Drawn] {
-    static SYSTEMS: OnceLock<Vec<Drawn>> = OnceLock::new();
-    SYSTEMS.get_or_init(|| {
+/// When a reference request fails to draw or a placement to model.
+pub fn references() -> &'static [Reference] {
+    static REFERENCES: OnceLock<Vec<Reference>> = OnceLock::new();
+    REFERENCES.get_or_init(|| {
         reference_requests()
-            .iter()
-            .map(|request| draw_with(request, &mut Trace::new(), stand_in_model).unwrap())
+            .into_iter()
+            .map(|inputs| {
+                let reads = RefCell::new(Vec::new());
+                let mut trace = Trace::new();
+                let drawn = draw_with(&inputs, &mut trace, |trial, trace| {
+                    let read = class_read(trial, trace)?;
+                    reads.borrow_mut().push(LoggedRead {
+                        seed: trial.seed,
+                        mass_bits: trial.mass.value().0.to_bits(),
+                        axis_bits: trial.orbit.semi_major_axis.value().0.to_bits(),
+                        read,
+                    });
+                    Ok(read.outcome)
+                })
+                .unwrap();
+                let planets = drawn
+                    .placements
+                    .iter()
+                    .map(|placement| model(placement, &mut trace).unwrap())
+                    .collect();
+                Reference {
+                    inputs,
+                    drawn,
+                    trace,
+                    planets,
+                    reads: reads.into_inner(),
+                }
+            })
             .collect()
     })
+}
+
+/// The systems of [`reference_requests`], read from the one draw of
+/// [`references`].
+#[must_use]
+pub fn reference_systems() -> Vec<&'static Drawn> {
+    references().iter().map(|r| &r.drawn).collect()
 }
 
 fn real(value: f64) -> String {

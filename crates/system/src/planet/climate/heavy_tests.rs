@@ -33,8 +33,9 @@ use super::{
     ALBEDO_DAMPING, ALBEDO_TOLERANCE_K, COLLAPSE_TOLERANCE, ClimateInputs, Numerics, SCAN_RATIO,
     THAW_STEPS,
 };
-use crate::Trial;
 use crate::planet::bare::{Ground, bare_air, bare_with, formed, surface_pass};
+use crate::planet::chain::{Spun, chain_with, state_of};
+use crate::planet::classify::classify;
 use crate::planet::codes;
 use crate::planet::draws::{Drawn, LABELS};
 use crate::planet::interior_tests::{AU_492, CORE_492, MASS_492, WATER_492};
@@ -46,6 +47,7 @@ use crate::planet::tests::{
 };
 use crate::planet::tests::{derived_from, trial, water_world_trial};
 use crate::planet::water::boiled;
+use crate::{Placement, Trial};
 use science::balance::{
     EARTH_DRY_AIR, EARTH_PLATEAU_OZONE, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, TOLERANCE,
     absorbed, earth_moist_plateau, moist_plateau, skin,
@@ -61,11 +63,14 @@ use science::surface::{
     ICE_COVERED_TEMPERATURE, Liquid, N2_ICE_EMISSIVITY, PHASE_BAND, methane_freezes, surface_vapour,
 };
 use science::units::{
-    Bar, EarthFlux, EarthMass, EarthRadius, Fraction, Kelvin, Kilogram, Metre, Pascal,
+    Bar, Day, Degree, EarthFlux, EarthMass, EarthRadius, Fraction, Kelvin, Kilogram, Metre, Pascal,
 };
 use science::volatiles::{NITROGEN_TRIPLE_TEMPERATURE, co2_saturation_pressure};
 use science::water::{CRITICAL_POINT_TEMPERATURE, melting_temperature};
-use timeline::{ClimateState, Code, Gas, LiquidKind, Material, NodeValue, Provenance, Seed, Trace};
+use timeline::{
+    ClimateState, Code, Designation, Gas, LiquidKind, Material, NodeValue, PlanetClass, Provenance,
+    Seed, SystemNumber, Trace,
+};
 
 /// Source: the Sun's nominal effective temperature, 5772 K (IAU 2015
 /// Resolution B3).
@@ -1116,8 +1121,8 @@ fn the_runaway_edge_steps_only_by_the_branches_albedos() {
 #[test]
 #[ignore = "heavy: the census case of #443 on its measured inputs"]
 fn census_182_d() {
-    // The system draw of seed 182 is not wired to the planet chain yet
-    // (2d-4): the case is solved on its census inputs, those of
+    // The rewrite's seed 182 is not legacy's system (the draw and the
+    // chain differ): the case stays on its census inputs, those of
     // `a_methane_greenhouse_cannot_warm_a_cold_world`, and held to
     // legacy's other bounds: T_eq about 114.5 K, 4.4 bar of N₂ and
     // 0.9 bar of methane over its seas.
@@ -1741,7 +1746,7 @@ fn settle(trace: &mut Trace, t: &Trial, d: &Drawn) -> Settled {
 }
 
 #[test]
-#[ignore = "heavy: a full boil loop, the first and the steam runs, 10.8 s in release"]
+#[ignore = "heavy: a full boil loop, the first and the steam runs, 127 s in release"]
 fn a_boil_that_escapes_all_its_water_ends_dry() {
     assert!(F0V_BOILING_FLUX < runaway_flux(F0V).0);
     let mut trace = Trace::new();
@@ -1760,6 +1765,11 @@ fn a_boil_that_escapes_all_its_water_ends_dry() {
     );
     assert_eq!(water.inventory.value().0, 0.0, "{water:?}");
     assert_eq!(verdicts.len(), 1, "{verdicts:?}");
+    // A runaway with the air it has left: dry, and a greenhouse over 1 bar.
+    assert_eq!(
+        *classify(&t, &s, &mut trace).unwrap().value(),
+        PlanetClass::RunawayGreenhouse
+    );
 }
 
 /// The bulk water share, under [`RECONDENSED_FLUENCE`], whose steam run hands [`LEFTOVER`] to its
@@ -1836,6 +1846,11 @@ fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
         "{c:?}"
     );
     assert!(derived_from(&trace, water.runaway.node()).contains(&water.inventory.node()));
+    // No runaway kept: the ocean it keeps is no runaway greenhouse.
+    assert_ne!(
+        *classify(&t, &s, &mut trace).unwrap().value(),
+        PlanetClass::RunawayGreenhouse
+    );
 }
 
 #[test]
@@ -1914,12 +1929,22 @@ fn the_492_super_earth_is_a_steam_world() {
     let s = settle(&mut trace, &t, &d);
     let hides = s.hides_surface.expect("a body with a surface is judged");
     assert!(*hides.value());
+    assert_eq!(
+        *classify(&t, &s, &mut trace).unwrap().value(),
+        PlanetClass::SteamWorld
+    );
     let c = s.climate.as_ref().unwrap();
     let h2o = *c.atmosphere.partial[&Gas::H2o].value();
     let temperature = *c.global.surface_temperature.value();
     assert!(h2o > DEEP_STEAM, "{h2o:?}");
     assert!(temperature > STEAM_WORLD_SURFACE, "{temperature:?}");
     assert!(under_steam(&s));
+    // Printed, not asserted (D4): what the code gives today, for the
+    // documentation to quote.
+    println!(
+        "#492: radius {:?}, surface temperature {temperature:?}",
+        s.bare.body.bulk().radius.value()
+    );
     // Over the dry core under the steam (Turbet et al. 2020 § 3.1); the
     // condensed twin is not a bound outside their grid (#684).
     let layers = s.bare.body.layers();
@@ -2196,4 +2221,258 @@ fn collapse_step_is_converged() {
             );
         }
     }
+}
+
+/// Definition: a life draw under any chance of life, 0 (legacy
+/// `earth_has_oxygenic_life`).
+const LIVING_DRAW: f64 = 0.0;
+
+#[test]
+#[ignore = "heavy: the bistable Earth settled, then solved twice more on its oxygenated air, about 243 s at opt-level 0, 8.3 s in release"]
+fn the_reference_earth_lives_and_reaches_its_climate() {
+    use crate::planet::climate::fixture::EARTH_OBLIQUITY as OBLIQUITY;
+    use crate::planet::draws::snowball_draw;
+    use crate::planet::life::living;
+    use crate::planet::settled::climate_of;
+    use crate::planet::settled_tests::{PREINDUSTRIAL_CO2, PREINDUSTRIAL_RANGE};
+    use science::life::O2_PER_N2;
+    use timeline::Biosphere;
+
+    let mut trace = Trace::new();
+    let (t, d) = reference_trial(&mut trace, &EARTH);
+    let rot = rotation(&mut trace, OBLIQUITY, false);
+    let seed = Seed::new(1).derive(LABELS.snowball);
+    let settled = settled_with(&t, &d, &rot, seed, &mut trace).unwrap();
+    let snowball = snowball_draw(seed);
+    let life = living(settled, &t.age, LIVING_DRAW, &rot, snowball, &mut trace).unwrap();
+    assert_eq!(*life.life.unwrap().value(), Biosphere::Modern);
+    // The stop rule of the plan: the climate the class reads, solved
+    // again on the oxygenated air, is Earth's preindustrial one.
+    let second = life.settled.climate.as_ref().unwrap();
+    let t2 = second.global.surface_temperature.value().0;
+    println!(
+        "second solve: {t2:.3} K, CO2 {:.4e} bar",
+        second.atmosphere.partial[&Gas::Co2].value().0
+    );
+    assert!(
+        (PREINDUSTRIAL_RANGE.0.0..=PREINDUSTRIAL_RANGE.1.0).contains(&t2),
+        "{t2} K, {second:?}"
+    );
+    let mut bare = life.settled.bare.clone();
+    let air = &mut bare.surface.as_mut().unwrap().atmosphere;
+    let (n2, o2) = (
+        air.partial[&Gas::N2].value().0,
+        air.partial[&Gas::O2].value().0,
+    );
+    assert_eq!(o2, O2_PER_N2 * n2);
+    // The methane a modern biosphere keeps around the Sun on this gravity.
+    let stars: Vec<_> = t
+        .sources
+        .iter()
+        .map(|s| (*s.effective_temperature.value(), *s.flux.value()))
+        .collect();
+    let gravity = *life.settled.bare.body.bulk().surface_gravity.value();
+    assert_eq!(
+        *air.partial[&Gas::Ch4].value(),
+        science::life_gases::modern_methane(&stars, gravity)
+    );
+
+    // The oxygenated air with Earth's preindustrial CO₂, solved. The
+    // carbonate thermostat rebuilds the CO₂ from the carbon inventory
+    // (`ClimateInputs::carbon`), so the air's CO₂ is a starting point:
+    // this is the second solve again, which the 280 ppm do not move.
+    let co2 = trace
+        .leaf(Code::of("test.co2"), PREINDUSTRIAL_CO2, Provenance::Input)
+        .unwrap();
+    air.partial.insert(Gas::Co2, co2);
+    let (c, ..) = climate_of(&bare, &rot, snowball, &mut trace).unwrap();
+    let preindustrial = c.global.surface_temperature.value().0;
+    assert!(
+        (PREINDUSTRIAL_RANGE.0.0..=PREINDUSTRIAL_RANGE.1.0).contains(&preindustrial),
+        "{preindustrial} K, {c:?}"
+    );
+}
+
+#[test]
+#[ignore = "heavy: a wet Earth-mass water world settled, one bistable solve"]
+fn a_migrated_water_world_in_the_habitable_zone_is_an_ocean_world() {
+    // 1 M_E, 30 % water (some 1300 oceans), at 1 au, the volatiles of its
+    // ice without their scatter: the ocean keeps most of them out of the
+    // air (legacy `classify.rs` l.428).
+    let mut trace = Trace::new();
+    let (t, d) = water_world_trial(&mut trace, 1.0, EARTH.core_mass_fraction, 0.3, 1.0);
+    let s = settle(&mut trace, &t, &d);
+    let c = s.climate.as_ref().unwrap();
+    assert_eq!(
+        c.liquid.map(|l| *l.value()),
+        Some(LiquidKind::Water),
+        "{c:?}"
+    );
+    assert_eq!(
+        *classify(&t, &s, &mut trace).unwrap().value(),
+        PlanetClass::OceanWorld
+    );
+}
+
+/// Source: a K5V star's effective temperature, 4440 K, and its
+/// luminosity, `10^-0.76` = 0.174 L_sun (Pecaut & Mamajek 2013, ApJS 208,
+/// 9, doi:10.1088/0067-0049/208/1/9, Table 5, in the version of
+/// Mamajek's "A Modern Mean Dwarf Stellar Color and Effective Temperature
+/// Sequence").
+const K5V: (Kelvin, f64) = (Kelvin(4440.0), 0.174);
+
+/// Definition: the orbit of the K5V bodies, 0.4 au (legacy
+/// `a_runaway_weighs_the_water_its_own_pass_kept`), near their cosmic
+/// shoreline.
+const K5V_ORBIT_AU: f64 = 0.4;
+
+/// Definition: the K5V bodies' water, 10 % of the mass, and core share
+/// 0.25 (legacy).
+const K5V_WATER: (f64, f64) = (0.1, 0.25);
+
+#[test]
+#[ignore = "heavy: three runaway bodies settled with their pass on the envelope"]
+fn a_runaway_weighs_the_water_its_own_pass_kept() {
+    // A runaway's kept pass loses more of its steam to the cosmic
+    // shoreline than the energy-limited escape it was handed: the class
+    // is read on the pass that was kept, and a steam world's layers sum to
+    // its whole mass (#513; legacy `classify.rs` l.704). The bodies are
+    // those of the legacy test: 0.3 and 0.6 M_E with 10 % of water at
+    // 0.4 au round a K5V star, and the #492 super-Earth.
+    let (teff, luminosity) = K5V;
+    let (water, core) = K5V_WATER;
+    // The trial's flux is `au^-2` S_E: the K5V's flux at 0.4 au.
+    let equivalent_au = K5V_ORBIT_AU / luminosity.sqrt();
+    let mut bodies = Vec::new();
+    for mass in [0.3, 0.6] {
+        let mut trace = Trace::new();
+        let (t, d) = water_world_trial(&mut trace, mass, core, water, equivalent_au);
+        let t = with_star(&mut trace, &t, teff);
+        bodies.push((trace, t, d));
+    }
+    let mut trace = Trace::new();
+    let (t, d) = water_world_trial(&mut trace, MASS_492, CORE_492, WATER_492, AU_492);
+    let t = with_star(&mut trace, &t, M9V);
+    bodies.push((trace, t, d));
+    let mut hidden = false;
+    for (mut trace, t, d) in bodies {
+        let s = settle(&mut trace, &t, &d);
+        let water = &s.bare.surface.as_ref().unwrap().water;
+        assert!(*water.runaway.value(), "{water:?}");
+        let class = *classify(&t, &s, &mut trace).unwrap().value();
+        if *s.hides_surface.unwrap().value() {
+            hidden = true;
+            assert_eq!(class, PlanetClass::SteamWorld);
+            let layers: f64 = s.bare.body.layers().iter().map(|l| l.mass.value().0).sum();
+            let whole = s.bare.body.whole_mass().0.0;
+            assert!(
+                (layers - whole).abs() <= 1e-9 * whole,
+                "{layers} vs {whole}"
+            );
+        } else {
+            assert_ne!(class, PlanetClass::SteamWorld);
+        }
+    }
+    assert!(hidden, "no steam world hides its surface");
+}
+
+/// Definition: a survey number for the placements of the tests below,
+/// 10 000 (the first, as `chain_tests.rs`).
+const SURVEY: u32 = 10_000;
+
+/// Definition: the rotation period of the tests below, one Earth day.
+const DAY: Day = Day(1.0);
+
+/// The planet `t` of composition `d` through the chain and into its
+/// state, with the state frozen: the state and its graph.
+fn frozen_state(
+    trace: &mut Trace,
+    t: Trial,
+    d: &Drawn,
+) -> (
+    crate::planet::chain::Chained,
+    timeline::PlanetState,
+    timeline::CauseGraph,
+) {
+    let spin = timeline::Spin {
+        rotation_period: trace
+            .leaf(Code::of("test.rotation"), DAY, Provenance::Input)
+            .unwrap(),
+        obliquity: trace
+            .leaf(Code::of("test.obliquity"), Degree(0.0), Provenance::Input)
+            .unwrap(),
+    };
+    let chained = chain_with(&t, d, Spun::Placed(&spin), HALF, HALF, trace).unwrap();
+    let placement = Placement {
+        designation: Designation::planet(SystemNumber::new(SURVEY).unwrap(), 1).unwrap(),
+        seed: t.seed,
+        spin,
+        trial: t,
+    };
+    let mut state = state_of(&placement, chained.clone(), trace).unwrap();
+    let graph = trace.freeze(&mut state).unwrap();
+    (chained, state, graph)
+}
+
+#[test]
+#[ignore = "heavy: a full boil loop and the water sizing, then the state frozen, about 5 s in release"]
+fn a_recondensed_boil_shows_in_the_tree() {
+    let mut trace = Trace::new();
+    let (t, d) = f0v_earth(&mut trace, recondensing_water(), Some(HUNDREDTH_OF_N2));
+    let t = with_fluence(&mut trace, &t, RECONDENSED_FLUENCE);
+    let (chained, state, graph) = frozen_state(&mut trace, t, &d);
+    let water = &chained.living.settled.bare.surface.as_ref().unwrap().water;
+    assert!(
+        *water.boiled.value() && !*water.runaway.value(),
+        "{water:?}"
+    );
+    let surface = state.surface.as_ref().expect("an Earth has a surface");
+    println!(
+        "recondensed boil: inventory {:?}, surface temperature {:?}",
+        water.inventory.value(),
+        surface.climate.surface_temperature.value()
+    );
+    let code = |id: timeline::NodeId| graph.node(id).unwrap().code.as_str().to_owned();
+    let parents = |id: timeline::NodeId| match &graph.node(id).unwrap().origin {
+        timeline::Origin::Derived { from } => from.clone(),
+        origin => panic!("{origin:?} is not derived"),
+    };
+    // The state keeps the settled water: its `boiled` node is the one of
+    // the graph, derived from the true `planet.climate.boils` verdict.
+    let boiled = surface.water.boiled.node();
+    assert_eq!(code(boiled), codes::WATER_BOILED);
+    let boils: Vec<_> = parents(boiled)
+        .into_iter()
+        .filter(|&id| code(id) == codes::CLIMATE_BOILS)
+        .collect();
+    assert_eq!(boils.len(), 1, "boiled derives from one verdict");
+    assert_eq!(
+        graph.node(boils[0]).unwrap().value,
+        NodeValue::Flag(true),
+        "the verdict under `boiled`"
+    );
+    // The runaway is the steam run's: its parents are that run's
+    // inventory and runaway nodes, not the first run's.
+    let runaway = surface.water.runaway.node();
+    assert_eq!(code(runaway), codes::WATER_RUNAWAY);
+    assert!(!*surface.water.runaway.value());
+    let from: Vec<String> = parents(runaway).into_iter().map(code).collect();
+    assert!(from.iter().any(|c| c == codes::WATER_INVENTORY), "{from:?}");
+    assert!(from.iter().any(|c| c == codes::WATER_RUNAWAY), "{from:?}");
+}
+
+#[test]
+#[ignore = "heavy: a steam world through the chain, then the state frozen, about 1 s in release"]
+fn the_steam_pass_boiled_node_is_not_kept() {
+    let mut trace = Trace::new();
+    let (t, d) = water_world_trial(&mut trace, MASS_492, CORE_492, WATER_492, AU_492);
+    let t = with_star(&mut trace, &t, M9V);
+    let (_, state, graph) = frozen_state(&mut trace, t, &d);
+    assert!(state.surface.is_some());
+    let kept = graph
+        .nodes
+        .iter()
+        .filter(|n| n.code.as_str() == codes::WATER_BOILED)
+        .count();
+    assert_eq!(kept, 1, "one planet.water.boiled node in the frozen graph");
 }
