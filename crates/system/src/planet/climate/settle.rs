@@ -320,7 +320,9 @@ fn residuals_of<M: AlbedoMap>(
 
 /// The albedo's and the emissivity's own residuals of `body` solved
 /// under `albedo` and `emissivity` at the temperature `t` with `air`, K:
-/// those [`albedo_fixed_point`] settles on ([`residuals_of`]).
+/// those [`albedo_fixed_point`] settles on ([`residuals_of`]). Only the
+/// heavy tests read it: the loop calls [`residuals_of`] itself.
+#[cfg(test)]
 pub(crate) fn pair_residuals(
     body: &mut ClimateBody,
     albedo: f64,
