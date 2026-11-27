@@ -14,6 +14,10 @@ timeline yet: `system::generate` is a future signature and
 everything that does not need the engine's planet states now, and leaves
 one small step for when they exist.
 
+Update 2026-11-27: `system::generate` exists, with the signature above
+(`docs/superpowers/specs/2026-11-27-system-generate-design.md`); pull
+request B can pass it as the producer.
+
 ## Goals
 
 - Global options of the CLI: `--root <DIR>` (the store) and
