@@ -1,20 +1,13 @@
-//! `map-generator`: the composition root. It wires the adapters into the
-//! engines' ports and dispatches the commands (`system` so far).
-
-mod args;
-mod error;
-mod explain;
-mod report;
-mod system;
-mod world;
+//! `map-generator`: the binary. Parses the arguments, runs the library's
+//! `dispatch`, prints on stdout and maps the errors to exit codes.
 
 use std::io::{self, ErrorKind, Write as _};
 use std::process::ExitCode;
 
 use clap::Parser;
-
-use crate::args::{Cli, Command};
-use crate::error::CliError;
+use map_generator::args::Cli;
+use map_generator::dispatch;
+use map_generator::error::CliError;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -31,19 +24,6 @@ fn main() -> ExitCode {
         Err(error) => {
             eprintln!("map-generator: {error}");
             ExitCode::from(1)
-        }
-    }
-}
-
-fn dispatch(cli: &Cli) -> Result<String, CliError> {
-    match &cli.command {
-        Command::System(command) => {
-            let root = command.system.root_seed()?;
-            if root.drawn {
-                let n = root.seed.get();
-                eprintln!("map-generator: seed {n} drawn; rerun with --seed {n}");
-            }
-            system::run(command, root.seed)
         }
     }
 }

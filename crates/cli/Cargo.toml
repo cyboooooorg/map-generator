@@ -5,6 +5,10 @@ version.workspace = true
 edition.workspace = true
 publish = false
 
+[lib]
+name = "map_generator"
+path = "src/lib.rs"
+
 [[bin]]
 name = "map-generator"
 path = "src/main.rs"
