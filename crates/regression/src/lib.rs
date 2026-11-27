@@ -9,13 +9,12 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use science::units::{Dex, SolarMass};
+use system::planet::class_of;
 use system::{ArchetypeId, Drawn, INPUTS_SCHEMA, Inputs, Request, SystemRequest, draw_with};
 use timeline::{Code, Seed, Trace, fnv1a64};
 
 /// Seeds of the shared reference systems; filled in with slice 1, PR 2.
 pub const REFERENCE_SEEDS: &[u64] = &[];
-
-pub use system::stand_in::classify as stand_in_model;
 
 fn inputs(seed: u64, host: Option<f64>, archetypes: &[(&'static str, u32)]) -> Inputs {
     Inputs {
@@ -50,7 +49,7 @@ pub fn reference_requests() -> Vec<Inputs> {
 }
 
 /// The systems of [`reference_requests`], drawn once per run with
-/// [`stand_in_model`].
+/// the planet model's [`class_of`].
 ///
 /// # Panics
 ///
@@ -60,7 +59,7 @@ pub fn reference_systems() -> &'static [Drawn] {
     SYSTEMS.get_or_init(|| {
         reference_requests()
             .iter()
-            .map(|request| draw_with(request, &mut Trace::new(), stand_in_model).unwrap())
+            .map(|request| draw_with(request, &mut Trace::new(), class_of).unwrap())
             .collect()
     })
 }

@@ -11,8 +11,10 @@ system.workspace = true
 world.workspace = true
 catalogue.workspace = true
 adapters.workspace = true
+map-generator = { path = "../cli" }
 
 [dev-dependencies]
+clap.workspace = true
 serde_json.workspace = true
 
 [lints]

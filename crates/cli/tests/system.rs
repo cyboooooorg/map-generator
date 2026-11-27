@@ -1,4 +1,7 @@
-//! The `system` command, through the binary.
+//! The `system` command, through the binary: what needs the process (exit
+//! codes, stderr, the closed pipe). The tests that draw a system are tier
+//! 3; the ones asserting on the draw itself are in
+//! `crates/regression/tests/cli.rs`, through the library.
 
 use std::process::{Command, Output};
 
@@ -16,26 +19,6 @@ fn stdout(output: &Output) -> String {
 
 fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr is UTF-8")
-}
-
-#[test]
-fn prints_the_draw_as_json() {
-    let output = run(&["--seed", "1"]);
-    assert_eq!(output.status.code(), Some(0));
-    assert_eq!(stderr(&output), "");
-    let json: serde_json::Value = serde_json::from_str(&stdout(&output)).unwrap();
-    assert_eq!(json["schema"], 1);
-    assert_eq!(json["classifier"], "stand-in");
-    for key in ["inputs", "engine", "family", "star", "planets", "causes"] {
-        assert!(json.get(key).is_some(), "missing {key}");
-    }
-}
-
-#[test]
-fn the_same_seed_prints_the_same_bytes() {
-    let a = run(&["--seed", "42"]);
-    let b = run(&["--seed", "42"]);
-    assert_eq!(a.stdout, b.stdout);
 }
 
 #[test]
@@ -64,6 +47,7 @@ fn a_malformed_archetype_is_a_usage_error() {
 }
 
 #[test]
+#[ignore = "heavy: draws two systems through the binary"]
 fn an_omitted_seed_is_drawn_and_replayable() {
     let drawn = run(&[]);
     assert_eq!(drawn.status.code(), Some(0));
@@ -81,17 +65,7 @@ fn an_omitted_seed_is_drawn_and_replayable() {
 }
 
 #[test]
-fn explain_prints_a_tree() {
-    let output = run(&["--seed", "1", "--explain", "/planets/0/orbit/period"]);
-    assert_eq!(output.status.code(), Some(0));
-    assert!(
-        stdout(&output).starts_with("system.draw.period = "),
-        "{}",
-        stdout(&output)
-    );
-}
-
-#[test]
+#[ignore = "heavy: draws a system with the planet model through the binary"]
 fn explain_errors_exit_1() {
     let output = run(&["--seed", "1", "--explain", "/planets/0/designation"]);
     assert_eq!(output.status.code(), Some(1));
@@ -115,6 +89,7 @@ fn a_negative_host_mass_reaches_the_draw() {
 }
 
 #[test]
+#[ignore = "heavy: draws a system with the planet model through the binary"]
 fn a_closed_pipe_is_not_a_panic() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_map-generator"))
         .args(["system", "--seed", "35", "--archetype", "jupiter-like=1"])
@@ -125,15 +100,4 @@ fn a_closed_pipe_is_not_a_panic() {
     drop(child.stdout.take());
     let output = child.wait_with_output().expect("the binary ends");
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
-}
-
-#[test]
-fn explain_a_code_held_by_no_field_names_its_dependents() {
-    let output = run(&["--seed", "1", "--explain", "system.draw.break-up-fraction"]);
-    assert_eq!(output.status.code(), Some(1));
-    assert!(
-        stderr(&output).contains("held by no field; values that depend on it: /"),
-        "{}",
-        stderr(&output)
-    );
 }

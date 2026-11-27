@@ -15,9 +15,9 @@ request, the archetype targets, the present date.
 | `draw` | mapgen3 | `draw_with(inputs, trace, classify) -> Drawn`: the star, its system number, the family and one `Placement` per planet; a body request is `BodyRequestNotDrawn` |
 | `families` | mapgen3 | `Family`: the five system architectures, untraced engine data carried by `Drawn`; `families::table` holds every count range |
 | `spin` | mapgen3 | the primordial spin of a planet (period, obliquity), drawn from its trial seed |
-| `stand_in` | mapgen3 | `classify`: a provisional classifier for `draw_with` (mass steps, one radius law), until `class_of` is public; used by the CLI and the tests |
+| `stand_in` | mapgen3 | `classify`: a provisional classifier for `draw_with` (mass steps, one radius law), kept for the draw's own tests only: the CLI and the regression tests classify with `planet::class_of` |
 | `star` | mapgen3 | `star(...) -> Star`: the asked or drawn host, its values and its interior, traced |
-| `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `envelope`, `enveloped`, `interior`, `boil_off`, `heat`, `escape`, `water`, `regime`, `core`, `air`, `bare`, `climate`, `settled`, `codes`: `bare::bare` chains a trial in legacy's order from its draws, structure (rocky, mini-Neptune, giant), the boil-off of a mini-Neptune's envelope down to Tang et al. 2024's ceiling, its XUV escape and heat to, once the envelope is gone, its water, regime, core and bare air (the radiogenic argon of its mantle included), which runs to the photochemistry (outgassed, shoreline, methane photolysis, reducing air, cold trap, photochemistry); `climate` is the climate solver (the body it settles, its albedo, the carbonate thermostat, the state branches, the snowball chance, `record` for its causes) and `settled::settled` chains it after `bare` with the reducing-air fallback (the air made again with its CO₂ when the climate leaves no Titan-like air) and the boil loop (a wet planet with no wet balance boils: run again from the forced steam, its leftover condensed again when that run does not boil) and the steam world (a runaway past the steam world line gets a Turbet et al. 2020 steam envelope, `interior::steam_interior`, on which one more pass reads its steam loss and cosmic shoreline, without a climate; the line is read again on the water kept); `settled` is not wired into generation until 2d-4 (#659), crate-internal until 2d (laws, sources and limits: [interiors](../../docs/science/planet-interiors.md), [atmospheres](../../docs/science/planet-atmospheres.md#the-chain-and-the-surface-classes)) |
+| `planet` | mapgen1 | `class_of`, `class_read`, `model`: wired since engine 4, `class_of` classifies the draw (class, radius and density from the chain) and the CLI runs `model` on each placement; `draws`, `envelope`, `enveloped`, `interior`, `boil_off`, `heat`, `escape`, `water`, `regime`, `core`, `air`, `bare`, `climate`, `settled`, `codes`: `bare::bare` chains a trial in legacy's order from its draws, structure (rocky, mini-Neptune, giant), the boil-off of a mini-Neptune's envelope down to Tang et al. 2024's ceiling, its XUV escape and heat to, once the envelope is gone, its water, regime, core and bare air (the radiogenic argon of its mantle included), which runs to the photochemistry (outgassed, shoreline, methane photolysis, reducing air, cold trap, photochemistry); `climate` is the climate solver (the body it settles, its albedo, the carbonate thermostat, the state branches, the snowball chance, `record` for its causes) and `settled::settled` chains it after `bare` with the reducing-air fallback (the air made again with its CO₂ when the climate leaves no Titan-like air) and the boil loop (a wet planet with no wet balance boils: run again from the forced steam, its leftover condensed again when that run does not boil) and the steam world (a runaway past the steam world line gets a Turbet et al. 2020 steam envelope, `interior::steam_interior`, on which one more pass reads its steam loss and cosmic shoreline, without a climate; the line is read again on the water kept); `settled` is reached through `class_of` and `model` (laws, sources and limits: [interiors](../../docs/science/planet-interiors.md), [atmospheres](../../docs/science/planet-atmospheres.md#the-chain-and-the-surface-classes)) |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
 
 The remaining doc-only module fixes its future signature in a `//!` comment.
@@ -109,9 +109,10 @@ it wraps `ContractError` and the host errors of `science::stellar`.
 
 - `INPUTS_SCHEMA` versions the shape of the stored `Inputs`. The inputs
   are the only stored truth.
-- `ENGINE_VERSION` (3 since compact chains end at 1071 d) is bumped
-  whenever a timeline or a world could change for the same inputs; it
-  invalidates the caches, which are never migrated.
+- `ENGINE_VERSION` (4 since the planet model classifies the draw and
+  spins are drawn from the trial seed; 3 was the 1071 d end of compact
+  chains) is bumped whenever a timeline or a world could change for the
+  same inputs; it invalidates the caches, which are never migrated.
 
 ## Ports
 
