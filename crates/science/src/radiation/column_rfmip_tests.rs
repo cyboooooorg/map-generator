@@ -267,6 +267,7 @@ fn mean_and_deviation(xs: &[f64]) -> (f64, f64) {
 }
 
 #[test]
+#[ignore = "heavy: 100 columns, about 25 s in a debug build (54 s on CI); moved to tier 3 by the user on 2026-11-27 to keep tier 1 in its budget"]
 fn the_columns_clear_sky_is_the_line_by_line_codes_on_rfmips_field() {
     // Study 40 and the user's decision of 2026-11-27 (issue #704): the
     // column's radiation on RFMIP's 100 present-day profiles, each at its

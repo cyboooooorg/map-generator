@@ -296,7 +296,7 @@ do now.
 | N₂O's 324.2 ppb taken out, Earth clear (a probe, no test) | | 2.179 W/m² | 1.5 (Hogan & Matricardi 2020, 332 ppb); 1.88 (Höpfner et al. 2012) | 16 % over the larger |
 | RFMIP, CO₂'s step "PI CO2" − "PD" (a probe, without N₂O) | 1.379 W/m² | | LBLRTM 12.8 1.322 (Pincus et al. 2020's fluxes) | 4.3 % over |
 | Earth's clear sky against CERES like for like (test removed by study 40) | 263.41 W/m² (window 266.14 to 274.58) | 261.24 W/m² | 264.64 to 273.08 (N₂O's 1.5 W/m² out of `MINOR_GASES_W_M2`) | 3.41 under |
-| RFMIP's present-day clear sky without the halocarbons, the column on the 100 profiles over grey grounds (tier 1 since study 40) | | 262.934 W/m² (263.903 over black grounds) | the five line-by-line codes' "PI HCs", 263.429, within 0.700 (a calibration, radiative-transfer.md) | −0.495, inside |
+| RFMIP's present-day clear sky without the halocarbons, the column on the 100 profiles over grey grounds (tier 3; added in tier 1 after study 40, moved for the budget on 2026-11-27) | | 262.934 W/m² (263.903 over black grounds) | the five line-by-line codes' "PI HCs", 263.429, within 0.700 (a calibration, radiative-transfer.md) | −0.495, inside |
 | Titan's sourced column | 92.300 K | 92.300 K (91.813 K since N₂ condenses, #741) | 92.296 K before the lines (91.809 K on `main` with #741); measured 93.65 ± 0.25 | +0.004 K |
 
 The methane step hardly depends on the bins (0.710 on 20 cm⁻¹, 0.720

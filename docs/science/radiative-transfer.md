@@ -1645,7 +1645,7 @@ decided on 2026-11-27 to hold the radiation on RFMIP's field instead
 and to leave the single column's profile to track T11, "the climate
 column's upper atmosphere" (issue #757, with #750 and #752).
 
-**The radiation on RFMIP's field (tier 1).** The test
+**The radiation on RFMIP's field (tier 3).** The test
 `column::rfmip_tests::the_columns_clear_sky_is_the_line_by_line_codes_on_rfmips_field`
 runs the column's radiation on RFMIP's 100 present-day profiles, each
 at its own temperatures and water, its ozone column laid out on the
@@ -1724,9 +1724,10 @@ this field (Pincus et al. 2020 compare the codes' forcings, not their
 absolute fluxes; their spread is the measure taken here), and a
 line-by-line value with RFMIP's halocarbons removed entirely. Carbon
 monoxide (120 ppb in RFMIP's present day) is not in the column and was
-not measured. The test costs 25 s of the tier-1 run (100 columns in a
-debug build); with it `mise run ci` ran tier 1 in 74.4 s of
-its 120 s budget.
+not measured. The test costs 25 s in a debug build (100 columns), 54 s
+on CI, where it took tier 1 to 136.5 s of its 120 s budget; the user
+moved it to tier 3 on 2026-11-27 (`mise run test:heavy`, run for every
+pull request that changes the engines).
 
 Two direct checks agree:
 
