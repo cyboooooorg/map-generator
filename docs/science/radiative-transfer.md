@@ -1732,9 +1732,12 @@ Two direct checks agree:
 
 - **On reanalysis profiles.** On the 100 RFMIP profiles (ERA-Interim,
   2014, weighted to the global mean; Pincus et al. 2016), RRTMGP's
-  reference fluxes for RFMIP (the file read, in the Sources) give
-  263.53 W/m² with all the gases, as study 32 takes them (LBLRTM gives
-  263.20, Pincus et al. 2019, Table 1). The column's radiation code on
+  reference fluxes for RFMIP were quoted by study 32 at 263.53 W/m²
+  with all the gases; the RTE-RRTMGP-181204 `rlu` file read since gives
+  263.2301 W/m² for present day and 263.6449 with pre-industrial
+  halocarbons (see "The radiation on RFMIP's field"), and LBLRTM gives
+  263.20 (Pincus et al. 2019, Table 1). Where study 32's 263.53 came
+  from was not traced. The column's radiation code on
   the same profiles with water vapour and CO₂ only (397.5 ppm) gives
   274.95 to 275.85 W/m² (air or skin temperature at the ground), 11.4 to
   12.3 W/m² more: the gases and the surface of the table above. The
