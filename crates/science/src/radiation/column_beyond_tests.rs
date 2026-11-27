@@ -137,7 +137,8 @@ const BOUKROUCHE_SURFACE_SENT: [(f64, f64); 2] = [(2300.0, 3.8e4), (3000.0, 3.3e
 const BOUKROUCHE_STEAM_BAR: f64 = 260.0;
 
 /// Calibration: how far under Boukrouche et al.'s surface light the
-/// column's radiation past 2 µm may fall, a factor of 10. Their band-grey
+/// ground's light that the column lets out past 2 µm may fall, a factor
+/// of 10. Their band-grey
 /// model averages ExoMol's water opacities over each band and tunes them
 /// to SOCRATES (their Table 2) and scatters nothing; the column caps the
 /// steam at 70 bar (`STEAM_MAX_BAR`), takes the shortwave table's lines
@@ -150,14 +151,28 @@ const BOUKROUCHE_FACTOR: f64 = 10.0;
 
 #[test]
 fn a_hot_steam_column_lets_its_surface_out_past_2_um() {
+    // Like with like: Boukrouche et al.'s SCFF is the surface's own light
+    // that escapes the whole column; the column's is the ground's light
+    // past 2 µm that reaches space through its clear sky ([`Sent::ground`]:
+    // the near infrared's transmission from the ground, and past 0.7 µm
+    // the Rayleigh transmission), not the air's emission. Theirs starts
+    // at 12 500 cm⁻¹, the column's at 5000 cm⁻¹.
     let steam = PartialPressures {
         h2o: BOUKROUCHE_STEAM_BAR,
         n2: 0.0,
         ..TRANSPARENT_AIR
     };
-    for (t, sent) in BOUKROUCHE_SURFACE_SENT {
-        let tail = bands(&steam, t)[TAIL];
-        println!("{t} K: past 2 µm {tail:.4e} W/m², Boukrouche's surface {sent:.1e}");
-        assert!(tail >= sent / BOUKROUCHE_FACTOR, "{t} K: {tail}");
+    let mut ws = Workspace::new();
+    for (t, scff) in BOUKROUCHE_SURFACE_SENT {
+        let sent = with_column(&steam, t, 0.0, STANDARD_GRAVITY.0, Profile::CLEAR, |c| {
+            sent(c, &mut ws)
+        })
+        .expect("an air");
+        println!(
+            "{t} K: the ground's light past 2 µm {:.4e} W/m² (all {:.4e}), Boukrouche's SCFF {scff:.1e}",
+            sent.ground, sent.total
+        );
+        assert!(sent.ground >= scff / BOUKROUCHE_FACTOR, "{t} K: {sent:?}");
+        assert!(sent.ground <= sent.total, "{t} K: {sent:?}");
     }
 }

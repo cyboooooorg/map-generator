@@ -1449,6 +1449,8 @@ struct Scratch {
     bottom: FastLevel,
     lines: [Depths; LINE_GASES],
     smooth: [f32; BINS],
+    /// The sum past the longwave table's ([`beyond::beyond`]).
+    beyond: beyond::Workspace,
 }
 
 impl Scratch {
@@ -1458,6 +1460,7 @@ impl Scratch {
             bottom: FastLevel::default(),
             lines: std::array::from_fn(|_| Depths::new()),
             smooth: [0.0; BINS],
+            beyond: beyond::Workspace::new(),
         })
     }
 }
@@ -1572,6 +1575,7 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
         bottom,
         lines,
         smooth,
+        beyond,
     } = scratch;
     let n = column.top();
     let weights = spectrum::weights().map(|w| w as f32);
@@ -1668,6 +1672,7 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
                 under_clouds(out, column.cloud, cloud_top, bins),
                 column,
                 tail,
+                beyond,
             );
         }
     }
@@ -1683,15 +1688,22 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
         under_clouds(out, column.cloud, cloud_top, bins),
         column,
         tail,
+        beyond,
     )
 }
 
 /// `out` with its tail band summed past the longwave table
-/// ([`beyond::beyond`]) when `tail` (every bin summed); otherwise its
-/// tail stays the clear ground's that [`radiate`] set.
-fn with_tail(mut out: [f64; BANDS], column: &Column, tail: bool) -> [f64; BANDS] {
+/// ([`beyond::beyond`], in the workspace `ws`) when `tail` (every bin
+/// summed); otherwise its tail stays the clear ground's that [`radiate`]
+/// set.
+fn with_tail(
+    mut out: [f64; BANDS],
+    column: &Column,
+    tail: bool,
+    ws: &mut beyond::Workspace,
+) -> [f64; BANDS] {
     if tail {
-        out[TAIL] = beyond::beyond(column);
+        out[TAIL] = beyond::beyond(column, ws);
     }
     out
 }
@@ -1831,6 +1843,7 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
         under_clouds(out, column.cloud, cloud_top, BINS),
         column,
         true,
+        &mut beyond::Workspace::new(),
     )
 }
 

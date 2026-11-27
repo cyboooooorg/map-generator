@@ -39,6 +39,8 @@
 //! surface is outside every published steam profile (Turbet et al. 2020),
 //! which the climate marks (`science::steam::PUBLISHED_SURFACE_TOP`).
 
+use std::sync::LazyLock;
+
 use super::super::rayleigh::rayleigh_depth_550;
 use super::super::shortwave::{LevelAbsorption, SHORTWAVE};
 use super::super::spectrum::{self, DIFFUSIVITY, G, SPECTRUM_TOP_CM};
@@ -55,10 +57,9 @@ fn wavenumber_cm(wavelength_m: f64) -> f64 {
     1e-2 / wavelength_m
 }
 
-/// The edges of the region past [`SPECTRUM_TOP_CM`], ascending, cm⁻¹,
-/// and the index of the first edge of the scattering part: the near
-/// infrared's (5000 cm⁻¹, then the shortwave table's edges above it) and
-/// the visible's (the star's bands from 0.7 µm to 0.2 µm).
+/// The edges of the region past [`SPECTRUM_TOP_CM`], ascending, cm⁻¹:
+/// the near infrared's (5000 cm⁻¹, then the shortwave table's edges
+/// above it) and the visible's (the star's bands from 0.7 µm to 0.2 µm).
 struct Edges {
     edges: Vec<f64>,
     /// The first bin of the shortwave table counted.
@@ -68,66 +69,130 @@ struct Edges {
     visible_from: usize,
 }
 
-impl Edges {
-    fn new() -> Self {
-        let table = &*SHORTWAVE;
-        let first_bin = table
-            .edges_cm
-            .windows(2)
-            .position(|e| e[1] > SPECTRUM_TOP_CM)
-            .expect("the shortwave table reaches past 5000 cm⁻¹");
-        let mut edges = vec![SPECTRUM_TOP_CM];
-        edges.extend_from_slice(&table.edges_cm[first_bin + 1..]);
-        let visible_from = edges.len() - 1;
-        // The star's bands bluer than the table, reddest first.
-        let visible = starlight::BANDS - table.bins;
-        edges.extend(
-            (0..visible)
-                .rev()
-                .map(|band| wavenumber_cm(band_edge_m(band))),
-        );
+/// Definition: the edges of every column's region past
+/// [`SPECTRUM_TOP_CM`] ([`Edges`]), from the shortwave table's and the
+/// star's bands, taken once.
+static EDGES: LazyLock<Edges> = LazyLock::new(|| {
+    let table = &*SHORTWAVE;
+    let first_bin = table
+        .edges_cm
+        .windows(2)
+        .position(|e| e[1] > SPECTRUM_TOP_CM)
+        .expect("the shortwave table reaches past 5000 cm⁻¹");
+    let mut edges = vec![SPECTRUM_TOP_CM];
+    edges.extend_from_slice(&table.edges_cm[first_bin + 1..]);
+    let visible_from = edges.len() - 1;
+    // The star's bands bluer than the table, reddest first.
+    let visible = starlight::BANDS - table.bins;
+    edges.extend(
+        (0..visible)
+            .rev()
+            .map(|band| wavenumber_cm(band_edge_m(band))),
+    );
+    Edges {
+        edges,
+        first_bin,
+        visible_from,
+    }
+});
+
+/// Workspace of [`beyond`]: the absorption at a layer's two levels, the
+/// depths, Planck fluxes and transmissions of each part. Kept in the
+/// caller's `ColumnCache` with the longwave's (`super::Scratch`), so that
+/// a column's sum allocates nothing once its vectors have grown.
+pub(super) struct Workspace {
+    rate: LevelAbsorption,
+    rate_below: LevelAbsorption,
+    co2: Vec<f64>,
+    water: Vec<f64>,
+    smooth: Vec<f64>,
+    planck: Vec<f64>,
+    planck_below: Vec<f64>,
+    ground: Vec<f64>,
+    seen: Vec<f64>,
+    out: Vec<f64>,
+    seen_above: Vec<f64>,
+    out_above: Vec<f64>,
+}
+
+impl Workspace {
+    pub(super) fn new() -> Self {
         Self {
-            edges,
-            first_bin,
-            visible_from,
+            rate: LevelAbsorption::new(0..0),
+            rate_below: LevelAbsorption::new(0..0),
+            co2: Vec::new(),
+            water: Vec::new(),
+            smooth: Vec::new(),
+            planck: Vec::new(),
+            planck_below: Vec::new(),
+            ground: Vec::new(),
+            seen: Vec::new(),
+            out: Vec::new(),
+            seen_above: Vec::new(),
+            out_above: Vec::new(),
         }
     }
 }
 
+/// What a column sends out past [`SPECTRUM_TOP_CM`], W/m².
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Sent {
+    /// All of it, its air, its clouds and its ground ([`beyond`]).
+    pub(super) total: f64,
+    /// The ground's own light that reaches space through the clear
+    /// column (no cloud): the near infrared's transmitted to space from
+    /// the ground (none when the column is opaque above it), the
+    /// visible's through the Rayleigh depth, and the parts left out of
+    /// the sum, clear.
+    pub(super) ground: f64,
+}
+
 /// What `column` sends out past [`SPECTRUM_TOP_CM`], W/m² (the module's
-/// documentation), its clouds and its ground included.
-pub(super) fn beyond(column: &Column) -> f64 {
+/// documentation), its clouds and its ground included, in the
+/// workspace `ws`.
+pub(super) fn beyond(column: &Column, ws: &mut Workspace) -> f64 {
+    sent(column, ws).total
+}
+
+/// [`beyond`], with the ground's share of it.
+pub(super) fn sent(column: &Column, ws: &mut Workspace) -> Sent {
     let Edges {
         edges,
         first_bin,
         visible_from,
-    } = Edges::new();
+    } = &*EDGES;
+    let (first_bin, visible_from) = (*first_bin, *visible_from);
+    let len = edges.len();
+    for v in [&mut ws.planck, &mut ws.planck_below, &mut ws.ground] {
+        v.resize(len, 0.0);
+    }
     let warmest = column.temperature.iter().copied().fold(0.0, f64::max);
     // The intervals summed: all but the last ones whose flux at the
     // warmest level, with the rest past them, is negligible.
-    let mut planck = vec![0.0; edges.len()];
-    spectrum::planck_over(warmest, &edges, &mut planck);
+    spectrum::planck_over(warmest, edges, &mut ws.planck);
     let floor = NEGLIGIBLE * STEFAN_BOLTZMANN * warmest.powi(4);
-    let mut summed = edges.len();
+    let mut summed = len;
     let mut rest = 0.0;
-    while summed > 0 && rest + planck[summed - 1] <= floor {
-        rest += planck[summed - 1];
+    while summed > 0 && rest + ws.planck[summed - 1] <= floor {
+        rest += ws.planck[summed - 1];
         summed -= 1;
     }
-    let mut ground = vec![0.0; edges.len()];
-    spectrum::planck_over(ground_k(column), &edges, &mut ground);
-    let left_out: f64 = ground[summed..]
+    spectrum::planck_over(ground_k(column), edges, &mut ws.ground);
+    let left_out: f64 = ws.ground[summed..]
         .iter()
         .map(|b| column.ground_sent(*b, 1.0))
         .sum();
     let nir = summed.min(visible_from);
-    let (air, air_cloud) = near_infrared(column, &edges[..=nir], first_bin);
-    let (light, light_cloud) = visible(column, &edges, visible_from, summed, &ground);
+    let (air, air_cloud, nir_ground) = near_infrared(column, &edges[..=nir], first_bin, ws);
+    let (light, light_cloud) = visible(column, edges, visible_from, summed, ws);
     let blend = |clear: f64, sent: Option<f64>| match (column.cloud, sent) {
         (Some(cloud), Some(sent)) => clear - cloud.weight * (clear - sent),
         _ => clear,
     };
-    blend(air, air_cloud) + blend(light, light_cloud) + left_out
+    Sent {
+        total: blend(air, air_cloud) + blend(light, light_cloud) + left_out,
+        ground: nir_ground + light + left_out,
+    }
 }
 
 /// The temperature, K, of `column`'s ground.
@@ -140,27 +205,50 @@ fn ground_k(column: &Column) -> f64 {
 /// The near infrared between the ascending `edges` (from `first_bin` of
 /// the shortwave table up; the last edge closes the last bin summed),
 /// summed from the top down as [`super::radiate`] sums the longwave bins:
-/// the clear column's radiation, W/m², and what its cloud top sends out
+/// the clear column's radiation, W/m², what its cloud top sends out
 /// (`above_c + seen_c B_c`, each linear in `ln p` across its layer), when
-/// it has a cloud and the sum passed it.
-fn near_infrared(column: &Column, edges: &[f64], first_bin: usize) -> (f64, Option<f64>) {
+/// it has a cloud and the sum passed it, and the ground's light in it
+/// that reaches space (none when the sum stops on an opaque column).
+fn near_infrared(
+    column: &Column,
+    edges: &[f64],
+    first_bin: usize,
+    ws: &mut Workspace,
+) -> (f64, Option<f64>, f64) {
     let parts = edges.len() - 1;
     if parts == 0 {
-        return (0.0, None);
+        return (0.0, None, 0.0);
     }
     let table = &*SHORTWAVE;
     let w = table.weights;
     let n = column.top();
     let bins = first_bin..first_bin + parts;
-    let mut rate = LevelAbsorption::new(bins.clone());
-    let mut rate_below = LevelAbsorption::new(bins);
+    ws.rate.resize(bins.clone());
+    ws.rate_below.resize(bins);
     // Each bin's slant depth to space per g-point of CO₂ and of water,
-    // and of the continua.
-    let mut co2 = vec![0.0f64; parts * G];
-    let mut water = vec![0.0f64; parts * G];
-    let mut smooth = vec![0.0f64; parts];
-    let mut planck = vec![0.0; edges.len()];
-    let mut planck_below = vec![0.0; edges.len()];
+    // and of the continua; its transmission to space and its radiation.
+    for v in [&mut ws.co2, &mut ws.water] {
+        v.resize(parts * G, 0.0);
+    }
+    for v in [&mut ws.smooth, &mut ws.seen, &mut ws.out] {
+        v.resize(parts, 0.0);
+    }
+    let edges_len = edges.len();
+    let Workspace {
+        rate,
+        rate_below,
+        co2,
+        water,
+        smooth,
+        planck,
+        planck_below,
+        ground,
+        seen,
+        out,
+        seen_above,
+        out_above,
+    } = ws;
+    let (mut planck, mut planck_below) = (&mut planck[..edges_len], &mut planck_below[..edges_len]);
     let through = |co2: &[f64], water: &[f64], smooth: &[f64], b: usize| {
         let gas = |depth: &[f64]| -> f64 {
             w.iter()
@@ -172,8 +260,8 @@ fn near_infrared(column: &Column, edges: &[f64], first_bin: usize) -> (f64, Opti
     };
     // The uniform air above the top: half the top's rate.
     rate.fill(table, &column.level(n));
-    spectrum::planck_over(column.temperature[n], edges, &mut planck);
-    for (depth, rates) in [(&mut co2, &rate.co2), (&mut water, &rate.water)] {
+    spectrum::planck_over(column.temperature[n], edges, planck);
+    for (depth, rates) in [(&mut *co2, &rate.co2), (&mut *water, &rate.water)] {
         for (d, r) in depth.iter_mut().zip(rates) {
             *d = DIFFUSIVITY * 0.5 * f64::from(*r);
         }
@@ -181,35 +269,36 @@ fn near_infrared(column: &Column, edges: &[f64], first_bin: usize) -> (f64, Opti
     for (d, r) in smooth.iter_mut().zip(&rate.smooth) {
         *d = DIFFUSIVITY * spectrum::smooth_above(f64::from(*r));
     }
-    let mut seen = vec![0.0; parts];
-    let mut out = vec![0.0; parts];
     for b in 0..parts {
-        seen[b] = through(&co2, &water, &smooth, b);
+        seen[b] = through(co2, water, smooth, b);
         out[b] = planck[b] * (1.0 - seen[b]);
     }
     let mut cloud_top = None;
     for i in (0..n).rev() {
         let at_cloud = column.cloud.filter(|c| c.layer == i);
-        let above = at_cloud.map(|_| (out.clone(), seen.clone()));
+        if at_cloud.is_some() {
+            out_above.clone_from(out);
+            seen_above.clone_from(seen);
+        }
         rate_below.fill(table, &column.level(i));
-        spectrum::planck_over(column.temperature[i], edges, &mut planck_below);
+        spectrum::planck_over(column.temperature[i], edges, planck_below);
         let slant = DIFFUSIVITY * column.span(i);
         let deepen = |depth: &mut [f64], top: &[f32], bottom: &[f32]| {
             for ((d, a), b) in depth.iter_mut().zip(top).zip(bottom) {
                 *d += slant * spectrum::log_mean(f64::from(*a), f64::from(*b));
             }
         };
-        deepen(&mut co2, &rate.co2, &rate_below.co2);
-        deepen(&mut water, &rate.water, &rate_below.water);
-        deepen(&mut smooth, &rate.smooth, &rate_below.smooth);
+        deepen(co2, &rate.co2, &rate_below.co2);
+        deepen(water, &rate.water, &rate_below.water);
+        deepen(smooth, &rate.smooth, &rate_below.smooth);
         let mut open = false;
         for b in 0..parts {
-            let below = through(&co2, &water, &smooth, b);
+            let below = through(co2, water, smooth, b);
             out[b] += 0.5 * (planck[b] + planck_below[b]) * (seen[b] - below);
             seen[b] = below;
             open |= below > OPAQUE;
         }
-        if let (Some(cloud), Some((out_above, seen_above))) = (at_cloud, above) {
+        if let Some(cloud) = at_cloud {
             let mid = |below: f64, above: f64| below + cloud.up * (above - below);
             let sent = (0..parts)
                 .map(|b| {
@@ -219,22 +308,25 @@ fn near_infrared(column: &Column, edges: &[f64], first_bin: usize) -> (f64, Opti
                 .sum();
             cloud_top = Some(sent);
         }
-        std::mem::swap(&mut rate, &mut rate_below);
+        std::mem::swap(rate, rate_below);
         std::mem::swap(&mut planck, &mut planck_below);
         if !open {
-            return (out.iter().sum(), cloud_top);
+            return (out.iter().sum(), cloud_top, 0.0);
         }
     }
-    let mut ground = vec![0.0; edges.len()];
-    spectrum::planck_over(ground_k(column), edges, &mut ground);
-    let sum = (0..parts)
-        .map(|b| out[b] + column.ground_sent(ground[b], seen[b]))
+    // `ground` holds the ground's Planck flux on every edge (`sent`).
+    let from_ground: f64 = (0..parts)
+        .map(|b| column.ground_sent(ground[b], seen[b]))
         .sum();
-    (sum, cloud_top)
+    (
+        out.iter().sum::<f64>() + from_ground,
+        cloud_top,
+        from_ground,
+    )
 }
 
 /// The scattering part, the intervals `from..summed` of `edges` (the last
-/// interval the rest past 0.2 µm): the ground's Planck flux `ground`
+/// interval the rest past 0.2 µm): the ground's Planck flux (`ws.ground`)
 /// through the Rayleigh depth of the whole column, and, under a cloud,
 /// its top's (the Planck flux linear in `ln p` across its layer, as
 /// [`super::radiate`] takes it) through the air above it, the share of
@@ -244,7 +336,7 @@ fn visible(
     edges: &[f64],
     from: usize,
     summed: usize,
-    ground: &[f64],
+    ws: &mut Workspace,
 ) -> (f64, Option<f64>) {
     if summed <= from {
         return (0.0, None);
@@ -259,16 +351,15 @@ fn visible(
         1.0 / (1.0 + 0.5 * DIFFUSIVITY * tau * scale * mass)
     };
     let clear = (from..summed)
-        .map(|j| column.ground_sent(ground[j], through(j, 1.0)))
+        .map(|j| column.ground_sent(ws.ground[j], through(j, 1.0)))
         .sum();
     let cloudy = column.cloud.map(|cloud| {
         let i = cloud.layer;
         let p_top = column.levels[i].total() * (-cloud.up * column.span(i)).exp();
         let mass = p_top / surface.total();
-        let mut below = vec![0.0; edges.len()];
-        let mut above = vec![0.0; edges.len()];
-        spectrum::planck_over(column.temperature[i], edges, &mut below);
-        spectrum::planck_over(column.temperature[i + 1], edges, &mut above);
+        let (below, above) = (&mut ws.planck, &mut ws.planck_below);
+        spectrum::planck_over(column.temperature[i], edges, below);
+        spectrum::planck_over(column.temperature[i + 1], edges, above);
         (from..summed)
             .map(|j| (below[j] + cloud.up * (above[j] - below[j])) * through(j, mass))
             .sum()

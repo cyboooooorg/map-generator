@@ -107,6 +107,23 @@ impl LevelAbsorption {
         }
     }
 
+    /// This buffer for the bins `bins`, its vectors resized (they keep
+    /// their capacity, so a buffer reused on fewer bins allocates
+    /// nothing).
+    pub(crate) fn resize(&mut self, bins: std::ops::Range<usize>) {
+        let m = bins.len() * G;
+        for v in [
+            &mut self.co2,
+            &mut self.water,
+            &mut self.by_air,
+            &mut self.by_self,
+        ] {
+            v.resize(m, 0.0);
+        }
+        self.smooth.resize(bins.len(), 0.0);
+        self.bins = bins;
+    }
+
     /// The absorption of `level` in its bins of `table`.
     pub(crate) fn fill(&mut self, table: &Table, level: &Level) {
         self.co2.fill(0.0);
