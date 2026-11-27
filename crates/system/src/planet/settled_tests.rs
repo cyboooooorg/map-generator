@@ -276,10 +276,9 @@ fn settled_draws_then_settles_from_its_snowball_seed() {
     assert_eq!(whole, parts);
 }
 
-// The model's own 577 K for Venus (#594) is not a source: it is a pin of
-// the code's output, so it belongs to the tier-2 net, added in 2d-4
-// because `settled` is not reachable from crates/regression before then.
-// `venus_prints_its_temperature` (tier 3) prints it for the documentation.
+// The model's own Venus (579.578 K, printed by this test in release) is
+// not a source: it is the code's output, so it stays a tier-3 number for
+// the documentation and is not pinned in tier 2 (plan 2d-4, D4).
 #[test]
 #[ignore = "heavy: prints Venus's surface temperature, a settled Venus, under 1 s in release"]
 fn venus_prints_its_temperature() {
@@ -342,7 +341,7 @@ fn mercury_sits_at_its_equilibrium_temperature() {
 
 #[test]
 fn titan_has_its_seas() {
-    // Titan on the air its chain makes (#679, 2d-4): no measured air
+    // Titan on the air its chain makes (#679): no measured air
     // substituted.
     let (titan, rot, trace) = settled_of(&TITAN, TITAN_OBLIQUITY);
     let c = climate(&titan);
@@ -505,7 +504,7 @@ fn the_climate_records_its_causes() {
 /// An air with O₂ records the ozone column each star's light crosses,
 /// the column the solve took, from the O₂ and the star's temperature; the
 /// Bond albedo derives from it. Mars's bare air given Earth's O₂, an input
-/// of the test (the reference bodies hold none until planet PR 2d-4).
+/// of the test (`settled` alone gives the reference bodies none: life adds it).
 #[test]
 fn an_oxygen_air_records_its_ozone() {
     let mut trace = Trace::new();
@@ -695,9 +694,9 @@ fn earth_has_its_climate() {
         "{clouds}"
     );
 
-    // Earth's measured air (Refs #659: 2d-4 gives the reference Earth its
-    // oxygen from life and solves its climate again on it, so that the
-    // reference Earth reaches this air). 280 ppm under that air's albedo
+    // Earth's measured air (Refs #659: `life` gives the reference Earth its
+    // oxygen and solves its climate again on it, so that the reference
+    // Earth reaches this air). 280 ppm under that air's albedo
     // gives 286 to 290 K, and the thermostat's CO₂ lies between the CO₂s
     // that give 286 and 290 K, all on that one air. Its O₂ holds the ozone
     // the reference air, without O₂, lacks (`ozone_column`, #705): its

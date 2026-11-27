@@ -251,8 +251,8 @@ surface albedo raised to reproduce Earth.
   `albedo::shortwave_budget`, and records it as
   `planet.climate.ozone-column` (one node per star, when positive) from
   the bare air's O₂ and the star's temperature; the Bond albedo derives
-  from it. The reference bodies hold no O₂ until planet PR 2d-4, so they
-  hold no ozone yet.
+  from it. The reference bodies hold no O₂ before life (planet PR 2d-4) oxygenates
+  them, so a lifeless one holds no ozone.
 - **The cross-sections.** Serdyuchenko et al. 2014's file, 213 to
   1100 nm at 223 and 233 K, reduced to the k-tables' eight g-points on
   each of the albedo's 240 bands (sorted samples, means over the
@@ -286,7 +286,7 @@ surface albedo raised to reproduce Earth.
 - **Which column.** The climate passes each body's
   `ClimateInputs::longwave_ozone`: each star's column
   (`Light::ozone`) weighted by its share of the planet's light, none
-  without light. The O₂-free bodies (all of them until planet PR 2d-4)
+  without light. The O₂-free bodies (all of them before planet PR 2d-4's life step)
   hold none, so their climates do not move. Around several stars the
   weighting is calibration 7 below.
 - **Ozone on the moist plateau** (#761). Goldblatt et al. 2013 find

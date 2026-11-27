@@ -21,6 +21,10 @@ the kind of the central object.
 - `StarState`, `PlanetState` (and their parts: `Orbit`, `Spin`, `Bulk`,
   `Composition`, `Heat`, `Surface`, `Atmosphere`, `GlobalClimate`,
   `SurfaceLiquid`, `Terrain`, `Biosphere`): the state of a body at a date.
+  `Biosphere` is the air life has made, from `Lifeless` (none) through
+  `Anoxic` (the air it found) and `Oxidising` (methane gone) to `Modern`
+  (oxygen); it is a `Traced` leaf of `Surface`, drawn by the planet model,
+  never by the world.
   A giant has no `Surface`. An `Atmosphere` holds its surface pressure and
   a weight per `Gas` (N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar; the gas's mass
   times the gravity over the planet's area, in bar, in the field

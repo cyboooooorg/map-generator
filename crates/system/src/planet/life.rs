@@ -4,7 +4,7 @@
 //! l.39-70) through `science::life` (study 27: life from 1.17 Gyr, oxygen
 //! in two steps, O₂ at the CIPM ratio to N₂). Legacy did not solve the
 //! climate again on the oxygenated air (its "known simplification"); the
-//! rewrite does (plan 2d-4, B8), so that the class and the surface read
+//! rewrite does (planet PR 2d-4), so that the class and the surface read
 //! the climate under the air life left.
 
 use super::bare::Bare;

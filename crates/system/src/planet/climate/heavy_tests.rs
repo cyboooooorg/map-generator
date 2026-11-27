@@ -1116,8 +1116,8 @@ fn the_runaway_edge_steps_only_by_the_branches_albedos() {
 #[test]
 #[ignore = "heavy: the census case of #443 on its measured inputs"]
 fn census_182_d() {
-    // The system draw of seed 182 is not wired to the planet chain yet
-    // (2d-4): the case is solved on its census inputs, those of
+    // The rewrite's seed 182 is not legacy's system (the draw and the
+    // chain differ): the case stays on its census inputs, those of
     // `a_methane_greenhouse_cannot_warm_a_cold_world`, and held to
     // legacy's other bounds: T_eq about 114.5 K, 4.4 bar of N₂ and
     // 0.9 bar of methane over its seas.

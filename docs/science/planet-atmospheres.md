@@ -732,7 +732,7 @@ the post-steam body, then the photolysis, the reducing test, the cold trap
 and the photochemistry. The non-thermal loss waits for #658;
 the fallback and the climate are the solver's (2d-3a, see "The climate
 solver of the rewrite" below), and the climate is solved again after
-oxygenation in 2d-4 (#659). The carbonate
+oxygenation (planet PR 2d-4, #659). The carbonate
 thermostat of the climate takes Earth's CO₂ away afterwards, and life
 adds the oxygen.
 
@@ -1237,9 +1237,8 @@ reducing node only. Legacy solved the air without CO₂, then solved it
 again with CO₂ when the climate did not leave a Titan's air. The
 rewrite does the same in `system::planet::settled`: the test on the
 climate's result (the fallback to the air with CO₂, `titan_like_air`)
-exists, but `settled` is not wired into generation until 2d-4 (#659), so
-the planets the engine produces still keep a reducing air without CO₂
-until then. The frozen CO₂ is
+is wired into generation since planet PR 2d-4 (#659): `class_of` and
+`model` run `settled` on every trial. The frozen CO₂ is
 booked as legacy does, a frost of what the cold trap removes, which
 gives Callisto 5 bar of it (#590).
 
@@ -1477,8 +1476,9 @@ Earth's O₂ by volume) reads the O₂'s partial pressure, with the SO₂ the
 shoreline kept before it and as its column the surface pressure, the
 sum of the weights; then the cold trap (`cold_trapped`, *How the
 rewrite computes the cold trap*), with the SO₂ washed. The chain's O₂ is 0 until
-life gives it some (2d-4), so the wash-out's reading moves no reference
-body today; the trap moves Callisto's CO₂ alone among them.
+life gives it some (the second solve, which runs after this step), so the
+wash-out's reading moves no reference body; the trap moves Callisto's CO₂
+alone among them.
 
 **Calibration of `NITROGEN_RECYCLED_UNDER_PLATES`** (0.7965; studies 23,
 part 5, and 28). Study 23 fitted it first: legacy's 0.8 gave the
@@ -2742,7 +2742,8 @@ legacy's `OCEAN_LAYER_KM` is not ported.
 `k = −ln(1 − 0.71)`: the sea level of a body follows its hypsometry,
 which the planet model does not draw. Searched and not found: a
 published law from a water inventory to the share of a planet under
-sea (study 24, part 7; Cowan & Abbot 2014 are 2d-4's study).
+sea (study 24, part 7). Cowan & Abbot 2014 give the basins' capacity, which
+the ocean-world class reads (*The ocean world*), not the share under sea.
 
 **Calibration of `SOIL_ALBEDO`** (0.25, kept): Mars's Bond albedo,
 0.250 (NASA Mars fact sheet, read), a thin air over dust. Searched and
@@ -3346,7 +3347,7 @@ their measured air (see "Test air and Solar System bounds" below):
 | Body | Result | Target | Observed |
 |---|---|---|---|
 | Earth | 288 K, water, regulated, thermostat CO₂ 0.010605 bar by weight, a partial pressure of 6.819e-3 bar, Bond albedo 0.3066 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone in the light and in the infrared (#704), Bond albedo 0.2907 and 289.38 K at 280 ppm (before #749, which keeps the air in weights: 6.910e-3 bar read as a partial pressure, 0.3064, 0.2906 and 289.39 K; before #704 and the clouds' infrared emissivity of #705: 4.071e-3 bar, 0.3071, 0.2914 and 288.18 K; before the N₂ and O₂ pairs of #703: 4.206e-3 bar and 288.02 K; on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
-| Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the 577 K pin, the model's output (#594), moves to the tier-2 net in 2d-4 | 737 K |
+| Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the model's own 579.578 K (printed by the tier-3 `venus_prints_its_temperature`, release, on this branch, #594) is a tier-3 number, not a tier-2 pin | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
 | Titan | 92.36 K on the measured air, hydrocarbons; the reference Titan settles at 92.39 K on the chain's own air (92.33 K and 92.62 K before #749, whose chain methane, 2.11 bar by weight, the column read as a partial pressure; 92.64 K and 92.97 K before N₂ condensed in the column, #741; 93.86 K and 94.24 K under methane's grey stand-in, before #703; 104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | its equilibrium temperature, dry, temperate | within 1 K of it | airless |
@@ -3358,10 +3359,11 @@ Since #679 (*Titan's nitrogen*) the chain gives it 1.422 bar of N₂ and it
 settled at 94.24 K, 1.512 bar, with 0.091 bar of CH₄ over its seas under
 methane's grey stand-in; since its greenhouse is its pairs only (#703)
 it settled at 92.97 K, and since N₂ condenses in its column (#741) at
-92.61 K; 2d-4 moves the test onto the chain's own air.
+92.61 K; planet PR 2d-4 moved the test onto the chain's own air, 1.4643 bar
+and 92.39 K (`titan_has_its_seas`).
 Earth's O₂ comes from life, which the chain adds later: its reference air
-has none, and the climate is solved again after oxygenation in 2d-4
-(#659), so the 280 ppm check runs on Earth's measured air (N₂ 78.08 %,
+has none, and the climate is solved again after oxygenation (planet PR 2d-4,
+#659), so the 280 ppm check runs on Earth's measured air (N₂ 78.08 %,
 O₂ 20.95 % of 1.014 bar), under that air's own Bond albedo with the
 ozone its O₂ holds (`ozone_column`, [ozone.md](ozone.md)), taken at
 the reference Earth's temperature. Since #705 the cloud albedo is
@@ -3403,7 +3405,7 @@ against an observed 210 K it took as target (the NASA fact sheet gives
 about 214 K, see study 25), Titan 99 K, `titan-like` 93.7 K. Legacy's
 `mars-like` reached 215 K on the distance sweep and 213.3 to 214.1 K
 over seeds 1 to 40, and `venus-like` 552 to 601 K (median 575 K) under
-75 to 98 bar. Venus reaches 577 K under its 85 bar of CO₂ and its Bond
+75 to 98 bar. Venus reaches 577 K (579.578 K in the rewrite's model, #594) under its 85 bar of CO₂ and its Bond
 albedo 0.76 (739 K on the grey column, whose CO₂ opacity was calibrated
 on it): the infrared opacity of its H₂SO₄ clouds and its SO₂ are not
 modelled, and the hot bands of the line list above 700 K are unchecked
@@ -4153,9 +4155,9 @@ solar days is zonal for any non-locked rotator, so the flag is
   the fact sheet (decided with the user on 2026-11-24).
 - **Earth** 288 K (fact sheet), **Titan** 93.65 ± 0.25 K (Fulchignoni
   et al. 2005), **Venus** Bond albedo 0.76 ± 0.05 (NASA Venus fact sheet) and no
-  liquid, held in tier 1. The model's own 577 K is not a source: it is
-  pinned as a regression net in tier 2 once 2d-4 makes the chain
-  reachable from `crates/regression` (#594).
+  liquid, held in tier 1. The model's own Venus (579.578 K, the
+  tier-3 `venus_prints_its_temperature` in release) is not a source and not
+  a tier-2 pin: it stays a printed tier-3 number (#594).
 
 #### The reducing-air fallback
 
@@ -4549,7 +4551,7 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | Thick steam (≥ 260 bar) past the limit; 30 % water at 0.7 AU, `a_thick_steam_runaway_settles_past_the_end_of_the_plateau` | 1500 to 2500 K, a steam world | Kasting 1988 (over 1500 K for a full ocean), Goldblatt et al. 2013 (a stable steam state from about 1600 K), Boukrouche et al. 2021 § 4.3 (1835 K under 311 W/m² incoming, 2364 to 2451 K under 1343 W/m², 260 bar) |
 | Turbet's worked example | 1.2 R⊕ ± 5 % on Zeng's 0.750 R⊕ core ("around"; the fit errs by up to about 10 %) | Turbet et al. 2020 § 3.1 |
 | A steam world's radius | over its condensed radius, inside the structures of Turbet's § 2.1 (27 bar to 270 kbar), past § 2.2's 27 kbar | Turbet et al. 2020 § 3.1 (property) |
-| The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; 1.61 R⊕ and 1679 K are the old code's output (tier-2 net only) |
+| The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; the model's own output on this branch is 1.64297 R⊕ and 1525.70 K (printed by the tier-3 test, release; not a source, not pinned) |
 | A wet Venus under an XUV fluence of 1e14 J/m², `thin_steam_over_rock_stays_a_runaway` | a runaway under 220.64 bar of steam, no envelope | Pierrehumbert 2023 § 1 (no surface hides under the critical pressure); legacy `thin_steam_over_rock_stays_a_runaway_greenhouse` |
 | A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
 | F0V (7220 K) at 1.2963 S⊕, a hundredth of the N₂, half Earth's mass, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light over the saturated column's peak (at Earth's mass 291.0 over 289.9 W/m²; at a tenth of the N₂, Earth's argon raises the peak to 292.3, #694), Kasting 1988, Goldblatt et al. 2013. Since the cloud albedo's refit (#705, 0.322) an Earth-mass planet there has a Bond albedo of 0.3515 and absorbs 286.0 W/m², under any peak the N₂ cut gives; half Earth's mass, whose lower gravity lowers the peak, boils at 282.7 W/m² (0.7 Earth masses does not); legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
@@ -4666,10 +4668,15 @@ O₂ 20.95 % of 1.014 bar) the solver gives 287.1 K at 280 ppm, inside
 the 286 to 290 K window of the tests (a test definition: Myhre et al.
 1998 give the 280 ppm, not a temperature). The second solve brings the
 reference Earth part of the way: its oxygenated air holds 0.746 bar of
-N₂ and 0.228 bar of O₂ (0.974 bar, no argon), and settles at 288.4 K
-with its thermostat's 906 ppm of CO₂, inside the window; at 280 ppm
-under that albedo it gives 285.8 K, 0.2 K under it (measured
-2026-11-25, with the O₂ counted by weight, `the_reference_earth_lives_and_reaches_its_climate`). The
+N₂ and 0.228 bar of O₂ (0.974 bar, no argon; measured 2026-11-25). Once
+the chain gives it Modern methane as well (dbf5b603) the second solve
+settles at 288.000 K with its thermostat's CO₂ at 2.4058e-4 bar by weight
+(the model's output, the tier-2 `the_reference_planets` net does not pin it:
+no reference planet is alive today, as reference 7's earth-like drew
+lifeless, so the figure is the model's for an Earth drawn alive,
+`the_reference_earth_lives_and_reaches_its_climate`); the 285.8 K it gave
+at 280 ppm under that albedo was measured earlier, with the O₂ counted by
+weight. The
 class does not read the
 O₂; the climate does, through the pressure. The second solve takes no
 boil verdict (a declared simplification): the class and the surface
@@ -4714,8 +4721,8 @@ core and dynamo, the air (`outgassed`, `atmosphere`,
 `methane_photolysis`, `cold_trap`, then `photochemistry`, which reads
 the cold trap's air), the climate and
 surface liquid, then life and the oxygen it makes, and the climate
-solved again on the oxygenated air (the rewrite, 2d-4; legacy kept the
-first climate). If a wet surface
+solved again on the oxygenated air (the rewrite, planet PR 2d-4; legacy
+kept the first climate). If a wet surface
 has no wet balance (`climate::boils`: its absorbed light and internal
 heat exceed the moist limit; Goldblatt et al. 2013,
 doi:10.1038/ngeo1892), the body has run away after all, in one pass
@@ -4725,9 +4732,14 @@ the air), flagged `boiled`, on the body that water leaves
 (`planet::after_steam`: its mass, layers and heat derived again). If
 escape leaves water and that leftover has a wet balance of its own (too
 little vapour to hold the moist limit), it condenses again and a third
-run keeps it as an ocean (`boiled`, no runaway; the water cause tree
-says so in a `boiled_recondensed` note that carries the water lost,
-issue #517); otherwise the steam run stands, dry when escape took all the
+run keeps it as an ocean. The chain shows it without a note: `boiled` is
+true (from the verdict) and `runaway` false (from the leftover's
+inventory), and the boiled-off envelope node is in the cause tree, read by
+`planet.mass.after-boil-off`; the water lost would be a difference
+computed only to explain, against one code path per value (the legacy
+`boiled_recondensed` note is not ported, issue #517). An F0V Earth that
+boils and recondenses ends with 1.4050e17 kg of water at 288.0005 K
+(the model's output); otherwise the steam run stands, dry when escape took all the
 water. There is no temperature condition, so a boil whose dry air is
 under 647 K still ends dry (issue #442). A body
 that keeps an envelope has no surface: `PlanetModel.surface` is `None`.
@@ -4751,7 +4763,7 @@ reads too.
 | 5 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
 | 6 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
 | 7 | `ocean-world` | surface liquid is water and the oceans kept exceed the basins' capacity, `3.7 (R/R⊕)² (g⊕/g)` Earth oceans (Cowan & Abbot 2014, below) |
-| 8 | `ice-world` | at least 5 % water and ices (`ICY_MIN_WATER`, the tides' line), and at least 0.01 Earth ocean kept at the surface (`ICE_WORLD_MIN_OCEANS`) |
+| 8 | `ice-world` | at least 5 % water and ices (`ICY_MIN_WATER`, the tides' line) in the water fraction the chain kept (`drawn.water_fraction`, the node the class reads, not the trial's draw), and at least 0.01 Earth ocean kept at the surface (`ICE_WORLD_MIN_OCEANS`) |
 | 9 | `volcanic-world` | a solid surface in the heat-pipe regime, none of the classes above, no ice world |
 | 10 | `super-earth`, `rocky` | radius of at least 1.25 R⊕ (Borucki et al. 2011), rocky below |
 
@@ -4820,7 +4832,13 @@ the basin capacity, a `Source:`, more planets become ocean worlds than
 with 10 (from 3.7 instead of 10 oceans on an Earth). The paper assumes
 plate tectonics; the rewrite applies it in every regime (decided
 2026-11-24): the basins' depth is set by isostasy under gravity (Eq. 6),
-not by plate motion.
+not by plate motion. The model has two laws for water on the surface:
+`ocean_share` of the surface liquid is `ocean_fraction` of the water
+inventory (the share of the surface under water, which the world reads
+for its sea level), and the basin capacity above is a second law, for
+where the land drowns. They are not reconciled: `ocean_fraction` does not
+read the basins' capacity, so the two can disagree on a low-gravity
+planet, whose basins hold more (a follow-up issue).
 
 **The dense air.** `DENSE_AIR_BAR` is 1 bar, for the runaway greenhouse
 (Venus has 92 bar; a runaway that lost its air is a bare rock). No
@@ -4832,11 +4850,13 @@ triple-point pressure (`methane_triple_pressure`, 0.1169 bar, NIST), under
 which no liquid methane is stable; it took the 1 bar until part 4, when
 Titans drawn with 0.6 to 1 bar kept lakes but were classed ice worlds.
 It keeps a cold body with a trace of methane over its ice under a thin
-air an ice world. Titan has 2.1 bar in the model.
+air an ice world. Titan has 1.4643 bar in the model, on its chain's own air
+(92.39 K).
 
 The case of issue #492 (4.78 M⊕, 12 % water, an M9V star at 0.018 AU)
-is a `steam-world`: 4.1e5 bar of steam over a surface at 1679 K, and
-1.700 R⊕ (1.641 with its water condensed).
+is a `steam-world`: over 1e5 bar of steam over a surface at 1525.70 K,
+and 1.64297 R⊕ (the model's output, printed by the tier-3 test; the old
+code gave 1679 K and 1.700 R⊕).
 
 The Solar System classifies as itself: Venus `runaway-greenhouse`, Earth
 and Mars `rocky`, Titan `hydrocarbon-world`, Ganymede and Europa
