@@ -485,6 +485,57 @@ fn a_falling_gap_closes_on_its_root_by_the_secant() {
     assert!(n <= 25, "{n} evaluations");
 }
 
+/// The hump traced round a 3300 K star (#731), as in
+/// `a_falling_gap_closes_on_its_root_by_the_secant`, less a dip (`depth` above
+/// the hump at `middle`, `half` wide, bar): a warm balance, a pocket, on
+/// the falling side. With `φ` growing with the CO₂ (`g' < 1`), the plain
+/// step finds the pocket's upper root.
+fn pocket_gap(c: f64, (extra, middle, half): (f64, f64, f64)) -> f64 {
+    let hump = |c: f64| 0.00605 * (c - 2.2) * (46.0 - c);
+    hump(c) - (hump(middle) + extra) * (-((c - middle) / half).powi(2)).exp()
+}
+
+#[test]
+fn a_collapse_does_not_stop_on_a_pockets_unstable_root() {
+    // Three pockets, each deeper than twice the noise, that a long step
+    // crosses down to its lower, unstable root (where `g` falls with the
+    // CO₂): within the noise above it at 4.6 and 16.5 bar, within the
+    // tolerance below it at 34.0 bar. The search must not stop there, but
+    // at the pocket's upper root, where the plain step stops (#755). The
+    // roots are those of `pocket_gap`, found by a 0.0005-bar scan.
+    let noise = |c: f64| 0.0016 + 0.0097 * c / 45.9;
+    for (pocket, warm, unstable) in [
+        ((0.1, 4.4, 0.8), 4.620, 3.879),
+        ((0.05, 16.2, 3.2), 16.497, 15.501),
+        ((0.2, 33.2, 2.4), 34.034, 32.635),
+    ] {
+        let collapse = |widest: f64| {
+            collapse_search(
+                45.9,
+                |c| Kept {
+                    kept: c - pocket_gap(c, pocket),
+                    noise: noise(c),
+                    state: (),
+                },
+                COLLAPSE_TOLERANCE,
+                COLLAPSE_ITERATIONS * 10,
+                widest,
+            )
+        };
+        let (plain, (), _, _) = collapse(0.0);
+        let (fast, (), n, held) = collapse(COLLAPSE_STEP);
+        assert!((plain - warm).abs() < 0.01, "{pocket:?}: plain {plain}");
+        assert!(
+            (fast - unstable).abs() > 0.1,
+            "{pocket:?}: {fast} on the unstable root"
+        );
+        assert!(
+            held && (fast - warm).abs() < 0.05,
+            "{pocket:?}: {fast} after {n}, not at {warm}"
+        );
+    }
+}
+
 #[test]
 fn a_collapse_steps_over_a_zero_within_its_noise() {
     // A dip of 0.007 bar at 17.03 bar takes `g` 0.002 bar under zero,

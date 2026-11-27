@@ -3701,6 +3701,26 @@ than a rising step, or hidden before the secant's zero, can be stepped
 over; the plain step finds every one (tier 1, synthetic collapses in
 the measured shape).
 
+A long step can also cross part of a warm balance (a pocket of `g`
+below zero) and land next to its lower root, the unstable one, where
+`g` falls with the CO₂: within the noise above it, or within the
+tolerance below it. The search would stop there, on a balance that the
+plain step never reaches and that a cooling planet cannot hold (#755).
+Since 2026-11-27, a stop reached by a longer step than the plain one,
+or inside the bracket, costs one more climate just above it, where the
+secant from the stop to the point above it reaches five times the noise
+(`POCKET_PROBE_NOISES`), at least `COLLAPSE_TOLERANCE` of the CO₂ above
+the stop and at most halfway to that point: if `g` there is below minus
+its noise, the stop sits under a pocket, and the search closes in on the
+pocket's upper root, the plain step's balance. On 4287 synthetic pockets
+deeper than twice the noise, cut into the traced 3300 K gap with `φ`
+growing with the CO₂, the stops on an unstable root went from 26 to
+none, for one more evaluation a collapse on average (19.8 to 20.8); at
+1.5, 2, 3 and 8 noises they are 5, 3, 1 and 0. On the climates
+of the heavy climate tests (1601 stops traced on main 6fc12ab7) no stop
+sat on an unstable root, and on main 22e37f31 the check never fires
+there: those climates do not change.
+
 Until 2026-11-27 every step was capped at 0.005 of the CO₂. Round cool
 stars that made the thaw search of a methane Earth near its outer edge
 slow (#731, main a97c1ca1): a frozen climate collapses its CO₂ again
@@ -3901,7 +3921,10 @@ discretisation is a `Calibration:` held by a convergence test.
 | `COLLAPSE_ITERATIONS` | 300 | Definition | a collapsing Earth at 1.6 AU settles under it (tier 1); a methane Earth just past its outer edge with #703's pairs needs up to 207 steps, plain; a collapse stopped at it leaves its climate not converged | 1, 3 |
 | `COLLAPSE_TOLERANCE` | 1e-4 | Calibration | at 1e-5 the temperature moves under 0.01 K | 3 |
 | `COLLAPSE_STEP` | 0.05 of the CO₂, while the gap rises (0.005 for every step before 2026-11-27) | Calibration | at 0.025, and against the plain step for the falling rule, a methane Earth's frozen climates round 4500 and 3300 K stars move by at most 0.084 K (#731); at the old 0.0025 its climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs; since them and #746, 1.25, 1.2534 and 1.264 AU do not move, and from 1.262 to 1.268 AU full, half, quarter and plain steps stay within 0.11 K on a converged climate and 0.33 K on a cycle's cold side (5.6 K before the cap of #747) | 3 |
+| `POCKET_PROBE_NOISES` | 5 noises | Calibration | the synthetic pockets of #755: 5, 3, 1, 0 and 0 stops on an unstable root at 1.5, 2, 3, 5 and 8 noises, 26 unchecked; a stop on a stable root does not fire it | 1 |
+| `POCKET_PROBE_REACH` | 0.5 of the way to the point above | Definition | the probe stays inside the bracket | 1 |
 | `PHASE_BAND` | 1 K | Calibration | Titan-like and Triton-like sweeps settle across their points | 3 |
+| `THAW_FLOOR` | 1e-12 of the maximum greenhouse | Definition | keeps `ln CO₂` finite; the icy start is read there when the search starts from it (#758) | 1 |
 | `THAW_STEPS` | 13 | Calibration | at 16 steps Earth's thaw CO₂ moves under 0.1 % (measured: +0.165 % at 12 steps, +0.063 % at 13, 0.180932, 0.180748 and 0.180634 bar at 12, 13 and 16); fewer steps run when the search meets a cycling icy start (#731) | 3 |
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |
 | `ALBEDO_TOLERANCE_K` | 0.1 K | Calibration | at 0.01 K the reference climates move under 0.1 K | 1 |
