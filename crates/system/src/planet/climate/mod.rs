@@ -96,7 +96,7 @@ pub(crate) const COLLAPSE_TOLERANCE: f64 = 1e-4;
 /// "Solver constants"; `collapse_iterations_is_converged`), but with
 /// #703's pairs a methane Earth just past its outer edge collapses from
 /// 14.2 to about 9.3 bar with a gap of only 0.02 to 0.09 bar, and needs
-/// up to 91 steps at [`COLLAPSE_STEP`], 140 at half of it and 207 with
+/// up to 91 steps at the old [`COLLAPSE_STEP`] (0.005), 140 at half of it and 207 with
 /// the plain step (measured at 1.25 to 1.268 AU); stopped at 100, the
 /// climate kept depended on the step. 300 is the plain step's 207 with
 /// half again as margin.
@@ -104,14 +104,18 @@ pub(crate) const COLLAPSE_ITERATIONS: usize = 300;
 
 /// Calibration: the longest step of a collapse while its gap rises or
 /// stays flat, as a share of its CO₂, 0.05 (#731): 0.85 bar at 17 bar.
-/// Once the gap falls, the step goes to the secant's zero, with no cap
-/// but twice the last step ([`wet::collapse_search`]). It was 0.005 for
+/// Once the gap falls by more than its noise, the step goes to the
+/// secant's zero, with no cap but twice the last step
+/// ([`wet::collapse_search`]). It was 0.005 for
 /// every step until 2026-11-27, which kept a methane Earth's collapses
-/// round cool stars at 44 to 85 evaluations (#731). A warm balance whose
+/// round cool stars at up to 45 (3300 K) and 85 (4500 K) evaluations
+/// (#731). A warm balance whose
 /// pocket of CO₂ is narrower than one step can be stepped over, where the
 /// plain iteration would stop in it; at half of it a methane Earth's
 /// climates around its outer edge, and its frozen climates round 4500 and
-/// 3300 K stars, do not move: a convergence test in tier 3
+/// 3300 K stars, move under `ALBEDO_TOLERANCE_K`, and the frozen ones
+/// stay within 0.002 K of the plain step, which holds the falling rule
+/// (it has no constant to halve): a convergence test in tier 3
 /// (`collapse_step_is_converged`) ("A collapse from the fold (#731)" in
 /// `docs/science/planet-atmospheres.md`).
 /// Zero steps the collapse plainly, as legacy did.

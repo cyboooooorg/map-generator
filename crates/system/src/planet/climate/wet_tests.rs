@@ -589,3 +589,48 @@ fn a_collapse_stops_where_its_gap_jumps_across_a_root() {
         );
     }
 }
+
+#[test]
+fn a_noisy_rising_gap_keeps_its_steps_under_the_cap() {
+    // A gap that rises slowly from 17 down to 8 bar (0.002 bar a bar),
+    // then falls to its root at 2 bar, with a jitter of 0.003 bar, under
+    // its noise of 0.005 bar: a solve to 0.01 K jumps by about that much.
+    // A jitter that makes `g` dip must not pass for a falling gap: while
+    // the gap rises, a step stays the plain one or at most `COLLAPSE_STEP`
+    // of the CO₂ (#731 review).
+    let gap = |c: f64| {
+        let smooth = if c > 8.0 {
+            0.02 + 0.002 * (17.0 - c)
+        } else {
+            0.038 * (c - 2.0) / 6.0
+        };
+        smooth + 0.003 * (c * 997.0).sin()
+    };
+    let mut evaluated = Vec::new();
+    let (_, (), _, held) = collapse_search(
+        17.0,
+        |c| {
+            evaluated.push((c, gap(c)));
+            Kept {
+                kept: c - gap(c),
+                noise: 0.005,
+                state: (),
+            }
+        },
+        COLLAPSE_TOLERANCE,
+        COLLAPSE_ITERATIONS,
+        COLLAPSE_STEP,
+    );
+    assert!(held);
+    for pair in evaluated.windows(2) {
+        let ((c, g), (next, _)) = (pair[0], pair[1]);
+        if c > 8.5 && next < c {
+            let allowed = g.max(COLLAPSE_STEP * c);
+            assert!(
+                c - next <= allowed * (1.0 + 1e-9),
+                "a step of {:.3} bar from {c:.3} bar, over the {allowed:.3} allowed",
+                c - next
+            );
+        }
+    }
+}

@@ -7,9 +7,10 @@ Issue: #731 (part 2, re-measured on main a97c1ca1). Branch: `perf/thaw-search`.
 A methane Earth near its outer edge round a cool star takes 45 to 276 s to
 solve (4500 K at 0.9 of its edge, 3300 K at 0.8 to 0.92), against under
 8 s elsewhere. More than 99 % of that time is in `collapsed_climate`:
-each albedo step of a frozen climate collapses its CO₂ again, in 40 to 85
-evaluations of about 33 ms. Planet PR 2d-4 will run the climate for every
-try of the system draw, so these bodies would stall it.
+each albedo step of a frozen climate collapses its CO₂ again, in up to 45
+(3300 K) and 85 (4500 K) evaluations of about 33 ms. Planet PR 2d-4 will
+run the climate for every try of the system draw, so these bodies would
+stall it.
 
 The gap `g(c) = c − φ(c)` of these collapses is a single hump: it starts
 near zero at the fold, rises to 0.3 to 3 bar, then falls to one root.

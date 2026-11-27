@@ -1971,7 +1971,8 @@ const STEP_ORBITS: [f64; 3] = [1.25, 1.2534, CYCLING_AU];
 /// Definition: frozen climates where the collapse's step is held round
 /// cool stars (star, AU, CO₂): calls of the thaw search on a methane
 /// Earth near its outer edge, measured on #731 (main a97c1ca1), where
-/// each albedo step collapsed its CO₂ in 40 to 85 evaluations before the
+/// each albedo step collapsed its CO₂ in up to 45 (3300 K) and 85
+/// (4500 K) evaluations before the
 /// step rules of 2026-11-27. The second one cycled with the old step.
 const COOL_FROZEN: [(Kelvin, f64, Bar); 3] = [
     (Kelvin(4500.0), 1.2828, Bar(19.0296)),
@@ -1982,9 +1983,9 @@ const COOL_FROZEN: [(Kelvin, f64, Bar); 3] = [
 #[test]
 #[ignore = "heavy: a methane Earth at three orbits around its outer edge, and three frozen climates round cool stars, twice"]
 fn collapse_step_is_converged() {
-    // The longest step of a collapse (`COLLAPSE_STEP`): at half of it the
-    // climates around the edge, where collapses start at the fold, keep
-    // their branch and move under `ALBEDO_TOLERANCE_K`. Each is converged
+    // The longest rising step of a collapse (`COLLAPSE_STEP`): at half of
+    // it the climates around the edge, where collapses start at the fold,
+    // keep their branch and move under `ALBEDO_TOLERANCE_K`. Each is converged
     // or cycles: a collapse stopped at `COLLAPSE_ITERATIONS` would leave
     // it neither, and its climate would depend on the step.
     let like = ClimateInputs {
@@ -2027,26 +2028,40 @@ fn collapse_step_is_converged() {
             ..inputs
         };
         let frozen = |numerics: Numerics| frozen_at(&mut ClimateBody::new(&inputs, numerics), co2);
-        let (a, b) = (frozen(Numerics::DEFAULT), frozen(half));
-        println!(
-            "{} K, {au} AU, {:.4} bar: {:.4} K against {:.4} K at half the step, CO2 {:.4} and \
-             {:.4} bar, cycles {} and {}",
-            teff.0,
-            co2.0,
-            a.temperature.0,
-            b.temperature.0,
-            a.air.co2,
-            b.air.co2,
-            a.cycles,
-            b.cycles
-        );
-        let at = format!("{} K, {au} AU, {} bar", teff.0, co2.0);
-        assert!(a.converged || a.cycles, "{at}: {a:?}");
-        assert!(b.converged || b.cycles, "{at}, half the step: {b:?}");
-        assert_eq!(frozen_over(&a), frozen_over(&b), "{at}: {a:?} {b:?}");
-        assert!(
-            (a.temperature.0 - b.temperature.0).abs() < super::ALBEDO_TOLERANCE_K.0,
-            "{at}: {a:?} {b:?}"
-        );
+        let a = frozen(Numerics::DEFAULT);
+        // Half the step holds the rising cap. The falling step goes to the
+        // secant's zero, with no constant to halve: the plain step, which
+        // finds every root, holds it.
+        let plain = Numerics {
+            collapse_step: 0.0,
+            ..Numerics::DEFAULT
+        };
+        for (name, numerics) in [("half the step", half), ("the plain step", plain)] {
+            let b = frozen(numerics);
+            println!(
+                "{} K, {au} AU, {:.4} bar: {:.4} K against {:.4} K at {name}, CO2 {:.4} and \
+                 {:.4} bar, cycles {} and {}",
+                teff.0,
+                co2.0,
+                a.temperature.0,
+                b.temperature.0,
+                a.air.co2,
+                b.air.co2,
+                a.cycles,
+                b.cycles
+            );
+            let at = format!("{} K, {au} AU, {} bar", teff.0, co2.0);
+            assert!(a.converged || a.cycles, "{at}: {a:?}");
+            assert!(b.converged || b.cycles, "{at}, {name}: {b:?}");
+            assert_eq!(
+                frozen_over(&a),
+                frozen_over(&b),
+                "{at}, {name}: {a:?} {b:?}"
+            );
+            assert!(
+                (a.temperature.0 - b.temperature.0).abs() < super::ALBEDO_TOLERANCE_K.0,
+                "{at}, {name}: {a:?} {b:?}"
+            );
+        }
     }
 }

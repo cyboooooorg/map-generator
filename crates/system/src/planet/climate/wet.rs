@@ -254,12 +254,14 @@ pub(crate) struct Kept<S> {
 ///
 /// Otherwise (#731) each step is at least the plain one and at most twice the
 /// last one. While `g` rises or stays flat, it is also at most `widest` times
-/// the CO₂; once `g` falls, it goes to the zero of the secant through the last
-/// two points, with no cap but twice the last step. Near a methane Earth's
+/// the CO₂; once `g` falls by more than its noise, it goes to the zero of the
+/// secant through the last two points, with no cap but twice the last step (a
+/// fall within the noise is a jitter of the solve, not a fall, and keeps the
+/// rising cap). Near a methane Earth's
 /// edge round a cool star, `g` is a single hump from about zero to its root
 /// (0.3 to 3 bar high, over 12 to 44 bar of CO₂): the cap kept the rise
 /// short and the secant short of the root, 83 and 44 evaluations at 4500
-/// and 3300 K; the two rules take about 24 and 22 (simulated on the traced
+/// and 3300 K; the two rules take about 22 and 22 (simulated on the traced
 /// gaps; #731, measured on main a97c1ca1). Where `g` falls below
 /// `−noise` it has passed a root: the search brackets it between that point
 /// and the last one above zero, and closes in on it by the Illinois rule
@@ -303,9 +305,10 @@ pub(crate) fn collapse_search<S: Copy>(
         let mut plain = true;
         if widest > 0.0 {
             if let Some((c0, g0)) = before {
-                let longer = if g0 > g {
-                    // Falling: to the secant's zero, at most twice the
-                    // last step.
+                let longer = if g0 - g > here.noise {
+                    // Falling by more than the noise (a jitter of the
+                    // solve is no fall): to the secant's zero, at most
+                    // twice the last step.
                     (g * (c0 - c) / (g0 - g)).min(2.0 * last_step)
                 } else {
                     // Rising or flat: doubling, at most `widest` of the
