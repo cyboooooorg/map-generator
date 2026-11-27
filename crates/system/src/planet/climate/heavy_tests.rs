@@ -2002,15 +2002,24 @@ fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
 const STEP_ORBITS: [f64; 3] = [1.265, 1.272, CYCLING_AU];
 
 /// Definition: frozen climates where the collapse's step is held round
-/// cool stars (star, AU, CO₂): calls of the thaw search on a methane
-/// Earth near its outer edge, measured on #731 (main a97c1ca1), where
-/// each albedo step collapsed its CO₂ in up to 45 (3300 K) and 85
-/// (4500 K) evaluations before the
-/// step rules of 2026-11-27. The second one cycled with the old step.
+/// cool stars (star, AU, CO₂): a methane Earth round a 3300 K star at
+/// 0.94, 0.96 and 0.98 of its outer edge (1.4147 AU), with methane's
+/// lines (#704) and the clouds' infrared emissivity (#705), at the
+/// geometric mean of the CO₂ it froze with and the most its thaw search
+/// leaves frozen (15.96 and 20.91, 20.81 and 37.56, 30.13 and 51.28 bar),
+/// a CO₂ the search passes through frozen: 215.72, 210.37 and 205.46 K.
+/// At the most it leaves frozen, within 0.004 bar of its thaw, the
+/// branch the climate lands on flips with the step (316.1 K at the plain
+/// step at 0.94, 385.0 K at half the step at 0.98). On #731 (main
+/// a97c1ca1), before #704 and #705, they were 4500 K at 1.2828 AU with
+/// 19.0296 and 19.6173 bar (the second cycled with the old step) and
+/// 3300 K at 1.3586 AU with 45.9 bar; with #704 and #705 those three thaw
+/// (308.6, 309.8 and 381.4 K), and a methane Earth round a 4500 K star
+/// is no longer bistable up to its edge (1.3315 AU).
 const COOL_FROZEN: [(Kelvin, f64, Bar); 3] = [
-    (Kelvin(4500.0), 1.2828, Bar(19.0296)),
-    (Kelvin(4500.0), 1.2828, Bar(19.6173)),
-    (Kelvin(3300.0), 1.3586, Bar(45.9)),
+    (Kelvin(3300.0), 1.3298, Bar(18.27)),
+    (Kelvin(3300.0), 1.3581, Bar(27.96)),
+    (Kelvin(3300.0), 1.3864, Bar(39.31)),
 ];
 
 #[test]

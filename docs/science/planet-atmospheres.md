@@ -3668,7 +3668,8 @@ and the orbits with no fixed point run from 1.280 to 1.285 AU (from
 1.279 AU and from 1.286 AU frozen; the band was swept before #741 and
 before the emissivity, which leave the edge and the cycling at 1.282 AU
 as they were); the test moved to 1.282 AU, where the climate cycles for
-19 steps and is stored at 234.08 K with 10.39 bar.
+19 steps and is stored at 234.08 K with 10.39 bar (233.92 K and
+10.33 bar under the collapse's step rules of 2026-11-27, #756).
 
 #### A collapse from the fold (#731)
 
@@ -3723,6 +3724,28 @@ The rules stay within 0.002 K of the plain step, closer than the old
 step did (0.07 K at 19.03 bar). The old step's column was measured with
 probes on main a97c1ca1 (#731).
 
+With methane's lines (#704) and the clouds' infrared emissivity (#705)
+those three climates thaw (308.6, 309.8 and 381.4 K), and a methane
+Earth round a 4500 K star is no longer bistable up to its outer edge
+(1.3315 AU; its solves take under 6 s). Round a 3300 K star (edge
+1.4147 AU) it is bistable from about 0.94 of its edge, and its solves
+still take 42 to 80 s (release) at 0.94 to 0.98 of it. The test holds
+frozen climates there, at the geometric mean of the CO₂ each froze with
+and the most its thaw search leaves frozen:
+
+| Frozen climate | Step rules | Half the step | Plain step |
+| --- | --- | --- | --- |
+| 3300 K, 1.3298 AU, 18.27 bar | 215.7167 K | 215.7130 K | 215.7292 K |
+| 3300 K, 1.3581 AU, 27.96 bar | 210.3725 K | 210.3725 K | 210.4052 K |
+| 3300 K, 1.3864 AU, 39.31 bar | 205.4620 K | 205.4620 K | 205.4657 K |
+
+At the most CO₂ each thaw search leaves frozen, within 0.004 bar of its
+thaw, the branch flips with the step: at 1.3298 AU and 20.9095 bar the
+rules land frozen (215.73 K) and the plain step warm (316.14 K); at
+1.3864 AU and 51.2841 bar the rules frozen (205.47 K) and half the step
+warm (384.96 K). The frozen branch a snowball is stored on sits at that
+CO₂.
+
 Before #703's pairs, at
 half the step the methane Earth's climates at 1.42875, 1.4355 and
 1.44 AU, around its outer edge, did not move (tier 3,
@@ -3734,7 +3757,9 @@ the step (at 1.264 AU, 231.5440 against 231.5523 K with the rules of
 climate moved by 0.105 K with the rules (231.6489 to 231.5440 K), the
 size of the step's effect on a cycle's cold side measured below. Since
 #704 and #705 the edge is 1.2720 AU and the test holds 1.265, 1.272 and
-1.282 AU: STEP_ORBITS_NUMBERS. Measured on 2026-11-26 at the old
+1.282 AU, and at half the step 288.0001, 283.8828 and 233.9173 K
+become 288.0001, 283.8828 and 233.9140 K (under the step rules of
+2026-11-27). Measured on 2026-11-26 at the old
 `COLLAPSE_STEP` (0.005), half, a quarter and the plain step, the
 climates just past the edge stay within:
 
