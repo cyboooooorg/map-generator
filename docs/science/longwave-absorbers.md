@@ -294,7 +294,8 @@ do now.
 | RFMIP, N₂O's step "PI N2O" − "PD" | | 0.2117 W/m² (OLR 264.115 − 263.903) | 0.204 ± 0.024 (line by line; RRTMGP 0.180) | +3.8 %, inside |
 | N₂O's 324.2 ppb taken out, Earth clear (a probe, no test) | | 2.179 W/m² | 1.5 (Hogan & Matricardi 2020, 332 ppb); 1.88 (Höpfner et al. 2012) | 16 % over the larger |
 | RFMIP, CO₂'s step "PI CO2" − "PD" (a probe, without N₂O) | 1.379 W/m² | | LBLRTM 12.8 1.322 (Pincus et al. 2020's fluxes) | 4.3 % over |
-| Earth's clear sky against CERES like for like | 263.41 W/m² (window 266.14 to 274.58) | 261.24 W/m² | 264.64 to 273.08 (N₂O's 1.5 W/m² out of `MINOR_GASES_W_M2`) | 3.40 under |
+| Earth's clear sky against CERES like for like (printed since study 40) | 263.41 W/m² (window 266.14 to 274.58) | 261.24 W/m² | 264.64 to 273.08 (N₂O's 1.5 W/m² out of `MINOR_GASES_W_M2`) | 3.40 under |
+| RFMIP's present-day clear sky, the column on the 100 profiles (tier 1 since study 40) | | 263.903 W/m² | LBLRTM 263.229 with the halocarbons, 263.619 without (0.39 W/m²), within 0.4 % (1.053 W/m², Pincus et al. 2019) | +0.284, inside |
 | Titan's sourced column | 92.300 K | 92.300 K (91.813 K since N₂ condenses, #741) | 92.296 K before the lines (91.809 K on `main` with #741); measured 93.65 ± 0.25 | +0.004 K |
 
 The methane step hardly depends on the bins (0.710 on 20 cm⁻¹, 0.720
@@ -307,8 +308,13 @@ Höpfner et al.'s: Earth's test column takes more than the sources' from
 both, which points at the column (its upper air, its stratosphere at
 the skin temperature) more than at the lines. Ozone's 8.4 W/m² sits
 under that stratosphere (on RFMIP's own temperatures it takes
-7.46 W/m²). The CERES test's clear sky is 3.4 W/m² under its window:
-see "Where it departs".
+7.46 W/m²). The CERES test's clear sky is 3.4 W/m² under its window,
+while on RFMIP's 100 profiles the column is 0.28 W/m² from LBLRTM:
+the single column's profile, not the lines, is dark. Study 40 found the
+stratosphere's heat is not the cause; the CERES test now only prints
+the gap, the RFMIP field holds the radiation, and the single column's
+upper atmosphere goes to track T11 (issue #757; see "Where it departs"
+in [radiative-transfer.md](radiative-transfer.md)).
 
 The clouds' infrared emissivity was then refitted on CERES (#705,
 `CLOUD_EMISSIVITY` 0.848, [radiative-transfer.md](radiative-transfer.md)),
@@ -539,6 +545,12 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give
     *Climate Change 2001: The Scientific Basis*, IPCC TAR WG1, chapter 6
     (read: Table 6.2, p. 358, the simplified expressions of methane and
     N₂O with their overlap function $f(M, N)$, and §6.3.5, p. 359).
+26. Pincus, R., Mlawer, E. J., Delamere, J. S. 2019, "Balancing accuracy,
+    efficiency, and flexibility in radiation calculations for dynamical
+    models", *J. Adv. Model. Earth Syst.* 11, 3074,
+    doi:10.1029/2019MS001621 (read: §3.2 and Table 1, RTE+RRTMGP within
+    0.4 % of LBLRTM at the top of RFMIP's profiles; LBLRTM's present-day
+    outgoing longwave 263.197 W/m²).
 
 ## See also
 

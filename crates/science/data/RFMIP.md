@@ -4,8 +4,9 @@
 al. 2016) the shortwave is tested on (`science::radiation::rfmip_tests`):
 the atmospheric conditions of its 51 sunlit sites. The sunlight the
 reference models absorb is not in the repository: the tests quote six
-weighted values of it, cited like values from a paper (below).
-`tools/rfmip-shortwave` regenerates the file and prints the six values
+weighted values of it (and two of the longwave going out at the top),
+cited like values from a paper (below).
+`tools/rfmip-shortwave` regenerates the file and prints the eight values
 (see its README). This file says where every number comes from, under
 which terms, and how it was derived. Study 35 (Wiki
 `35-stellar-spectra-audit`, issue #655) chose the tests; the total comes
@@ -16,7 +17,8 @@ infrared column is tested on (`science::radiation::column::rfmip_tests`,
 tier 3): methane's and N₂O's steps from pre-industrial to present day,
 against the line-by-line codes' 0.613 and 0.204 W/m² and RRTMGP's 0.563
 and 0.180 (Pincus et al. 2020, quoted from
-`docs/science/longwave-absorbers.md`; issue #704).
+`docs/science/longwave-absorbers.md`; issue #704), and in tier 1 its
+present-day outgoing radiation at the top against LBLRTM's (study 40).
 
 ## Format
 
@@ -64,6 +66,14 @@ between two experiments. The tests hold them as `Source:` constants:
 | 0.5x to 8x CO₂ (4 to 7) | 2.0772 | 2.1394 |
 | +4 K to +4 K at constant RH (13 to 14) | 4.2098 | 4.1653 |
 
+The clear-sky outgoing longwave at the top, W/m²: the `rlu` of the top
+level (the least pressure) of present day (0), weighted the same way
+over the 100 sites:
+
+| Experiment | LBLRTM-12-8 | RTE-RRTMGP-181204 |
+| --- | --- | --- |
+| Present day (0) | 263.2287 | 263.2301 |
+
 ## Sources and terms
 
 - **Profiles**: Pincus, R., Forster, P. M., Stevens, B. 2016, *Geosci.
@@ -74,14 +84,14 @@ between two experiments. The tests hold them as `Source:` constants:
   profiles of 2014 and their weights, 18 experiments.
 - **Line-by-line fluxes**: Mlawer, E., Pernak, R. 2019, AER LBLRTM model
   output prepared for CMIP6 RFMIP rad-irf, Earth System Grid Federation,
-  doi:10.22033/ESGF/CMIP6.2528: `rsd_Efx_LBLRTM-12-8_rad-irf_r1i1p1f1_gn.nc`
-  and `rsu_…` (v20190514), LBLRTM 12.8 on every level, for each
+  doi:10.22033/ESGF/CMIP6.2528: `rsd_Efx_LBLRTM-12-8_rad-irf_r1i1p1f1_gn.nc`,
+  `rsu_…` and `rlu_…` (v20190514), LBLRTM 12.8 on every level, for each
   experiment.
 - **RRTMGP fluxes**: Pincus, R. 2019, RTE-RRTMGP-Consortium RTE+RRTMGP
   (2018-12-04 full-resolution) model output prepared for CMIP6 RFMIP
   rad-irf, Earth System Grid Federation, doi:10.22033/ESGF/CMIP6.10173:
-  `rsd_Efx_RTE-RRTMGP-181204_rad-irf_r1i1p1f1_gn.nc` and `rsu_…`
-  (v20191007); Pincus, R., Mlawer, E. J., Delamere, J. S. 2019, *J. Adv.
+  `rsd_Efx_RTE-RRTMGP-181204_rad-irf_r1i1p1f1_gn.nc`, `rsu_…` and
+  `rlu_…` (v20191007); Pincus, R., Mlawer, E. J., Delamere, J. S. 2019, *J. Adv.
   Model. Earth Syst.* 11, 3074, doi:10.1029/2019MS001621.
 - **Terms of the profiles**: the input file states that its data are
   "licensed under a Creative Commons Attribution "Share Alike" 4.0
@@ -101,21 +111,23 @@ between two experiments. The tests hold them as `Source:` constants:
 - **Terms of the fluxes**: the LBLRTM and RRTMGP files are licensed under
   CC BY-NC-SA 4.0 (and the CMIP6 terms of use,
   `https://pcmdi.llnl.gov/CMIP6/TermsOfUse`). No data derived from them
-  is committed: only the six weighted values above, quoted with their
+  is committed: only the eight weighted values above, quoted with their
   citations, as values read from a paper would be. `fetch.sh` and the
   checksums let anyone recompute them.
 
 ## Files
 
-`tools/rfmip-shortwave/SHA256SUMS` lists the SHA-256 of the five netCDF
-files, equal to the checksums ESGF publishes for them, and of the six
+`tools/rfmip-shortwave/SHA256SUMS` lists the SHA-256 of the seven netCDF
+files, equal to the checksums ESGF publishes for them, and of the eight
 OPeNDAP text views the tool reads (the same variables, served by the
 same ESGF node), as downloaded on 2026-11-25 from
 `https://esgf-node.ornl.gov/thredds/` (the longwave view of the input
 file, `ozone`, `surface_temperature`, `surface_emissivity`,
 `methane_GM`, `nitrogen_GM`, `oxygen_GM` and `nitrous_oxide_GM`, on
 2026-11-27, fetched again that day with `nitrous_oxide_GM` added, the
-other variables equal; the other nine matched again that day).
+other variables equal; the other nine matched again that day; the two
+`rlu` files and their views on 2026-11-27, their checksums equal to
+ESGF's).
 `rfmip-longwave.tsv` has the SHA-256
 `c4d118bec7a3d1ca16a5eec5df6b4ee84f83d07e82e7703240a72c8d0ce9cbff`;
 rebuilding wrote `rfmip-profiles.tsv` byte for byte again. `fetch.sh`

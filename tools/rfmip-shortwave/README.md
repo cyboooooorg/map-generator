@@ -6,7 +6,8 @@ crate's tests read (`science::radiation::rfmip_tests`), and
 `crates/science/data/rfmip-longwave.tsv`, the field of all 100 sites
 the infrared column's tier-3 test reads (methane's and N₂O's steps,
 `science::radiation::column::rfmip_tests`), and prints the
-six weighted line-by-line and RRTMGP shortwave values the tests quote. Nothing
+six weighted line-by-line and RRTMGP shortwave values and the two
+present-day outgoing longwave values the tests quote. Nothing
 derived from the flux files (CC BY-NC-SA 4.0) is written. The generator
 never runs this tool: the table is committed, and the tool only
 regenerates it. Provenance, terms and method:
@@ -29,7 +30,7 @@ methane and N₂O.
 ## Download
 
 `fetch.sh` downloads into `tools/rfmip-shortwave/raw/` (git-ignored,
-about 11 MB) the RFMIP input file and the `rsd` and `rsu` files of
+about 17 MB) the RFMIP input file and the `rsd`, `rsu` and `rlu` files of
 LBLRTM-12-8 and RTE-RRTMGP-181204, and the OPeNDAP text views of the
 same variables (and a second view of the input file for the longwave
 field: ozone, the surface, methane, N₂, O₂ and N₂O), from the ESGF node of ORNL, then checks every file
@@ -46,8 +47,9 @@ tools/rfmip-shortwave/fetch.sh
 cargo run --release -p rfmip-shortwave
 ```
 
-It writes the two tables and prints the six values; compare them with
-the `Source:` constants of `crates/science/src/radiation/rfmip_tests.rs`.
+It writes the two tables and prints the eight values; compare them with
+the `Source:` constants of `crates/science/src/radiation/rfmip_tests.rs`
+and `column_rfmip_tests.rs`.
 
 Options: `--raw DIR` (default `tools/rfmip-shortwave/raw`), `--out FILE`
 (default `crates/science/data/rfmip-profiles.tsv`), `--longwave-out

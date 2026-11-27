@@ -220,7 +220,7 @@ const TOTAL_REGION_W_M2: f64 = -2.2;
 /// [`CERES_N2O_PPB`], [`EARTH_OZONE_COLUMN`]). N₂'s and O₂'s pairs (0.15
 /// and 0.096 W/m² in the same table) are in the column since study 36
 /// ([`earths_nitrogen_and_oxygen_pairs_take_what_line_by_line_codes_find`]).
-const MINOR_GASES_W_M2: f64 = 0.22 + 0.17;
+pub(super) const MINOR_GASES_W_M2: f64 = 0.22 + 0.17;
 
 /// Source: the methane of CERES's years, July 2005 to June 2015, ppb:
 /// its global mean of 2011, the middle of the span, 1803.1 ppb (NOAA;
@@ -970,14 +970,19 @@ fn earth_skin() -> Kelvin {
 }
 
 #[test]
-fn earths_clear_sky_column_is_ceres_like_for_like() {
-    // The climate's own clear column on Earth's measured air at 288 K and
-    // 280 ppm, with CERES's methane and N₂O and Earth's ozone column, against
-    // CERES's clear sky made like for like (study 32):
-    // the clear sky of the same air without its clouds, plus what the
-    // gases the column lacks take, plus the radiation 280 ppm of CO₂
-    // gives back over CERES's 389, plus at most a black ground; within
-    // CERES's uncertainty.
+fn earths_single_column_against_ceres() {
+    // Printed, not held (the user's decision of 2026-11-27, study 40): the
+    // climate's own clear column on Earth's measured air at 288 K and
+    // 280 ppm, with CERES's methane and N₂O and Earth's ozone column,
+    // against CERES's clear sky made like for like (study 32): the clear
+    // sky of the same air without its clouds, plus what the gases the
+    // column lacks take, plus the radiation 280 ppm of CO₂ gives back over
+    // CERES's 389, plus at most a black ground; within CERES's
+    // uncertainty. Since #704 the column is about 3.4 W/m² under it: its
+    // profile (the moist adiabat aloft, the cold trap's water, the
+    // stratosphere), a departure of `docs/science/radiative-transfer.md`
+    // left to track T11 (issue #757). Its radiation is held on RFMIP's
+    // field instead (`rfmip_tests::the_columns_clear_sky_is_lblrtms_on_rfmips_field`).
     let co2 = MYHRE_CO2_W_M2 * (CERES_CO2_PPM / PREINDUSTRIAL_PPM).ln();
     let base = CERES_CLEAR_SKY_W_M2 + TOTAL_REGION_W_M2 + MINOR_GASES_W_M2 + co2;
     let (calibration, scene) = CERES_UNCERTAINTY;
@@ -985,8 +990,11 @@ fn earths_clear_sky_column_is_ceres_like_for_like() {
     let low = base - uncertainty;
     let high = base + BLACK_GROUND_W_M2 + uncertainty;
     let olr = earth_clear(&ceres_air(), EARTH_OZONE_COLUMN, CERES_N2O_PPB);
-    println!("Earth's clear sky {olr:.2} W/m², like for like {low:.2} to {high:.2}");
-    assert!((low..=high).contains(&olr), "{olr} against {low} to {high}");
+    let gap = olr - olr.clamp(low, high);
+    println!(
+        "Earth's clear sky {olr:.2} W/m², like for like {low:.2} to {high:.2} (gap {gap:+.2})"
+    );
+    assert!(olr.is_finite(), "{olr}");
 }
 
 /// Definition: every pair of [`spectrum::PAIRS`], as the bits of

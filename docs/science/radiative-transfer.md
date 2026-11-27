@@ -1594,9 +1594,12 @@ under that range, not above it: it falls inside only the window widened
 by CERES's uncertainty, below.
 
 The test `earths_clear_sky_column_is_ceres_like_for_like` (tier 1)
-holds it there. Before #704 it built the window from the table: 268.1 −
-2.2 + 3.39 (`MINOR_GASES_W_M2`, Hogan & Matricardi's CH₄, N₂O and
-halocarbons; 3.64 with N₂ and O₂ before #703) + 1.76 (Myhre et al. 1998's
+held it there until the user's decision of 2026-11-27 (study 40,
+below); it is now `earths_single_column_against_ceres`, which prints
+the column and the window without holding it. Before #704 it built
+the window from the table: 268.1 − 2.2 + 3.39 (`MINOR_GASES_W_M2`,
+Hogan & Matricardi's CH₄, N₂O and halocarbons; 3.64 with N₂ and O₂
+before #703) + 1.76 (Myhre et al. 1998's
 $5.35 \ln(389/280)$ for the CO₂ of CERES's years, NOAA), plus ozone from
 4.2 to 10 and a black ground from 0 to 1.6, widened by CERES's
 uncertainty (0.75 % of 268.1 and 2.75 W/m², the two terms of the data
@@ -1629,8 +1632,36 @@ where the sources give at most 1.88. On RFMIP's 100 profiles with all
 its gases but the halocarbons, the column gives 263.90 W/m² against
 LBLRTM's 263.20 with them (0.39 W/m² for the halocarbons): there it is
 right. The single column, not the radiation code, is dark. The cloud
-refits of #705 do not touch a clear sky; what to do is the user's call
-(issue #705's comments).
+refits of #705 do not touch a clear sky. Study 40 (below) found the
+stratosphere's heat is not the cause, and the user decided on
+2026-11-27 to hold the radiation on RFMIP's field instead and to leave
+the single column's profile to track T11, "the climate column's upper
+atmosphere" (issue #757, with #750 and #752).
+
+**The radiation on RFMIP's field (tier 1).** The test
+`the_columns_clear_sky_is_lblrtms_on_rfmips_field` runs the column's
+radiation on RFMIP's 100 present-day profiles, each at its own
+temperatures, water and ozone, with RFMIP's CO₂, methane, N₂O and O₂
+(the column of `crates/science/data/RFMIP.md`), weighted by the sites'
+weights: 263.903 W/m². LBLRTM-12-8 gives 263.2287 W/m² on the same
+profiles (its ESGF `rlu` at the top, weighted by
+`tools/rfmip-shortwave`, source 121; Pincus et al. 2019, Table 1, give
+263.197)
+with the halocarbons, which the column lacks: with Hogan & Matricardi's
+0.39 W/m² for them added back, 263.619 W/m², 0.284 W/m² (0.11 %) under
+the column. The test holds the column within 0.4 % of LBLRTM's flux
+(1.053 W/m²), the accuracy Pincus et al. (2019, §3.2) state for
+RTE+RRTMGP against LBLRTM at the top of these profiles, a bound over
+both bands that their shortwave sets (0.165 of 47.315 W/m²). On the
+longwave alone RRTMGP comes closer (0.033 W/m² in their Table 1, and
+RTE-RRTMGP-181204's ESGF fluxes give 263.2301 W/m², 0.0014 from
+LBLRTM's), closer than the test's own inputs are known: the
+halocarbons' share estimated on another air, and a black ground where
+RFMIP's emits 0.98. Study 36's rule (no worse than RRTMGP on the
+longwave) would ask more of the column than of its inputs, so the test
+takes the paper's stated bound, not a calibration. It costs 25 s of
+the tier-1 run (100 columns in a debug build; the run went from 68 to
+87 s of its 120).
 
 Two direct checks agree:
 
@@ -1832,7 +1863,13 @@ The analytic alternatives (Guillot 2010, eq. 49; Robinson & Catling
 2012, eqs. 15 to 18) heat a grey stratosphere through
 `k = τ_sw / τ_IR`, a ratio fitted per world (Robinson & Catling 2014,
 Table 1: 90 for Earth's stratosphere, 180 for Titan's), not derived
-from the gases. No change was made: the options went back to the user.
+from the gases. No change was made. The user decided on 2026-11-27: no
+stratosphere change in study 36's second pull request; the CERES test
+only prints the single column's gap (`earths_single_column_against_ceres`,
+about −3.4 W/m²), the column's radiation is held on RFMIP's field
+(above), and the single column's upper atmosphere (its stratosphere,
+the lapse rate aloft, the cold trap's water, and Titan's radiative upper
+troposphere, #750) goes to track T11, issue #757.
 
 **Sources the audit could not read.** Kasting 1991 (Appendix B),
 Pierrehumbert 2010 (equation 2.33), the CRC polarizabilities and Sobolev
@@ -2187,6 +2224,17 @@ publisher's page (Tables 1 to 5).
      doi:10.1175/1520-0469(1964)021<0361:TEOTAW>2.0.CO;2 (the first
      radiative–convective equilibrium with ozone; not read: the
      publisher refused the download).
+121. Mlawer, E., Pernak, R. 2019, AER LBLRTM model output prepared for
+     CMIP6 RFMIP rad-irf, Earth System Grid Federation,
+     doi:10.22033/ESGF/CMIP6.2528, and Pincus, R. 2019,
+     RTE-RRTMGP-Consortium RTE+RRTMGP (2018-12-04) model output prepared
+     for CMIP6 RFMIP rad-irf, doi:10.22033/ESGF/CMIP6.10173: the
+     clear-sky upward longwave `rlu_Efx_LBLRTM-12-8_rad-irf_r1i1p1f1_gn.nc`
+     (v20190514) and `rlu_Efx_RTE-RRTMGP-181204_rad-irf_r1i1p1f1_gn.nc`
+     (v20191007), read on 2026-11-27 from ESGF's ORNL node, their
+     checksums ESGF's (`tools/rfmip-shortwave`,
+     `crates/science/data/RFMIP.md`); CC BY-NC-SA 4.0, only the weighted
+     means quoted.
 
 ## See also
 

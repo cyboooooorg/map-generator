@@ -522,7 +522,8 @@ pairs' 0.83 ratio, temperature at study 32's 2.0 W/m²/K:
 
 Methane's sunlight at these amounts moves the Bond albedo by less than
 0.0005 (study 36). The CERES test of PR #711
-(`earths_clear_sky_column_is_ceres_like_for_like`) runs on a fixed test
+(`earths_clear_sky_column_is_ceres_like_for_like`, since study 40 the
+printed `earths_single_column_against_ceres`) runs on a fixed test
 air, not on the engine's: it reads no law. When methane's lines land,
 its air can carry the measured methane of CERES's years as a test input
 and its `MINOR_GASES_W_M2` drop methane's 1.5 W/m² (study 36).

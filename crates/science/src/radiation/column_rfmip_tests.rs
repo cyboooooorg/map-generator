@@ -51,6 +51,30 @@ const N2O_LINE_BY_LINE_W_M2: f64 = 0.204;
 /// 2020's fluxes): study 36's tolerance, `|0.180 / 0.204 − 1|`, 11.8 %.
 const N2O_RRTMGP_W_M2: f64 = 0.180;
 
+/// Source: LBLRTM-12-8's clear-sky outgoing longwave at the top of
+/// RFMIP's present day, 263.2287 W/m²: the top level's `rlu` of
+/// experiment 0 weighted by the sites' `profile_weight` (Mlawer, E.,
+/// Pernak, R. 2019, AER LBLRTM model output prepared for CMIP6 RFMIP
+/// rad-irf, ESGF, doi:10.22033/ESGF/CMIP6.2528,
+/// `rlu_Efx_LBLRTM-12-8_rad-irf_r1i1p1f1_gn.nc`, v20190514; derived by
+/// `tools/rfmip-shortwave`, `crates/science/data/RFMIP.md`). Its air holds
+/// the halocarbons the column lacks. Pincus et al. 2019 (Table 1) give
+/// 263.197 W/m² on the same profiles.
+const LBLRTM_PRESENT_DAY_W_M2: f64 = 263.2287;
+
+/// Source: the accuracy RTE+RRTMGP's authors give for it against LBLRTM
+/// on RFMIP's 100 profiles, "accurate to within 0.4% at the top of the
+/// atmosphere" (Pincus, R., Mlawer, E. J., Delamere, J. S. 2019, *J.
+/// Adv. Model. Earth Syst.* 11, 3074, doi:10.1029/2019MS001621, §3.2 and
+/// Table 1), as a share of the flux; the bound covers both bands, the
+/// shortwave's 0.165 of 47.315 W/m² setting it. On the longwave alone
+/// RRTMGP comes closer (0.033 W/m² in their Table 1, 0.0014 in the ESGF
+/// files of RTE-RRTMGP-181204), closer than the test's own inputs are
+/// known: the halocarbons estimated on another air
+/// ([`super::tests::MINOR_GASES_W_M2`]) and a black ground where RFMIP's
+/// emits 0.98. The test takes the paper's stated accuracy.
+const RRTMGP_TOP_SHARE: f64 = 0.004;
+
 /// Source: the mean molar mass of the U.S. Standard Atmosphere 1976's
 /// dry air, 28.964 g/mol (NASA-TM-X-74335), kg/mol: the air whose
 /// weight carries a site's ozone.
@@ -200,6 +224,32 @@ fn outgoing(site: &Site, gases: Gases, water_scale: f64) -> f64 {
 fn mean(sites: &[Site], f: impl Fn(&Site) -> f64) -> f64 {
     let total: f64 = sites.iter().map(|s| s.weight).sum();
     sites.iter().map(|s| s.weight * f(s)).sum::<f64>() / total
+}
+
+#[test]
+fn the_columns_clear_sky_is_lblrtms_on_rfmips_field() {
+    // Study 40 (issue #704): the column's radiation on RFMIP's 100
+    // present-day profiles, each at its own temperatures, against
+    // LBLRTM's with the halocarbons the column lacks added back
+    // (Hogan & Matricardi 2020's 0.39 W/m²). The single column of the
+    // climate is darker than CERES (`earths_single_column_against_ceres`,
+    // printed): its profile, not its radiation (issue #757).
+    let (gases, sites) = field();
+    let present = *gases
+        .iter()
+        .find(|g| g.expt == PRESENT_DAY)
+        .expect("present day");
+    let olr = mean(&sites, |s| outgoing(s, present, 1.0));
+    let expected = LBLRTM_PRESENT_DAY_W_M2 + super::tests::MINOR_GASES_W_M2;
+    let tolerance = RRTMGP_TOP_SHARE * LBLRTM_PRESENT_DAY_W_M2;
+    println!(
+        "RFMIP's field: the column {olr:.3} W/m², LBLRTM {LBLRTM_PRESENT_DAY_W_M2} with its \
+         halocarbons, {expected:.3} without them, within {tolerance:.3}"
+    );
+    assert!(
+        (olr - expected).abs() <= tolerance,
+        "{olr} against {expected} within {tolerance}"
+    );
 }
 
 #[test]
