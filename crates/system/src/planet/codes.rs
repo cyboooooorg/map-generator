@@ -1,5 +1,13 @@
 //! The cause codes of the planet's composition, interior and heat:
 //! dotted lowercase, one constant per node, read with `Code::of`.
+//!
+//! The air's gases, `planet.air.*` and `planet.climate.air.*`, are
+//! weights: a gas's mass times the gravity over the planet's area,
+//! `m_i g / (4 π R²)`, in bar (`science::radiation::gases::Weights`).
+//! Their sum is the surface pressure (water vapour included); a gas's
+//! weight is not its partial pressure, its share by volume of that
+//! pressure, which each law reads from the whole air at the moment it
+//! reads it (issue #749).
 
 /// Core mass fraction of the planet without its water, drawn.
 pub(crate) const CORE_MASS_FRACTION: &str = "planet.core-mass-fraction";
@@ -217,32 +225,32 @@ pub(crate) const VOLATILE_DISC_TEMPERATURE: &str = "planet.volatiles.disc-temper
 /// Whether the planet's ice trapped N2 when it formed: a disc colder than
 /// `science::volatiles::NITROGEN_TRAPPING_TEMPERATURE`.
 pub(crate) const VOLATILE_ICE_TRAPS_N2: &str = "planet.volatiles.ice-traps-n2";
-/// Partial pressure of N2 the interior brought up: the inventory at
+/// Weight of N2 the interior brought up: the inventory at
 /// formation times its scatter (the ice's N2 only where it trapped some),
 /// plus the N2 of the NH3 the interior decomposed
 /// (`science::outgassing::decomposed`), times the regime's share, the
 /// share the water lets through and, under plates, what subduction
 /// leaves.
 pub(crate) const AIR_OUTGASSED_N2: &str = "planet.air.outgassed.n2";
-/// Partial pressure of CO2 the interior brought up (see
+/// Weight of CO2 the interior brought up (see
 /// [`AIR_OUTGASSED_N2`]).
 pub(crate) const AIR_OUTGASSED_CO2: &str = "planet.air.outgassed.co2";
-/// Partial pressure of water vapour before the escape: a runaway's whole
+/// Weight of water vapour before the escape: a runaway's whole
 /// water inventory, 0 bar otherwise (the oceans hold it).
 pub(crate) const AIR_OUTGASSED_H2O: &str = "planet.air.outgassed.h2o";
-/// Partial pressure of CH4 the interior brought up (see
+/// Weight of CH4 the interior brought up (see
 /// [`AIR_OUTGASSED_N2`]).
 pub(crate) const AIR_OUTGASSED_CH4: &str = "planet.air.outgassed.ch4";
-/// Partial pressure of NH3 the interior brought up: the NH3 left once
+/// Weight of NH3 the interior brought up: the NH3 left once
 /// the share the interior decomposes has come up as N2
 /// (`science::outgassing::decomposed`), then as [`AIR_OUTGASSED_N2`].
 pub(crate) const AIR_OUTGASSED_NH3: &str = "planet.air.outgassed.nh3";
-/// Partial pressure of SO2 the interior brought up: its sulphur as SO2,
+/// Weight of SO2 the interior brought up: its sulphur as SO2,
 /// the share that stays in the air, then as [`AIR_OUTGASSED_N2`].
 pub(crate) const AIR_OUTGASSED_SO2: &str = "planet.air.outgassed.so2";
-/// Partial pressure of O2 outgassed: 0 bar, imposed (life makes it).
+/// Weight of O2 outgassed: 0 bar, imposed (life makes it).
 pub(crate) const AIR_OUTGASSED_O2: &str = "planet.air.outgassed.o2";
-/// Partial pressure of Ar-40 outgassed: the argon the mantle's potassium
+/// Weight of Ar-40 outgassed: the argon the mantle's potassium
 /// made over the age (`science::outgassing::radiogenic_argon`, from the
 /// mantle's mass and the radiogenic abundance), times the share it
 /// degasses under the regime (`argon_degassed_share`, less under a
@@ -256,27 +264,27 @@ pub(crate) const AIR_SHORELINE_KEPT: &str = "planet.air.shoreline-kept";
 /// Share of the SO2 the air keeps against its wash-out: wet or oxidising,
 /// a day and a half's worth; dry, in proportion to its column.
 pub(crate) const AIR_SO2_KEPT: &str = "planet.air.so2-kept";
-/// Partial pressure of N2 the cosmic shoreline kept: the outgassed one
+/// Weight of N2 the cosmic shoreline kept: the outgassed one
 /// times the shoreline's share.
 pub(crate) const AIR_KEPT_N2: &str = "planet.air.kept.n2";
-/// Partial pressure of CO2 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
+/// Weight of CO2 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_CO2: &str = "planet.air.kept.co2";
-/// Partial pressure of water vapour the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
+/// Weight of water vapour the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_H2O: &str = "planet.air.kept.h2o";
-/// Partial pressure of CH4 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
+/// Weight of CH4 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_CH4: &str = "planet.air.kept.ch4";
-/// Partial pressure of NH3 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
+/// Weight of NH3 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_NH3: &str = "planet.air.kept.nh3";
-/// Partial pressure of SO2 in the air: the outgassed one times the
+/// Weight of SO2 in the air: the outgassed one times the
 /// shoreline's share and the share the wash-out leaves; the air's, no
 /// later step changing it.
 pub(crate) const AIR_KEPT_SO2: &str = "planet.air.kept.so2";
-/// Partial pressure of O2 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
+/// Weight of O2 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_O2: &str = "planet.air.kept.o2";
-/// Partial pressure of Ar the cosmic shoreline kept (see [`AIR_KEPT_N2`]);
+/// Weight of Ar the cosmic shoreline kept (see [`AIR_KEPT_N2`]);
 /// the air's, no later step changing it.
 pub(crate) const AIR_KEPT_AR: &str = "planet.air.kept.ar";
-/// Partial pressure of CH4 the stars' ultraviolet leaves of the kept one
+/// Weight of CH4 the stars' ultraviolet leaves of the kept one
 /// (`science::photochemistry::methane_left`), from the surface gravity,
 /// each star's flux and history (its mass, the metallicity and the age).
 pub(crate) const AIR_PHOTOLYSED_CH4: &str = "planet.air.photolysed.ch4";
@@ -286,35 +294,34 @@ pub(crate) const AIR_PHOTOLYSED_CH4: &str = "planet.air.photolysed.ch4";
 /// does not hold a reducing air's CO2 back. A reducing air outgasses no
 /// CO2 ([`AIR_OUTGASSED_CO2`] is then 0 and derives from it).
 pub(crate) const AIR_REDUCING: &str = "planet.air.reducing";
-/// Partial pressure of CO2 the cold trap leaves as gas: the kept one,
+/// Weight of CO2 the cold trap leaves as gas: the kept one,
 /// capped by the CO2 frost pressure at the equilibrium temperature below
 /// CO2's triple point (`science::volatiles::co2_frost_pressure`).
 pub(crate) const AIR_TRAPPED_CO2: &str = "planet.air.trapped.co2";
-/// Partial pressure of NH3 the cold trap leaves as gas (see
+/// Weight of NH3 the cold trap leaves as gas (see
 /// [`AIR_TRAPPED_CO2`], `science::volatiles::ammonia_frost_pressure`).
 pub(crate) const AIR_TRAPPED_NH3: &str = "planet.air.trapped.nh3";
 /// CO2 the cold trap froze out, bar: the photolysed CO2 (the photolysis
 /// leaves it as kept) less the trapped one. Legacy books all of it as a
 /// frost, which overstates it on small icy bodies (#590).
 pub(crate) const AIR_FROZEN_CO2: &str = "planet.air.frozen-co2";
-/// Partial pressure of N2 once the photochemistry has run: the kept N2
+/// Weight of N2 once the photochemistry has run: the kept N2
 /// plus the N2 the trapped NH3 leaves once photolysed
 /// (`science::photochemistry::nitrogen_from_ammonia`).
 pub(crate) const AIR_PHOTOCHEMISTRY_N2: &str = "planet.air.photochemistry.n2";
-/// Partial pressure of NH3 once the photochemistry has run: 0 bar, all of
+/// Weight of NH3 once the photochemistry has run: 0 bar, all of
 /// the trapped NH3 photolysed to N2.
 pub(crate) const AIR_PHOTOCHEMISTRY_NH3: &str = "planet.air.photochemistry.nh3";
-/// Partial pressure of CH4 once the photochemistry has run: the photolysed
+/// Weight of CH4 once the photochemistry has run: the photolysed
 /// CH4 where it survives the OH of water vapour, under the equilibrium
 /// temperature of `science::photochemistry::METHANE_SURVIVES`; 0 bar
 /// above it.
 pub(crate) const AIR_PHOTOCHEMISTRY_CH4: &str = "planet.air.photochemistry.ch4";
-/// Surface pressure: the sum of the partial pressures.
+/// Surface pressure: the sum of the weights.
 pub(crate) const AIR_PRESSURE: &str = "planet.air.pressure";
 
-/// The gases of the air, each with the code of its outgassed partial
-/// pressure and of its partial pressure the shoreline kept, in the
-/// contract's order.
+/// The gases of the air, each with the code of its outgassed weight and
+/// of its weight the shoreline kept, in the contract's order.
 pub(crate) const AIR_GASES: [(timeline::Gas, &str, &str); 8] = [
     (timeline::Gas::N2, AIR_OUTGASSED_N2, AIR_KEPT_N2),
     (timeline::Gas::Co2, AIR_OUTGASSED_CO2, AIR_KEPT_CO2),
@@ -385,25 +392,29 @@ pub(crate) const CLIMATE_BOILS: &str = "planet.climate.boils";
 /// Whether a runaway's steam hides its surface: a runaway whose steam is
 /// supercritical at its base (`science::steam::hides_surface`).
 pub(crate) const CLIMATE_HIDES_SURFACE: &str = "planet.climate.hides-surface";
-/// Partial pressure of N2 in the air the climate leaves.
+/// Weight of N2 in the air the climate leaves.
 pub(crate) const CLIMATE_AIR_N2: &str = "planet.climate.air.n2";
-/// Partial pressure of CO2 in the air the climate leaves.
+/// Weight of CO2 in the air the climate leaves.
 pub(crate) const CLIMATE_AIR_CO2: &str = "planet.climate.air.co2";
-/// Partial pressure of water vapour in the air the climate leaves.
+/// Weight of water vapour in the air the climate leaves: over a wet
+/// surface, the saturation pressure at its temperature, which the column
+/// takes as the vapour's weight (`science::radiation::gases::Weights`);
+/// a runaway's, the steam the chain kept.
 pub(crate) const CLIMATE_AIR_H2O: &str = "planet.climate.air.h2o";
-/// Partial pressure of CH4 in the air the climate leaves.
+/// Weight of CH4 in the air the climate leaves.
 pub(crate) const CLIMATE_AIR_CH4: &str = "planet.climate.air.ch4";
-/// Partial pressure of NH3 in the air the climate leaves.
+/// Weight of NH3 in the air the climate leaves.
 pub(crate) const CLIMATE_AIR_NH3: &str = "planet.climate.air.nh3";
-/// Partial pressure of SO2 in the air the climate leaves.
+/// Weight of SO2 in the air the climate leaves.
 pub(crate) const CLIMATE_AIR_SO2: &str = "planet.climate.air.so2";
-/// Partial pressure of O2 in the air the climate leaves.
+/// Weight of O2 in the air the climate leaves.
 pub(crate) const CLIMATE_AIR_O2: &str = "planet.climate.air.o2";
-/// Partial pressure of Ar in the air the climate leaves: at most its
-/// frost's or liquid's pressure at the surface temperature.
+/// Weight of Ar in the air the climate leaves: at most the weight whose
+/// partial pressure is its frost's or liquid's pressure at the surface
+/// temperature.
 pub(crate) const CLIMATE_AIR_AR: &str = "planet.climate.air.ar";
 /// Surface pressure of the air the climate leaves: the sum of its
-/// partial pressures.
+/// weights.
 pub(crate) const CLIMATE_AIR_PRESSURE: &str = "planet.climate.air.pressure";
 /// N2 on the ground at the surface temperature (liquid or frost);
 /// recorded when positive.
@@ -421,7 +432,7 @@ pub(crate) const CLIMATE_CONDENSATE_AR: &str = "planet.climate.condensate.ar";
 pub(crate) const SURFACE_LIQUID: &str = "planet.surface.liquid";
 
 /// The gases of the air the climate leaves, each with the code of its
-/// partial pressure, in the contract's order.
+/// weight, in the contract's order.
 pub(crate) const CLIMATE_AIR_GASES: [(timeline::Gas, &str); 8] = [
     (timeline::Gas::N2, CLIMATE_AIR_N2),
     (timeline::Gas::Co2, CLIMATE_AIR_CO2),

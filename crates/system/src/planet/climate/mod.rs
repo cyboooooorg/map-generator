@@ -59,7 +59,7 @@ mod wet_tests;
 
 use super::bare::Bare;
 use science::balance::{SOLVER, Solver};
-use science::radiation::gases::PartialPressures;
+use science::radiation::gases::Weights;
 use science::radiation::ozone::ozone_column;
 use science::relief::volcanoes::heat_flux;
 use science::units::{
@@ -202,10 +202,12 @@ pub(crate) struct Light {
     /// timeline's reference albedo: the warm start of the fixed point.
     pub equilibrium: Kelvin,
     /// The ozone column the air's O₂ holds under this star's light
-    /// ([`ozone_column`] of the bare air's O₂ and the star's
-    /// temperature), which its light crosses in the shortwave budget. The
-    /// climate never changes the air's O₂ (it does not condense), so the
-    /// column holds for every air the solve tries.
+    /// ([`ozone_column`] of the partial pressure of the bare air's O₂ and
+    /// the star's temperature), which its light crosses in the shortwave
+    /// budget. The climate never changes the air's O₂ weight (it does not
+    /// condense), so the column is held for every air the solve tries,
+    /// though the O₂'s partial pressure moves a little as other gases
+    /// condense out (issue #749).
     pub ozone: DobsonUnit,
 }
 
@@ -224,8 +226,13 @@ pub(crate) struct Rotation {
 pub(crate) struct ClimateInputs {
     /// The light of each star.
     pub sources: Vec<Light>,
-    /// The bare air: the inventory of what condenses.
-    pub air: PartialPressures,
+    /// The bare air, the inventory of what condenses, as the chain keeps
+    /// it: the weights of its gases (bar, [`Weights`]). The climate's air
+    /// stays in weights throughout, a gas that condenses, collapses or is
+    /// set by the thermostat leaving the others' weights as they are; a
+    /// law that reads a partial pressure reads
+    /// [`Weights::partial_pressures`] of the air at hand (issue #749).
+    pub air: Weights,
     /// The water kept: liquid and ice, or a runaway's steam.
     pub water: Kilogram,
     /// Whether the water ran away by its stars' light.
@@ -238,9 +245,9 @@ pub(crate) struct ClimateInputs {
     pub gravity: MetrePerSecondSquared,
     /// The radius.
     pub radius: Metre,
-    /// The CO₂ outgassed: the carbon inventory.
+    /// The CO₂ outgassed: the carbon inventory, a weight.
     pub carbon: Bar,
-    /// The CO₂ the cold trap froze onto the ground.
+    /// The CO₂ the cold trap froze onto the ground, a weight.
     pub frozen_co2: Bar,
     /// The SO₂ frost volcanoes lay on the ground.
     pub so2_frost: Bar,
@@ -286,7 +293,7 @@ impl ClimateInputs {
         let radius = Metre::from(*bulk.radius.value());
         let heat = &bare.heat;
         let total = Watt(heat.radiogenic.value().0 + heat.tidal.value().0 + heat.secular.value().0);
-        let air = partial_pressures(&surface.atmosphere);
+        let air = weights(&surface.atmosphere);
         Some(ClimateInputs {
             sources: bare
                 .trial
@@ -297,7 +304,10 @@ impl ClimateInputs {
                     effective_temperature: *s.effective_temperature.value(),
                     metallicity: *bare.trial.metallicity.value(),
                     equilibrium: *s.equilibrium.value(),
-                    ozone: ozone_column(Bar(air.o2), *s.effective_temperature.value()),
+                    ozone: ozone_column(
+                        Bar(air.partial_pressures().o2),
+                        *s.effective_temperature.value(),
+                    ),
                 })
                 .collect(),
             air,
@@ -317,18 +327,19 @@ impl ClimateInputs {
     }
 }
 
-/// The partial pressures of `atmosphere`, bar; a gas it lacks is none.
-fn partial_pressures(atmosphere: &Atmosphere) -> PartialPressures {
-    let p = |gas: Gas| atmosphere.partial.get(&gas).map_or(0.0, |p| p.value().0);
-    PartialPressures {
-        n2: p(Gas::N2),
-        co2: p(Gas::Co2),
-        h2o: p(Gas::H2o),
-        ch4: p(Gas::Ch4),
-        nh3: p(Gas::Nh3),
-        so2: p(Gas::So2),
-        o2: p(Gas::O2),
-        ar: p(Gas::Ar),
+/// The weights of the gases of `atmosphere`, bar, as the chain keeps
+/// them; a gas it lacks is none.
+fn weights(atmosphere: &Atmosphere) -> Weights {
+    let w = |gas: Gas| atmosphere.partial.get(&gas).map_or(0.0, |p| p.value().0);
+    Weights {
+        n2: w(Gas::N2),
+        co2: w(Gas::Co2),
+        h2o: w(Gas::H2o),
+        ch4: w(Gas::Ch4),
+        nh3: w(Gas::Nh3),
+        so2: w(Gas::So2),
+        o2: w(Gas::O2),
+        ar: w(Gas::Ar),
     }
 }
 

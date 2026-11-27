@@ -283,8 +283,8 @@ ratios carry over.
 
 - **The `Modern` methane law is in `science`, not yet wired.**
   `science::life_gases::modern_methane(stars, gravity)` gives the
-  methane of a `Modern` air, bar by weight (the column reads it as a
-  mole share, issue #749): $p = \Phi_A \tau g$ with
+  methane of a `Modern` air, bar by weight (the climate reads its share
+  of the moles from the whole air, issue #749): $p = \Phi_A \tau g$ with
   Prather et al. 2012's 202 Tg/yr spread over Earth's 5.112e14 m² and
   their 9.5 years times the host factor of each star (calibration 1,
   `methane_host_factor`), the stars' loss rates added by their share of
@@ -316,14 +316,15 @@ ratios carry over.
   (`EARTH_MEASURED_AIR`, `EARTH_DRY_AIR`) stay without methane; the
   CERES test carried CERES's 1803 ppb and dropped methane's 1.5 W/m²
   from its `MINOR_GASES_W_M2`, until study 40 removed it.
-- **Weights read as moles (a departure).** The chain's partial pressures
-  are weights; the column reads $p_i/p$ as a share of the moles. The
-  law's 3.678e-7 bar of methane is 672.8 ppb by moles in Earth's air,
-  but the column would read it as 373 ppb ($16.04/28.96$ of it), so
-  methane's lines would take about half of what they should once 2d-4
-  wires it. The same holds for argon (radiative-transfer.md, "Gases that
-  only broaden") and for Titan's chain methane. Not fixed here: it
-  changes every air the column reads (issue #749).
+- **Weights and moles (issue #749, fixed).** The chain's gases are
+  weights; the column reads partial pressures, shares of the moles. The
+  climate keeps its air in weights and converts the whole air at each
+  law it calls (`Weights::partial_pressures`), so the law's 3.678e-7 bar
+  of methane by weight would reach the column as 672.8 ppb of the moles
+  in Earth's air once 2d-4 wires the law
+  (`weights_read_as_study_37_reads_its_methane`), where the column would
+  have read it as 373 ppb ($16.04/28.96$ of it) before. Argon and
+  Titan's chain methane are read the same way.
 
 ### Where the code's docs disagree
 

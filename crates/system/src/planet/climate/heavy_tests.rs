@@ -56,7 +56,7 @@ use science::habitable::{SURFACE_WATER_SHARE, maximum_greenhouse_flux, runaway_f
 use science::outgassing::column_pressure;
 use science::radiation::clouds::cloud_cover;
 use science::radiation::column::{ColumnCache, Profile, outgoing_longwave};
-use science::radiation::gases::PartialPressures;
+use science::radiation::gases::{CO2_MOLAR_MASS, PartialPressures, Weights};
 use science::surface::{
     ICE_COVERED_TEMPERATURE, Liquid, N2_ICE_EMISSIVITY, PHASE_BAND, methane_freezes, surface_vapour,
 };
@@ -328,8 +328,8 @@ const HALF: f64 = 0.5;
 const ACID_ORBITS: (f64, f64, usize) = (0.8, 0.02, 60);
 
 /// Definition: the dry acid air: 3 bar of nitrogen, 0.05 bar of CO₂ and
-/// 0.02 bar of SO₂ (legacy).
-const ACID_AIR: PartialPressures = PartialPressures {
+/// 0.02 bar of SO₂ (legacy), weights as legacy's chain gave its airs.
+const ACID_AIR: Weights = Weights {
     n2: 3.0,
     co2: 0.05,
     h2o: 0.0,
@@ -524,7 +524,7 @@ fn one_greenhouse_search_on_a_condensing_air() {
     // the climate's gap is reported, and the edge held to #593's
     // acceptance condition.
     let like = ClimateInputs {
-        air: PartialPressures {
+        air: Weights {
             ch4: titan().air.ch4,
             ..earth().air
         },
@@ -657,7 +657,7 @@ fn collapse_tolerance_is_converged() {
                 ..Numerics::DEFAULT
             },
         );
-        let air = PartialPressures {
+        let air = Weights {
             co2: inputs.carbon.0,
             ..inputs.air
         };
@@ -748,11 +748,7 @@ fn greenhouse_steps_is_converged() {
 
 /// Titan's body under `air`, its light scaled by each of `count` factors
 /// from `low` to `high`: the flux and the settled climate.
-fn sweep_of(
-    inputs: &ClimateInputs,
-    air: PartialPressures,
-    (low, high): (f64, f64),
-) -> Vec<(f64, Settle)> {
+fn sweep_of(inputs: &ClimateInputs, air: Weights, (low, high): (f64, f64)) -> Vec<(f64, Settle)> {
     let base = ClimateInputs {
         air,
         ..inputs.clone()
@@ -817,7 +813,7 @@ fn settles_across(
 #[ignore = "heavy: 200 climates of a methane world across its sea's freezing point"]
 fn the_fixed_point_converges_across_the_methane_freezing_point() {
     let reference = titan();
-    let air = PartialPressures {
+    let air = Weights {
         n2: THIN_N2.0,
         ..reference.air
     };
@@ -868,7 +864,7 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
     // solves, which tests the same physics without the grey premise (ε T⁴
     // is still printed).
     let reference = titan();
-    let air = PartialPressures {
+    let air = Weights {
         n2: NITROGEN_WORLD_N2.0,
         ch4: 0.0,
         ..reference.air
@@ -885,10 +881,11 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
         let at = lit(&base, flux);
         let mut body = ClimateBody::new(&at, Numerics::DEFAULT);
         let light = body.starlight(c.bond_albedo);
-        let took = absorbed(light, &c.air, at.heat_flux).0;
+        let gases = c.air.partial_pressures();
+        let took = absorbed(light, &gases, at.heat_flux).0;
         let sent = c.emissivity.get()
             * outgoing_longwave(
-                &c.air,
+                &gases,
                 at.longwave_ozone(),
                 c.temperature,
                 skin(light),
@@ -975,7 +972,7 @@ fn a_nitrogen_world_keeps_its_frost_and_its_liquid_over_a_range_of_light() {
     // (history only, not asserted).
     let reference = titan();
     let base = ClimateInputs {
-        air: PartialPressures {
+        air: Weights {
             n2: NITROGEN_WORLD_N2.0,
             ch4: 0.0,
             ..reference.air
@@ -1132,7 +1129,13 @@ fn census_182_d() {
 /// The air of `c` in bar of CO₂ the ground keeps at its temperature
 /// (legacy `co2_saturation_bar`).
 fn kept_co2(c: &Settle) -> f64 {
-    Bar::from(co2_saturation_pressure(c.temperature)).0
+    let others = Weights { co2: 0.0, ..c.air };
+    Weights::weight_at(
+        &others,
+        CO2_MOLAR_MASS,
+        Bar::from(co2_saturation_pressure(c.temperature)),
+    )
+    .0
 }
 
 #[test]
@@ -1167,7 +1170,7 @@ fn the_thermostat_never_exceeds_the_outgassed_co2() {
     // all of it in the air, and the water freezes.
     let d = earth_at(SCARCE_ORBIT);
     let scarce = ClimateInputs {
-        air: PartialPressures {
+        air: Weights {
             co2: d.air.co2 * SCARCE_SHARE,
             ..d.air
         },
@@ -1194,7 +1197,7 @@ fn an_earth_with_two_or_three_bar_of_nitrogen_stays_temperate() {
             };
             let inputs = inputs_at(&body, 1.0, SUN);
             let thick = ClimateInputs {
-                air: PartialPressures { n2, ..inputs.air },
+                air: Weights { n2, ..inputs.air },
                 ..inputs
             };
             let c = settled(&thick, Numerics::DEFAULT);
@@ -1222,10 +1225,14 @@ fn doubling_the_nitrogen_warms_a_late_archean_earth_by_a_few_kelvin() {
     // own climate: the clear sky with that share of cloudy sky,
     // `(1 − f₀) OLR_clear + f₀ OLR_cloudy`.
     let faint = lit(&earth(), FAINT_SUN * earth().sources[0].flux.0);
-    let air = |n2: f64| PartialPressures {
-        n2,
-        co2: ARCHEAN_CO2,
-        ..PartialPressures::default()
+    // Their partial pressures, as weights (issue #749).
+    let air = |n2: f64| {
+        PartialPressures {
+            n2,
+            co2: ARCHEAN_CO2,
+            ..PartialPressures::default()
+        }
+        .weights()
     };
     let mut body = ClimateBody::new(&faint, Numerics::DEFAULT);
     let light = body.starlight(Fraction::new(TEST_ALBEDO).unwrap());
@@ -1238,13 +1245,14 @@ fn doubling_the_nitrogen_warms_a_late_archean_earth_by_a_few_kelvin() {
     let mut cache = ColumnCache::default();
     let mut temperature = |n2: f64| {
         let gases = air(n2);
-        let take = absorbed(light, &gases, faint.heat_flux).0;
+        let take = absorbed(light, &gases.partial_pressures(), faint.heat_flux).0;
         let skin = skin(light);
         let mut excess = |t: f64| {
-            let wet = PartialPressures {
+            let wet = Weights {
                 h2o: surface_vapour(Kelvin(t), water).0,
                 ..gases
-            };
+            }
+            .partial_pressures();
             let mut at = |profile| {
                 outgoing_longwave(
                     &wet,
@@ -1369,7 +1377,7 @@ fn co2_builds_up_past_the_outgassed_snapshot() {
         .map(|au| {
             let near = earth_at(au);
             let snapshot = ClimateInputs {
-                air: PartialPressures {
+                air: Weights {
                     co2: SNAPSHOT_CO2.0,
                     ..near.air
                 },
@@ -1973,7 +1981,7 @@ const CYCLING_STEPS: usize = 40;
 #[ignore = "heavy: a methane Earth just past its outer edge, a cycling climate"]
 fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
     let like = ClimateInputs {
-        air: PartialPressures {
+        air: Weights {
             ch4: titan().air.ch4,
             ..earth().air
         },
@@ -2030,7 +2038,7 @@ const COOL_FROZEN: [(Kelvin, f64, Bar); 3] = [
 fn methane_earth_at(au: f64, teff: Kelvin) -> ClimateInputs {
     let inputs = inputs_at(&EARTH, au, teff);
     ClimateInputs {
-        air: PartialPressures {
+        air: Weights {
             ch4: titan().air.ch4,
             ..inputs.air
         },
@@ -2047,7 +2055,7 @@ fn collapse_step_is_converged() {
     // or cycles: a collapse stopped at `COLLAPSE_ITERATIONS` would leave
     // it neither, and its climate would depend on the step.
     let like = ClimateInputs {
-        air: PartialPressures {
+        air: Weights {
             ch4: titan().air.ch4,
             ..earth().air
         },

@@ -1432,6 +1432,25 @@ by hand on a Titan: over 1.422 bar of N₂ by weight (`A` = 0.05076,
 instead (keeping `cap / p_CH4` of it) would leave it 40 % over its cap
 in the air its condensation leaves, the N₂'s share having grown.
 
+*How the climate uses them.* The climate's air is weights end to end:
+its inputs are the chain's weights, it records weights
+(`planet.climate.air.*`, `timeline::Atmosphere::partial`), and each law
+that reads a partial pressure converts the whole air it is given at the
+moment it reads it: the longwave column (`outgoing_longwave`,
+`surface_temperature`), what the surface absorbs (`absorbed`), the
+shortwave budget, the moist plateau, the sulphuric deck and the ozone
+column. The partial pressures are never stored and get no node of their
+own. A gas that condenses keeps its exact weight through the closed form:
+`condense` caps the N₂, the CH₄ and the Ar each over the others held, in
+rounds until no weight moves by more than `CONDENSE_SETTLED` (1e-12 of
+it; two gases that condense together, as a Triton's N₂ and Ar, each
+raise the other's share as it leaves); the frost takes back from the
+ground only the CO₂ or SO₂ weight that its sublimation pressure lets
+into the air (`frost`); a CO₂ collapse keeps the weight whose partial
+pressure is CO₂'s saturation (`collapsed_climate`). The sea's
+dissolved nitrogen reads the N₂'s partial pressure, and whether an air
+is a Titan's reads its total, a sum of weights.
+
 **Calibration of `NITROGEN_RECYCLED_UNDER_PLATES`** (0.7965; studies 23,
 part 5, and 28). Study 23 fitted it first: legacy's 0.8 gave the
 rewrite's Earth 0.804 bar of N₂, 7.8 % over the target; the chain's N₂ on
@@ -2145,8 +2164,10 @@ the draw that wires the chain bumps it.
   a minor volatile over N₂ ice; Raoult's law would keep a few 1e-5 of it
   in the air. Under 50 K its curve rests on two data sets, and its two
   fits part by a factor 1.6 at 38 K; under 26 K it carries on the slope.
-- The column treats the partials, weights, as shares of the moles (existing
-  convention): argon's 1.29 % by weight is 0.93 % by volume.
+- The air's argon is a weight, 1.29 % of Earth's by weight; the column
+  reads it at its share of the moles, 0.93 %, through
+  `Weights::partial_pressures` (issue #749; it read the weight as a share
+  of the moles before).
 - The column counts argon as air in the lines' broadening (0.78 of N₂ for CO₂,
   about 0.37 of air for water, measured): 0.2 % and 0.6 % too much foreign
   broadening on Earth ([radiative transfer](radiative-transfer.md)).
@@ -3984,8 +4005,10 @@ solar days is zonal for any non-locked rotator, so the flag is
   depending on season)", 95.1 % CO₂, 2.59 % N₂, 0.16 % O₂ (NASA Mars
   fact sheet, read, May 2025), imposed in the test (CO₂ 6.05 mbar, N₂
   0.165 mbar, O₂ 0.010 mbar, derived), with its argon, 1.93 % by volume
-  (Mahaffy et al. 2013), 0.123 mbar as the column takes its shares (the
-  *Argon (study 29)* section's 0.11 mbar is the same argon by weight).
+  (Mahaffy et al. 2013), 0.123 mbar: partial pressures, which the test
+  turns into the weights the climate reads (`PartialPressures::weights`,
+  issue #749; the *Argon (study 29)* section's 0.11 mbar is that argon's
+  weight).
   Legacy's `MARS_CO2_FACTOR` is not ported. The fact sheet gives "Average
   temperature: ~214 K"; no source for the legacy 210 K was found (it is
   Mars's equilibrium temperature), so the bound is 214 ± 5 K, `Source:`

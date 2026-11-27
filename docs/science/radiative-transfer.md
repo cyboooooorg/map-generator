@@ -1486,9 +1486,11 @@ the Bond albedo are there too (change 2b-2).
   water (derived from argon's 0.93 % of the moles), an effect too small to
   estimate from a source. An N₂-equivalent broadening pressure, `p − (1 −
   β) p_Ar` with `β` the ratio, would need the table read at a pressure
-  other than the level's, which no test asks for yet. The column also
-  treats the partials, weights, as shares of the moles (1.29 % by weight
-  is 0.93 % by volume for Earth's argon).
+  other than the level's, which no test asks for yet. The column reads
+  partial pressures, shares of the moles; the system keeps its airs in
+  weights and converts them at each call (`Weights::partial_pressures`,
+  issue #749): Earth's argon is 1.29 % of the air by weight and 0.93 % of
+  its moles.
 
 **Changes from the legacy model.** The port changes these on purpose, after
 a literature check of every number and citation (the full audit is in the

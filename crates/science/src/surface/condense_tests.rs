@@ -14,16 +14,16 @@ use crate::volatiles::{
 /// Definition: the tolerance of an identity.
 const TIGHT: f64 = 1e-9;
 
-/// Definition: the tolerance of a sum of partial pressures that must give
-/// back the inventory, 1e-12 bar.
+/// Definition: the tolerance of a sum of weights that must give back the
+/// inventory, 1e-12 bar.
 const SUM_TOLERANCE: f64 = 1e-12;
 
 /// Definition: an inventory of methane that floods a surface, 1 bar.
 const FLOODING_CH4: Bar = Bar(1.0);
 
 /// Definition: the legacy test's methane-ice inventory, N2 1e-3 bar and
-/// CH4 1 bar, at 50 K, far under any sea's freezing point.
-const ICE_INVENTORY: PartialPressures = PartialPressures {
+/// CH4 1 bar (weights), at 50 K, far under any sea's freezing point.
+const ICE_INVENTORY: Weights = Weights {
     n2: 1e-3,
     co2: 0.0,
     h2o: 0.0,
@@ -59,14 +59,17 @@ const TRITON_PRESSURE: Bar = Bar(1.4e-5);
 /// Definition: a methane trace in a Triton-like air, 1e-9 bar.
 const CH4_TRACE: Bar = Bar(1e-9);
 
-fn titan_inventory(ch4: f64) -> PartialPressures {
-    PartialPressures {
-        ch4,
-        ..TITAN_SURFACE_AIR
-    }
+/// Titan's measured air ([`TITAN_SURFACE_AIR`], by volume) as weights.
+fn titan_air() -> Weights {
+    TITAN_SURFACE_AIR.weights()
 }
 
-fn sum(a: &PartialPressures, b: &PartialPressures) -> [f64; 8] {
+/// Titan's measured air with `ch4` bar of methane by weight.
+fn titan_inventory(ch4: f64) -> Weights {
+    Weights { ch4, ..titan_air() }
+}
+
+fn sum(a: &Weights, b: &Weights) -> [f64; 8] {
     [
         a.n2 + b.n2,
         a.co2 + b.co2,
@@ -79,7 +82,7 @@ fn sum(a: &PartialPressures, b: &PartialPressures) -> [f64; 8] {
     ]
 }
 
-fn parts(p: &PartialPressures) -> [f64; 8] {
+fn parts(p: &Weights) -> [f64; 8] {
     [p.n2, p.co2, p.h2o, p.ch4, p.nh3, p.so2, p.o2, p.ar]
 }
 
@@ -96,21 +99,18 @@ fn titans_air_holds_its_sea_vapour() {
     let Condensed { air, condensate } = condense(&flooded, t);
     println!("Titan, 1 bar of CH4 at 93.65 K: air {air:?}, condensate {condensate:?}");
     let cap = methane_sea_vapour(t).0;
-    assert!(
-        (air.ch4 - cap).abs() <= TIGHT * cap,
-        "{} against {cap}",
-        air.ch4
-    );
+    let held = air.partial_pressures().ch4;
+    assert!((held - cap).abs() <= TIGHT * cap, "{held} against {cap}");
     assert!(
         (condensate.ch4 - (FLOODING_CH4.0 - air.ch4)).abs() <= SUM_TOLERANCE,
         "{condensate:?}"
     );
     assert_eq!(condensate.n2, 0.0);
-    assert_eq!(air.n2, TITAN_SURFACE_AIR.n2);
+    assert_eq!(air.n2, titan_air().n2);
 
-    let measured = condense(&TITAN_SURFACE_AIR, t);
-    assert_eq!(measured.air, TITAN_SURFACE_AIR);
-    assert_eq!(measured.condensate, PartialPressures::default());
+    let measured = condense(&titan_air(), t);
+    assert_eq!(measured.air, titan_air());
+    assert_eq!(measured.condensate, Weights::default());
 }
 
 /// Methane over its own ice keeps all of its saturation pressure
@@ -119,23 +119,25 @@ fn titans_air_holds_its_sea_vapour() {
 #[test]
 fn methane_ice_holds_its_full_saturation() {
     let Condensed { air, condensate } = condense(&ICE_INVENTORY, ICE_K);
-    let freezes = sea_freezes(Bar(air.n2), &condensate);
+    let freezes = sea_freezes(Bar(air.partial_pressures().n2), &condensate);
     assert!(ICE_K.0 < freezes.0 - PHASE_BAND.0, "{freezes:?}");
     let full = methane_saturation_pressure(ICE_K).0 / crate::constants::PASCALS_PER_BAR;
-    assert!((air.ch4 / full - 1.0).abs() < TIGHT, "{air:?} {full:e}");
+    let held = air.partial_pressures().ch4;
+    assert!((held / full - 1.0).abs() < TIGHT, "{air:?} {full:e}");
 
     let Condensed { air, .. } = condense(&ICE_INVENTORY, SEA_K);
     let sea = methane_sea_vapour(SEA_K).0;
-    assert!((air.ch4 / sea - 1.0).abs() < TIGHT, "{air:?} {sea:e}");
+    let held = air.partial_pressures().ch4;
+    assert!((held / sea - 1.0).abs() < TIGHT, "{air:?} {sea:e}");
 }
 
 /// Nitrogen condenses first, over its own frost (activity 1): a
 /// Triton-like inventory keeps its frost pressure in the air.
 #[test]
 fn nitrogen_condenses_first() {
-    let inventory = PartialPressures {
+    let inventory = Weights {
         n2: TRITON_N2.0,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     let Condensed { air, condensate } = condense(&inventory, TRITON_K);
     let frost = nitrogen_frost_pressure(TRITON_K)
@@ -157,11 +159,11 @@ fn condensation_keeps_the_inventory() {
     let (floor, ceiling, step) = SWEEP_K;
     for n2 in SWEEP_BAR {
         for ch4 in SWEEP_BAR {
-            let inventory = PartialPressures {
+            let inventory = Weights {
                 n2,
                 ch4,
                 ar: ch4,
-                ..EARTH_AIR
+                ..EARTH_AIR.weights()
             };
             let mut k = 0.0;
             loop {
@@ -188,10 +190,10 @@ fn condensation_keeps_the_inventory() {
 
 /// `condensed_air` changes only the gases that condense: the CO2, H2O,
 /// NH3, SO2 and O2 of `air` pass through; its N2, CH4 and Ar are what
-/// the inventory leaves.
+/// the inventory leaves over those of `air`.
 #[test]
 fn condensed_air_changes_only_what_condenses() {
-    let air = PartialPressures {
+    let air = Weights {
         n2: 0.5,
         co2: 0.1,
         h2o: 0.02,
@@ -201,13 +203,13 @@ fn condensed_air_changes_only_what_condenses() {
         o2: 0.006,
         ar: 0.007,
     };
-    let inventory = PartialPressures {
+    let inventory = Weights {
         ar: FLOODING_CH4.0,
         ..titan_inventory(FLOODING_CH4.0)
     };
     let t = Kelvin(TITAN_SURFACE_K);
     let condensed = condensed_air(&air, &inventory, t);
-    let kept = condense(&inventory, t).air;
+    let kept = condense(&condensables(&air, &inventory), t).air;
     assert_eq!(condensed.n2, kept.n2);
     assert_eq!(condensed.ch4, kept.ch4);
     assert_eq!(condensed.ar, kept.ar);
@@ -227,14 +229,14 @@ fn condensed_air_changes_only_what_condenses() {
 /// air with a trace of methane is not one, nor is Earth's.
 #[test]
 fn titan_like_air_is_dense_and_methane_bearing() {
-    assert!(titan_like_air(&TITAN_SURFACE_AIR));
-    let triton = PartialPressures {
+    assert!(titan_like_air(&titan_air()));
+    let triton = Weights {
         n2: TRITON_PRESSURE.0,
         ch4: CH4_TRACE.0,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     assert!(!titan_like_air(&triton));
-    assert!(!titan_like_air(&EARTH_AIR));
+    assert!(!titan_like_air(&EARTH_AIR.weights()));
 }
 
 /// Source: the argon a Triton made into its air, 1.3 to 1.8 Pa, and a
@@ -263,28 +265,27 @@ fn argon_condenses_over_its_own_frost_on_the_cold_bodies() {
         let curve = argon_frost_pressure(t).expect("under the triple point").0;
         assert!((curve / frost - 1.0).abs() < TWO_DIGITS, "{t:?}: {curve}");
         for made in [low, high] {
-            let inventory = PartialPressures {
+            let inventory = Weights {
                 n2: TRITON_N2.0,
                 ar: made / crate::constants::PASCALS_PER_BAR,
-                ..PartialPressures::default()
+                ..Weights::default()
             };
             let Condensed { air, condensate } = condense(&inventory, t);
             let cap = curve / crate::constants::PASCALS_PER_BAR;
-            assert!((air.ar / cap - 1.0).abs() < TIGHT, "{t:?}: {air:?}");
+            let p = air.partial_pressures();
+            assert!((p.ar / cap - 1.0).abs() < TIGHT, "{t:?}: {air:?}");
             assert!(
                 (condensate.ar - (inventory.ar - air.ar)).abs() <= SUM_TOLERANCE,
                 "{condensate:?}"
             );
-            // The N2 is what it is without argon.
-            let alone = condense(
-                &PartialPressures {
-                    ar: 0.0,
-                    ..inventory
-                },
-                t,
-            );
-            assert_eq!(air.n2, alone.air.n2);
-            let share = air.ar / air.total();
+            // The N2 holds its own frost's pressure beside the argon: two
+            // gases that condense together both sit at their caps, where
+            // capping the N2 with all the argon still in the air would
+            // leave it under its own.
+            let n2_frost =
+                nitrogen_frost_pressure(t).unwrap().0 / crate::constants::PASCALS_PER_BAR;
+            assert!((p.n2 / n2_frost - 1.0).abs() < TIGHT, "{t:?}: {p:?}");
+            let share = p.ar / p.total();
             println!(
                 "{t:?}, {made} Pa of Ar: {:.3e} Pa in the air, {share:.4} of it",
                 curve
@@ -300,9 +301,9 @@ fn argon_condenses_over_its_own_frost_on_the_cold_bodies() {
 #[test]
 fn argon_under_its_triple_pressure_stays_in_a_warm_air() {
     let ar = 0.99 * ARGON_TRIPLE_PRESSURE.0 / crate::constants::PASCALS_PER_BAR;
-    let inventory = PartialPressures {
+    let inventory = Weights {
         ar,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     for t in [ARGON_TRIPLE_TEMPERATURE.0, 87.28, 120.0, 150.687, 300.0] {
         let Condensed { air, condensate } = condense(&inventory, Kelvin(t));

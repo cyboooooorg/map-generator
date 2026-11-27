@@ -6,6 +6,7 @@
 use super::*;
 use crate::constants::PASCALS_PER_BAR;
 use crate::habitable::OCEAN_MASS;
+use crate::radiation::gases::PartialPressures;
 use crate::radiation::test_points::{
     EARTH_AIR, EARTH_SURFACE_K, TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_PRESSURE_BAR,
     VENUS_SURFACE_K,
@@ -54,15 +55,15 @@ fn dry() -> Kilogram {
     Kilogram(0.0)
 }
 
-fn none() -> PartialPressures {
-    PartialPressures::default()
+fn none() -> Weights {
+    Weights::default()
 }
 
 /// Titan's seas on its ground, 1 bar of methane condensate.
-fn seas() -> PartialPressures {
-    PartialPressures {
+fn seas() -> Weights {
+    Weights {
         ch4: 1.0,
-        ..PartialPressures::default()
+        ..Weights::default()
     }
 }
 
@@ -72,7 +73,8 @@ fn a_trace_of_methane_makes_no_lake() {
         n2: 1.5,
         ch4: 0.003,
         ..PartialPressures::default()
-    };
+    }
+    .weights();
     assert_ne!(
         liquid(TITAN_SEA_K, &trace, dry(), false, &none(), None),
         Some(Liquid::Hydrocarbons)
@@ -84,10 +86,13 @@ fn a_trace_of_methane_makes_no_lake() {
 /// 2005), above the freezing point of the sea under its 1.45 bar of N2.
 #[test]
 fn titans_seas_are_liquid_at_its_surface_temperature() {
+    // The sea's vapour, a hair over it ([`TIGHT`]) so that the round
+    // trip through the weights does not round it under.
     let titan = PartialPressures {
-        ch4: methane_sea_vapour(Kelvin(TITAN_SURFACE_K)).0,
+        ch4: methane_sea_vapour(Kelvin(TITAN_SURFACE_K)).0 * (1.0 + TIGHT),
         ..TITAN_SURFACE_AIR
-    };
+    }
+    .weights();
     assert!(methane_freezes(TITAN_N2).0 < TITAN_SURFACE_K);
     assert_eq!(
         liquid(Kelvin(TITAN_SURFACE_K), &titan, dry(), false, &none(), None),
@@ -156,7 +161,8 @@ fn a_methane_sea_is_liquid_over_its_freezing_point() {
             n2,
             ch4: methane_sea_vapour(Kelvin(t)).0,
             ..PartialPressures::default()
-        };
+        }
+        .weights();
         liquid(Kelvin(t), &air, dry(), false, &seas(), None)
     };
     for n2 in [0.0, 1.0] {
@@ -174,23 +180,23 @@ fn a_methane_sea_is_liquid_over_its_freezing_point() {
 /// nitrogen; under it, a frost (issue #524).
 #[test]
 fn a_pure_nitrogen_sea_is_nitrogen() {
-    let condensate = PartialPressures {
+    let condensate = Weights {
         n2: 0.5,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     let warm = NITROGEN_SEA_K;
-    let air = PartialPressures {
+    let air = Weights {
         n2: bar(nitrogen_saturation_pressure(warm)),
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     assert_eq!(
         liquid(warm, &air, dry(), false, &condensate, None),
         Some(Liquid::Nitrogen)
     );
     let cold = NITROGEN_FROST_K;
-    let air = PartialPressures {
+    let air = Weights {
         n2: bar(nitrogen_frost_pressure(cold).expect("under the triple point")),
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     assert_eq!(liquid(cold, &air, dry(), false, &condensate, None), None);
     let frost = frost(&condensate, Bar(0.0), Bar(0.0), cold, &air);
@@ -204,10 +210,10 @@ fn a_pure_nitrogen_sea_is_nitrogen() {
 #[test]
 fn condensed_nitrogen_keeps_the_sea_liquid() {
     let t = NITROGEN_SEA_K;
-    let condensate = PartialPressures {
+    let condensate = Weights {
         n2: 5.0,
         ch4: 8.0,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     let air = PartialPressures {
         n2: bar(nitrogen_saturation_pressure(t)),
@@ -215,6 +221,7 @@ fn condensed_nitrogen_keeps_the_sea_liquid() {
         ..PartialPressures::default()
     };
     assert!(t.0 < methane_freezes(Bar(air.n2)).0, "{air:?}");
+    let air = air.weights();
     assert_eq!(
         liquid(t, &air, dry(), false, &condensate, None),
         Some(Liquid::Hydrocarbons)
@@ -241,10 +248,10 @@ fn ethane_lowers_the_liquidus() {
 
 #[test]
 fn water_on_top_is_never_lava() {
-    let air = PartialPressures {
+    let air = Weights {
         n2: 10.0,
         h2o: 200.0,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     for runaway in [false, true] {
         for t in [700.0, 2000.0, 5000.0] {
@@ -268,7 +275,8 @@ fn earth_mars_titan_have_their_liquids() {
     let earth = PartialPressures {
         n2: STANDARD_ATMOSPHERE_BAR - EARTH_AIR.o2 - EARTH_AIR.co2,
         ..EARTH_AIR
-    };
+    }
+    .weights();
     assert_eq!(
         liquid(
             Kelvin(EARTH_SURFACE_K),
@@ -281,9 +289,9 @@ fn earth_mars_titan_have_their_liquids() {
         Some(Liquid::Water)
     );
     let [mars_k, mars_co2, mars_oceans] = MARS_LIKE;
-    let mars = PartialPressures {
+    let mars = Weights {
         co2: mars_co2,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     assert_eq!(
         liquid(
@@ -301,7 +309,7 @@ fn earth_mars_titan_have_their_liquids() {
     assert_eq!(
         liquid(
             Kelvin(TITAN_SURFACE_K),
-            &TITAN_SURFACE_AIR,
+            &TITAN_SURFACE_AIR.weights(),
             dry(),
             false,
             &seas(),
@@ -309,9 +317,9 @@ fn earth_mars_titan_have_their_liquids() {
         ),
         Some(Liquid::Hydrocarbons)
     );
-    let venus = PartialPressures {
+    let venus = Weights {
         co2: VENUS_PRESSURE_BAR,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     assert_eq!(
         liquid(Kelvin(VENUS_SURFACE_K), &venus, dry(), true, &none(), None),
@@ -326,9 +334,9 @@ fn liquid_boundaries_are_inclusive_below() {
         liquid(LAVA_TEMPERATURE, &none(), dry(), false, &none(), None),
         Some(Liquid::Lava)
     );
-    let air = PartialPressures {
+    let air = Weights {
         n2: 1.0,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     let p = Pascal(PASCALS_PER_BAR);
     let melts = ice_ih_melting_temperature(p);
@@ -344,9 +352,9 @@ fn liquid_boundaries_are_inclusive_below() {
     );
     assert_eq!(liquid(boils, &air, water, false, &none(), None), None);
     // Under water's triple-point pressure, no liquid water at all.
-    let thin = PartialPressures {
+    let thin = Weights {
         n2: 0.9 * bar(TRIPLE_POINT_PRESSURE),
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     for t in (200..=400).map(f64::from) {
         assert_eq!(
@@ -381,9 +389,9 @@ fn frozen_frost_melts_back() {
 #[test]
 fn io_keeps_its_so2_frost() {
     let t = IO_SURFACE_K;
-    let air = PartialPressures {
+    let air = Weights {
         so2: bar(sulphur_dioxide_frost_pressure(t).expect("under the triple point")),
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     let frost = frost(&none(), Bar(0.0), Bar(1.0), t, &air);
     assert_eq!(frost.so2, 1.0, "{frost:?}");
@@ -392,7 +400,7 @@ fn io_keeps_its_so2_frost() {
     assert_eq!(warm.co2, 0.0, "{warm:?}");
 }
 
-fn frost_at_triple(air: &PartialPressures) -> PartialPressures {
+fn frost_at_triple(air: &Weights) -> Weights {
     frost(
         &none(),
         Bar(1.0),
@@ -415,9 +423,9 @@ const ABOVE_ICE_III_MELTING_K: Kelvin = Kelvin(256.0);
 /// called it liquid).
 #[test]
 fn water_under_ice_iii_pressure_freezes() {
-    let air = PartialPressures {
+    let air = Weights {
         n2: ICE_III_AIR_BAR,
-        ..PartialPressures::default()
+        ..Weights::default()
     };
     let water = oceans(1.0);
     assert_ne!(
