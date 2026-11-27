@@ -80,6 +80,7 @@ fn every_planet_node_is_in_the_planet_graph() {
 }
 
 #[test]
+#[ignore = "heavy: draws and reports a system of its own (215 s in debug); tier 2 keeps the coverage on the shared references"]
 fn asked_archetypes_are_placed() {
     let report = report(&inputs(&["--archetype", "earth-like=1"], 3)).unwrap();
     let asked = ArchetypeId(Code::of("earth-like"));
@@ -110,6 +111,7 @@ fn prints_the_draw_as_json() {
 }
 
 #[test]
+#[ignore = "heavy: draws a system twice (260 s in debug); tier 2 checks the draw is pure on the shared references"]
 fn the_same_seed_prints_the_same_bytes() {
     assert_eq!(
         dispatch(&cli(&[], 42)).unwrap(),
