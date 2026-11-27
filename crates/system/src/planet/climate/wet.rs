@@ -253,8 +253,16 @@ pub(crate) struct Kept<S> {
 /// before #734).
 ///
 /// Otherwise (#731) each step is at least the plain one and at most twice the
-/// last one and `widest` times the CO₂; where `g` falls, at most to the zero
-/// of the secant through the last two points too. Where `g` falls below
+/// last one. While `g` rises or stays flat, it is also at most `widest` times
+/// the CO₂; once `g` falls by more than its noise, it goes to the zero of the
+/// secant through the last two points, with no cap but twice the last step (a
+/// fall within the noise is a jitter of the solve, not a fall, and keeps the
+/// rising cap). Near a methane Earth's
+/// edge round a cool star, `g` is a single hump from about zero to its root
+/// (0.3 to 3 bar high, over 12 to 44 bar of CO₂): the cap kept the rise
+/// short and the secant short of the root, 83 and 44 evaluations at 4500
+/// and 3300 K; the two rules take about 22 and 22 (simulated on the traced
+/// gaps; #731, measured on main a97c1ca1). Where `g` falls below
 /// `−noise` it has passed a root: the search brackets it between that point
 /// and the last one above zero, and closes in on it by the Illinois rule
 /// (Dowell & Jarratt 1971) to a point with `0 ≤ g ≤ tolerance φ`. A root
@@ -265,7 +273,10 @@ pub(crate) struct Kept<S> {
 /// `g` jump across a root by up to its noise ("A collapse from the fold
 /// (#731)" in
 /// `docs/science/planet-atmospheres.md`). A warm balance (a pair of roots)
-/// narrower than one step, at most `widest` of the CO₂, can be stepped over.
+/// narrower than a rising step, at most `widest` of the CO₂, or hidden before
+/// the secant's zero on a falling `g`, can be stepped over: a limit accepted
+/// on 2026-11-27 for the speed, and held by the convergence test of
+/// [`super::COLLAPSE_STEP`].
 pub(crate) fn collapse_search<S: Copy>(
     start: f64,
     mut solve: impl FnMut(f64) -> Kept<S>,
@@ -294,12 +305,16 @@ pub(crate) fn collapse_search<S: Copy>(
         let mut plain = true;
         if widest > 0.0 {
             if let Some((c0, g0)) = before {
-                let secant = if g0 > g {
-                    g * (c0 - c) / (g0 - g)
+                let longer = if g0 - g > here.noise {
+                    // Falling by more than the noise (a jitter of the
+                    // solve is no fall): to the secant's zero, at most
+                    // twice the last step.
+                    (g * (c0 - c) / (g0 - g)).min(2.0 * last_step)
                 } else {
-                    f64::INFINITY
+                    // Rising or flat: doubling, at most `widest` of the
+                    // CO₂.
+                    (2.0 * last_step).min(widest * c)
                 };
-                let longer = secant.min(2.0 * last_step).min(widest * c);
                 if longer > step && longer < c {
                     step = longer;
                     plain = false;
