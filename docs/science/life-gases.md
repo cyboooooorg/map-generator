@@ -306,15 +306,16 @@ ratios carry over.
   (`methane_left`).
 - **Methane's lines are in the column (#704).** The infrared column
   absorbs in methane's HITRAN lines (broadened by air and by methane
-  itself, `opacity.bin`'s sets 4 and 5) on top of its N₂–CH₄ and
+  itself, `opacity.bin`'s sets 4 and 5, `CH4_SET` and `CH4_SELF_SET`,
+  counted from 0) on top of its N₂–CH₄ and
   CH₄–CH₄ pairs (`radiation::spectrum::PAIRS`), the gases overlapped at
   random. The grey stand-in that acted on any air holding methane
   (`CH4_OPACITY`) went with study 36's first pull request, so no path
   counts methane twice: the column reads one `ch4` per level, the lines
   and the pairs each once, and the test airs that hold none
   (`EARTH_MEASURED_AIR`, `EARTH_DRY_AIR`) stay without methane; the
-  CERES test carries CERES's 1803 ppb and dropped methane's 1.5 W/m²
-  from its `MINOR_GASES_W_M2`.
+  CERES test carried CERES's 1803 ppb and dropped methane's 1.5 W/m²
+  from its `MINOR_GASES_W_M2`, until study 40 removed it.
 - **Weights read as moles (a departure).** The chain's partial pressures
   are weights; the column reads $p_i/p$ as a share of the moles. The
   law's 3.678e-7 bar of methane is 672.8 ppb by moles in Earth's air,
@@ -522,11 +523,11 @@ pairs' 0.83 ratio, temperature at study 32's 2.0 W/m²/K:
 
 Methane's sunlight at these amounts moves the Bond albedo by less than
 0.0005 (study 36). The CERES test of PR #711
-(`earths_clear_sky_column_is_ceres_like_for_like`, since study 40 the
-printed `earths_single_column_against_ceres`) runs on a fixed test
-air, not on the engine's: it reads no law. When methane's lines land,
-its air can carry the measured methane of CERES's years as a test input
-and its `MINOR_GASES_W_M2` drop methane's 1.5 W/m² (study 36).
+(`earths_clear_sky_column_is_ceres_like_for_like`) ran on a fixed test
+air, not on the engine's: it read no law. With methane's lines (#704)
+its air carried the measured methane of CERES's years as a test input
+and its `MINOR_GASES_W_M2` dropped methane's 1.5 W/m² (study 36); study
+40 then removed the test, its gap left to track T11 (#757).
 
 ## Sources
 

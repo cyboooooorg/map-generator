@@ -234,8 +234,11 @@ pub(crate) const CLOUD_TOP_SHARE: f64 = 580.0 / 985.5;
 /// layer, and why ISCCP's clouds in a mean column take more than CERES
 /// measures (Wiki study 32; its candidate, the mean emissivity over a
 /// spread of thin cirrus being under the emissivity of their mean depth,
-/// goes the way of this fit). `docs/science/radiative-transfer.md`,
-/// "Clouds in the infrared".
+/// goes the way of this fit). It is fitted on the single column whose
+/// profile track T11 (issue #757) will change (its stratosphere, its
+/// lapse rate aloft, its cold trap's water), which the clouds' effect
+/// reads, so it is refitted by the same method then.
+/// `docs/science/radiative-transfer.md`, "Clouds in the infrared".
 const CLOUD_EMISSIVITY: f64 = 0.848;
 
 /// The clouds' infrared emissivity for the column's fluxes,
@@ -1265,6 +1268,7 @@ fn with_column<R>(
         ozone: OzoneProfile::NONE,
         n2o: 0.0,
         cloud,
+        ground: None,
     };
     Some(use_column(&column))
 }
@@ -1283,6 +1287,36 @@ struct Cloud {
     layer: usize,
     up: f64,
     weight: f64,
+}
+
+/// A grey ground under a column, for the tests that compare the column
+/// with line-by-line codes on measured profiles: its temperature, K, and
+/// its infrared emissivity. The climate's ground is black, at the
+/// temperature of the column's lowest level ([`Column::ground`] `None`).
+///
+/// It sends up `ε B(T_g) + (1 − ε) D` in each band, `D` the air's
+/// radiation down to it, which the column does not sum. `D` is taken as
+/// that of an air at the ground's temperature, `(1 − t) B(T_g)` with `t`
+/// the band's transmission through the whole column: what reaches space
+/// from the ground is then `B(T_g) t (1 − (1 − ε) t)`. An air colder than
+/// the ground sends down less, so the term is an upper bound of the
+/// reflected light (Definition: Kirchhoff's law for a grey surface with
+/// the downward radiation of an isothermal air; the bound's width is
+/// measured in `docs/science/radiative-transfer.md`, "The radiation on
+/// RFMIP's field").
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Clone, Copy, Debug)]
+struct Ground {
+    temperature_k: f64,
+    emissivity: f64,
+}
+
+impl Ground {
+    /// What reaches space of the ground's Planck flux `planck` in a band
+    /// of transmission `seen` to space.
+    fn sent(self, planck: f64, seen: f64) -> f64 {
+        planck * seen * (1.0 - (1.0 - self.emissivity) * seen)
+    }
 }
 
 /// The levels of a column, from the surface up, as its radiation reads
@@ -1309,6 +1343,9 @@ struct Column<'a> {
     n2o: f64,
     /// Its water clouds, if any.
     cloud: Option<Cloud>,
+    /// A grey ground of its own ([`Ground`]); `None`, the climate's, is a
+    /// black ground at the lowest level's temperature.
+    ground: Option<Ground>,
 }
 
 impl Column<'_> {
@@ -1374,6 +1411,29 @@ impl Column<'_> {
             n2o: fraction.max(0.0),
             ..*self
         }
+    }
+
+    /// This column over `ground` instead of a black ground at its lowest
+    /// level's temperature, for the tests that compare with line-by-line
+    /// codes.
+    #[cfg(test)]
+    fn with_ground(&self, ground: Ground) -> Column<'_> {
+        Column {
+            ground: Some(ground),
+            ..*self
+        }
+    }
+
+    /// The Planck flux of its ground in each band, up to `bins`.
+    fn ground_planck(&self, bins: usize, out: &mut [f64; BANDS]) {
+        let t = self.ground.map_or(self.temperature[0], |g| g.temperature_k);
+        spectrum::planck_spectrum_upto(t, bins, out);
+    }
+
+    /// What reaches space of the ground's Planck flux `planck` in a band
+    /// of transmission `seen` ([`Ground::sent`]; all of it, black).
+    fn ground_sent(&self, planck: f64, seen: f64) -> f64 {
+        self.ground.map_or(planck * seen, |g| g.sent(planck, seen))
     }
 }
 
@@ -1519,8 +1579,10 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
     let mut out = [0.0; BANDS];
     if bins < BINS {
         let mut ground = [0.0; BANDS];
-        planck_spectrum(column.temperature[0], &mut ground);
-        out[bins..].copy_from_slice(&ground[bins..]);
+        column.ground_planck(BINS, &mut ground);
+        for b in bins..BANDS {
+            out[b] = column.ground_sent(ground[b], 1.0);
+        }
     }
     let (mut planck, mut planck_below) = ([0.0; BANDS], [0.0; BANDS]);
     let top_level = column.level(n);
@@ -1614,12 +1676,16 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
             return under_clouds(out, column.cloud, cloud_top, bins, tail);
         }
     }
-    // `planck` is now the surface's, at `temperature[0]`.
+    // `planck` is now the lowest level's, at `temperature[0]`: the
+    // climate's black ground; a grey one has its own.
+    if column.ground.is_some() {
+        column.ground_planck(bins, &mut planck);
+    }
     for b in 0..bins {
-        out[b] += planck[b] * seen[b];
+        out[b] += column.ground_sent(planck[b], seen[b]);
     }
     if tail {
-        out[TAIL] += planck[TAIL] * seen[BINS - 1];
+        out[TAIL] += column.ground_sent(planck[TAIL], seen[BINS - 1]);
     }
     under_clouds(out, column.cloud, cloud_top, bins, tail)
 }
@@ -1753,8 +1819,11 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
         std::mem::swap(&mut rate, &mut rate_below);
         std::mem::swap(&mut planck, &mut planck_below);
     }
+    if column.ground.is_some() {
+        column.ground_planck(BINS, &mut planck);
+    }
     for k in 0..BANDS {
-        out[k] += planck[k] * seen[k];
+        out[k] += column.ground_sent(planck[k], seen[k]);
     }
     under_clouds(out, column.cloud, cloud_top, BINS, true)
 }
@@ -1776,4 +1845,77 @@ fn layer(w: &[f64; G], seen: &mut [f64; G], top: &[f64; G], bottom: &[f64; G], s
 #[cfg(test)]
 fn dot(a: &[f64; G], b: &[f64; G]) -> f64 {
     a.iter().zip(b).map(|(a, b)| a * b).sum()
+}
+
+/// The air's radiation down to the ground of `column` in each band,
+/// W/m², and each band's transmission through the whole column: the
+/// double-precision sum of [`radiate_reference`] (the same depths, the
+/// same random overlap) taken from the ground up, the air above the top
+/// at the top's temperature. The column's sum to space does not hold it;
+/// the test that measures how far [`Ground::sent`]'s bound is from the
+/// light the air sends down reads it.
+#[cfg(test)]
+fn ground_downward(column: &Column) -> ([f64; BANDS], [f64; BANDS]) {
+    use spectrum::reference::{Spectrum, absorption_spectrum, depth_above, log_mean};
+    let n = column.top();
+    let has = column.has_lines;
+    let w = spectrum::weights();
+    let rates: Vec<Box<Spectrum>> = (0..=n)
+        .map(|i| {
+            let mut rate = Box::<Spectrum>::default();
+            absorption_spectrum(&column.level(i), &mut rate);
+            rate
+        })
+        .collect();
+    // The depth from the ground up, per band, gas and g-point.
+    let mut depth = Box::<Spectrum>::default();
+    let through = |depth: &Spectrum, k: usize| {
+        let mut t = (-DIFFUSIVITY * depth.smooth[k]).exp();
+        for (g, gas) in depth.lines.iter().enumerate() {
+            if has[g] {
+                t *= dot(w, &gas[k].map(|d| (-DIFFUSIVITY * d).exp()));
+            }
+        }
+        t
+    };
+    let (mut planck, mut planck_above) = ([0.0; BANDS], [0.0; BANDS]);
+    planck_spectrum(column.temperature[0], &mut planck);
+    let mut below = [1.0; BANDS];
+    let mut down = [0.0; BANDS];
+    for i in 0..n {
+        let h = column.span(i);
+        let (lower, upper) = (&rates[i], &rates[i + 1]);
+        for k in 0..BANDS {
+            depth.smooth[k] += log_mean(lower.smooth[k], upper.smooth[k]) * h;
+            for g in 0..LINE_GASES {
+                for j in 0..G {
+                    depth.lines[g][k][j] +=
+                        log_mean(lower.lines[g][k][j], upper.lines[g][k][j]) * h;
+                }
+            }
+        }
+        planck_spectrum(column.temperature[i + 1], &mut planck_above);
+        for k in 0..BANDS {
+            let t = through(&depth, k);
+            down[k] += 0.5 * (planck[k] + planck_above[k]) * (below[k] - t);
+            below[k] = t;
+        }
+        std::mem::swap(&mut planck, &mut planck_above);
+    }
+    let mut above = Box::<Spectrum>::default();
+    depth_above(&rates[n], &mut above);
+    for k in 0..BANDS {
+        depth.smooth[k] += above.smooth[k];
+        for g in 0..LINE_GASES {
+            for j in 0..G {
+                depth.lines[g][k][j] += above.lines[g][k][j];
+            }
+        }
+    }
+    let mut total = [0.0; BANDS];
+    for k in 0..BANDS {
+        total[k] = through(&depth, k);
+        down[k] += planck[k] * (below[k] - total[k]);
+    }
+    (down, total)
 }

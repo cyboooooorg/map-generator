@@ -1157,7 +1157,11 @@ the Bond albedo are there too (change 2b-2).
     would a lower top, which the shortwave shares (`CLOUD_TOP_SHARE`),
     so the fit takes the emissivity, a longwave-only constant, and
     `CLOUD_ALBEDO`'s fit does not move. Searched and not found: a global
-    mean emissivity of a single cloud layer for a one-column model.
+    mean emissivity of a single cloud layer for a one-column model. The
+    fit reads the single column's profile above the clouds, which track
+    T11 (issue #757) will change (the stratosphere, the lapse rate
+    aloft, the cold trap's water): `CLOUD_EMISSIVITY` is refitted then,
+    by the same method.
   - *Cloud cover.* The cover is $RH^{0.25}\,(1 - e^{-p_{H_2O}/p_c})$ with
     $p_c$ = 0.01 bar. The $RH^{0.25}$ factor is Xu & Randall's (1996)
     cloudiness, as coded in NCEP's physics; their second factor, a
@@ -1595,8 +1599,9 @@ by CERES's uncertainty, below.
 
 The test `earths_clear_sky_column_is_ceres_like_for_like` (tier 1)
 held it there until the user's decision of 2026-11-27 (study 40,
-below); it is now `earths_single_column_against_ceres`, which prints
-the column and the window without holding it. Before #704 it built
+below), which removed it: the single column's gap is recorded here,
+and the acceptance criteria of track T11 (issue #757) hold it. Before
+#704 it built
 the window from the table: 268.1 − 2.2 + 3.39 (`MINOR_GASES_W_M2`,
 Hogan & Matricardi's CH₄, N₂O and halocarbons; 3.64 with N₂ and O₂
 before #703) + 1.76 (Myhre et al. 1998's
@@ -1605,10 +1610,11 @@ $5.35 \ln(389/280)$ for the CO₂ of CERES's years, NOAA), plus ozone from
 uncertainty (0.75 % of 268.1 and 2.75 W/m², the two terms of the data
 quality summary, combined here in quadrature: 3.4 W/m²):
 271.83 to 286.08 W/m² (272.1 to 286.3 before #703). Since #704 the
-test's air carries CERES's methane (1803 ppb), N₂O (324.2 ppb) and
+test's air carries CERES's methane (1803 ppb), N₂O (324.2 ppb, source 124) and
 ozone (300 DU), which the column absorbs, so the window keeps only the
 halocarbons (0.39 W/m²): 264.64 to 273.08 W/m². The column gives
-261.24 W/m², 3.40 under it (see below). It runs the
+261.235 W/m², 3.41 under it (264.642 − 261.235 = 3.407; see below).
+It ran the
 climate's own clear column (`Profile::CLEAR`) on Earth's measured air
 (78.08 % N₂ and 20.95 % O₂ of 1.014 bar, NASA's fact sheet), 280 ppm,
 77 % surface humidity at 288 K, under the skin of CERES's all-sky 240.1 W/m²: the
@@ -1631,37 +1637,97 @@ where it takes 7.46 on RFMIP's own temperatures, and N₂O takes 2.18
 where the sources give at most 1.88. On RFMIP's 100 profiles with all
 its gases but the halocarbons, the column gives 263.90 W/m² against
 LBLRTM's 263.20 with them (0.39 W/m² for the halocarbons): there it is
-right. The single column, not the radiation code, is dark. The cloud
-refits of #705 do not touch a clear sky. Study 40 (below) found the
-stratosphere's heat is not the cause, and the user decided on
-2026-11-27 to hold the radiation on RFMIP's field instead and to leave
-the single column's profile to track T11, "the climate column's upper
-atmosphere" (issue #757, with #750 and #752).
+right (over a black ground; over RFMIP's grey grounds it gives
+262.934, against the line-by-line codes' 263.429 without the
+halocarbons, below). The single column, not the radiation code, is
+dark. The cloud refits of #705 do not touch a clear sky. Study 40
+(below) found the stratosphere's heat is not the cause, and the user
+decided on 2026-11-27 to hold the radiation on RFMIP's field instead
+and to leave the single column's profile to track T11, "the climate
+column's upper atmosphere" (issue #757, with #750 and #752).
 
 **The radiation on RFMIP's field (tier 1).** The test
-`the_columns_clear_sky_is_lblrtms_on_rfmips_field` runs the column's
-radiation on RFMIP's 100 present-day profiles, each at its own
-temperatures, water and ozone, with RFMIP's CO₂, methane, N₂O and O₂
-(the column of `crates/science/data/RFMIP.md`), weighted by the sites'
-weights: 263.903 W/m². LBLRTM-12-8 gives 263.2287 W/m² on the same
-profiles (its ESGF `rlu` at the top, weighted by
-`tools/rfmip-shortwave`, source 121; Pincus et al. 2019, Table 1, give
-263.197)
-with the halocarbons, which the column lacks: with Hogan & Matricardi's
-0.39 W/m² for them added back, 263.619 W/m², 0.284 W/m² (0.11 %) under
-the column. The test holds the column within 0.4 % of LBLRTM's flux
-(1.053 W/m²), the accuracy Pincus et al. (2019, §3.2) state for
-RTE+RRTMGP against LBLRTM at the top of these profiles, a bound over
-both bands that their shortwave sets (0.165 of 47.315 W/m²). On the
-longwave alone RRTMGP comes closer (0.033 W/m² in their Table 1, and
-RTE-RRTMGP-181204's ESGF fluxes give 263.2301 W/m², 0.0014 from
-LBLRTM's), closer than the test's own inputs are known: the
-halocarbons' share estimated on another air, and a black ground where
-RFMIP's emits 0.98. Study 36's rule (no worse than RRTMGP on the
-longwave) would ask more of the column than of its inputs, so the test
-takes the paper's stated bound, not a calibration. It costs 25 s of
-the tier-1 run (100 columns in a debug build; the run went from 68 to
-87 s of its 120).
+`column::rfmip_tests::the_columns_clear_sky_is_the_line_by_line_codes_on_rfmips_field`
+runs the column's radiation on RFMIP's 100 present-day profiles, each
+at its own temperatures and water, its ozone column laid out on the
+AFGL shape the app uses (`OzoneProfile`, not RFMIP's own profile), with
+RFMIP's CO₂, methane, N₂O and O₂ (the column of
+`crates/science/data/RFMIP.md`), each over its own ground: grey, at
+RFMIP's surface temperature and emissivity (0.98), the air at the
+surface at RFMIP's lowest level's temperature. Weighted by the sites'
+weights it gives 262.934 W/m². The column has no halocarbons, so the
+reference is RFMIP's "PI HCs" experiment (12): present day with the
+halocarbons at their pre-industrial amounts. The five line-by-line
+codes of Pincus et al. (2020; their published fluxes, source 122) give
+262.4495 (ARTS 2.3), 263.5135 (GRTCODE), 263.7986 (RFM-DISORT),
+263.7139 (LBLRTM 12.8) and 263.6705 W/m² (4A/OP 1.5): a mean of
+263.429, sample standard deviation 0.557. The column is 0.495 W/m²
+(0.19 %) under their mean, 0.780 under LBLRTM's, 0.485 over ARTS's.
+LBLRTM's ESGF files (source 121, weighted by `tools/rfmip-shortwave`)
+give 263.2287 for present day and 263.7138 for "PI HCs", its own
+`p1-f1` values; RTE-RRTMGP-181204's give 263.2301 and 263.6449.
+
+What changed in the column, measured on the field, W/m²:
+
+| The column | Outgoing |
+| --- | --- |
+| Black ground, the air at the surface at the ground's temperature (before) | 263.903 |
+| Black ground, the air at the surface at RFMIP's lowest level | 263.761 |
+| Grey ground (0.98), reflecting nothing | 262.367 |
+| Grey ground, reflecting an air at the ground's temperature | 262.925 |
+| The same, reflecting the light the air sends down (double-precision sum from the ground up) | 262.828 |
+| The test: the grey ground's bound, each site's ozone column integrated linear in `ln p` (293.9 DU on average, 294.6 before) | 262.934 |
+
+The column sums its radiation to space and does not hold the light the
+air sends down, so the grey ground reflects that of an air at the
+ground's temperature (`Ground`, in `column.rs`), an upper bound: the
+real air is colder and sends down less. The heavy test
+`the_grounds_reflection_bound_is_within_its_calibration` measures the
+bound's excess with a double-precision sum from the ground up: 0.0968
+W/m² on the field.
+
+*The user's decision (2026-11-27).* The tolerance of this test is a
+calibration built from what remains uncertain in the test's inputs,
+each measured on the field, and not RRTMGP's error against LBLRTM. It
+amends study 36's rule ("no worse than RRTMGP",
+[longwave-absorbers.md](longwave-absorbers.md), "Decisions") for this
+test only: RRTMGP is within 0.033 W/m² of LBLRTM on this field
+(Pincus et al. 2019, Table 1; 0.0014 in the ESGF files), much closer
+than the reference itself is known, since the five line-by-line codes
+spread over 1.35 W/m² on the same air. The methane and N₂O steps keep
+study 36's rule.
+
+*Calibration of the field test's tolerance.* The test holds the column
+within the sum of three terms of the line-by-line codes' mean
+(0.700 W/m²):
+
+- **The reference's spread**, 0.557 W/m²: the sample standard
+  deviation of the five codes on "PI HCs". They differ by their line
+  lists, line shapes and continua; the column's HITRAN2024 and MT_CKD
+  4.3 are one more such set.
+- **The ground's reflection**, 0.1 W/m² (`REFLECTION_BOUND_W_M2`): the
+  bound's measured excess, 0.0968, rounded up; the heavy test holds it.
+- **The pre-industrial halocarbons** that "PI HCs" keeps and the column
+  lacks: at most 0.043 W/m². Their removal is linear in their amounts
+  (the optically thin expressions of Ramaswamy et al. 2001, Table 6.2,
+  source 123), so
+  they take at most the largest ratio, over the input file's three
+  equivalents, of their pre-industrial amount to what present day adds
+  (19.15 against 237.91 ppt of HFC-134a equivalent, 8.05 %), times what
+  the codes find removing present day's take: 0.530 W/m² (their mean;
+  0.485 for LBLRTM).
+
+The terms add linearly, as bounds; the reflection and the halocarbons
+both make the column brighter than the reference, so the symmetric
+window holds them generously. What was searched and not found: an
+absolute accuracy of the line-by-line codes' top-of-atmosphere flux on
+this field (Pincus et al. 2020 compare the codes' forcings, not their
+absolute fluxes; their spread is the measure taken here), and a
+line-by-line value with RFMIP's halocarbons removed entirely. Carbon
+monoxide (120 ppb in RFMIP's present day) is not in the column and was
+not measured. The test costs 25 s of the tier-1 run (100 columns in a
+debug build); with it `mise run ci` ran tier 1 in TIER1_SECONDS s of
+its 120 s budget.
 
 Two direct checks agree:
 
@@ -1765,7 +1831,7 @@ under a 214.4 K skin (the test's 214.51 K moves each by about
   shortfall of the CERES test, the clouds now taking CERES's 25.7.
 
 **The column's stratosphere (study 40, 2026-11-27).** The user asked
-whether the CERES test's 3.40 W/m² come from the column's stratosphere,
+whether the CERES test's 3.41 W/m² come from the column's stratosphere,
 held at the skin temperature, and for a general law that heats it with
 the ozone it holds. Scratch probes on the test's column (288 K,
 280 ppm, 1803 ppb of methane, 324.2 ppb of N₂O, 300 DU, clear; nothing
@@ -1804,8 +1870,8 @@ radiative one (a convective adjustment, Manabe & Wetherald 1967),
 iterated with a diagonal Newton step until no radiative level gains
 more than 0.002 W/m². It warms the upper stratosphere as the
 observations do (271 K at 1 hPa) and cools the lower one to 202 to
-208 K, 6 to 13 K under the U.S. Standard and near RFMIP's mean at
-0.1 bar. What each stratosphere does to the test's column, W/m²
+208 K, 9 to 14 K under the U.S. Standard at 0.03 to 0.2 bar and
+near RFMIP's mean at 0.1 bar. What each stratosphere does to the test's column, W/m²
 (outgoing; then, at fixed temperatures, what ozone, N₂O and methane
 take and what doubling CO₂ takes):
 
@@ -1844,8 +1910,8 @@ most 1.88, ozone's RFMIP temperatures 7.46. Findings:
 - **Without ozone the RCE's stratosphere is far under the skin.** With
   no light absorbed above the troposphere, CO₂'s cooling takes Earth's
   stratosphere down to 97 to 174 K (0.13 to 0.001 bar), an M dwarf's
-  Earth (71 DU, 0.30 W/m² absorbed) to 126 to 184 K, and Titan's (no
-  haze heating) to 45 to 65 K. A general law needs the light every
+  Earth (71 DU, 0.30 W/m² absorbed) to 130 to 184 K, and Titan's (no
+  haze heating) to 47 to 65 K. A general law needs the light every
   absorber takes at each level (CO₂'s, water's and methane's near
   infrared, the haze), which the shortwave column does not resolve
   above 1 % of the surface pressure. Robinson & Catling 2014 (Table 1)
@@ -1865,11 +1931,12 @@ The analytic alternatives (Guillot 2010, eq. 49; Robinson & Catling
 Table 1: 90 for Earth's stratosphere, 180 for Titan's), not derived
 from the gases. No change was made. The user decided on 2026-11-27: no
 stratosphere change in study 36's second pull request; the CERES test
-only prints the single column's gap (`earths_single_column_against_ceres`,
-about −3.4 W/m²), the column's radiation is held on RFMIP's field
-(above), and the single column's upper atmosphere (its stratosphere,
-the lapse rate aloft, the cold trap's water, and Titan's radiative upper
-troposphere, #750) goes to track T11, issue #757.
+is removed, the single column's gap (261.235 against 264.642 W/m²,
+3.41 under) recorded above and held by #757's acceptance criteria; the
+column's radiation is held on RFMIP's field (above); and the single
+column's upper atmosphere (its stratosphere, the lapse rate aloft, the
+cold trap's water, and Titan's radiative upper troposphere, #750) goes
+to track T11, issue #757.
 
 **Sources the audit could not read.** Kasting 1991 (Appendix B),
 Pierrehumbert 2010 (equation 2.33), the CRC polarizabilities and Sobolev
@@ -2235,6 +2302,22 @@ publisher's page (Tables 1 to 5).
      checksums ESGF's (`tools/rfmip-shortwave`,
      `crates/science/data/RFMIP.md`); CC BY-NC-SA 4.0, only the weighted
      means quoted.
+122. Pincus, R. et al. 2020, "Benchmark calculations of radiative
+     forcing by greenhouse gases", *J. Geophys. Res. Atmos.* 125,
+     e2020JD033483, doi:10.1029/2020JD033483 (the text was not reached;
+     its global-mean fluxes were read in
+     `RobertPincus/rfmip-benchmark-paper-figures` at `76f2bff4`,
+     `lw-lbl-models.nc`, SHA-256 `11101c39…e094b`: the top level's `rlu`
+     of each code for "PD" and "PI HCs").
+123. Ramaswamy, V. et al. 2001, "Radiative forcing of climate change", in
+     *Climate Change 2001: The Scientific Basis*, IPCC TAR WG1, chapter 6
+     (Table 6.2, the halocarbons' linear expressions, as
+     [longwave-absorbers.md](longwave-absorbers.md) reads it).
+124. Gulev, S. K. et al. 2021, "Changing state of the climate system", in
+     *Climate Change 2021: The Physical Science Basis*, IPCC AR6 WG1,
+     chapter 2, doi:10.1017/9781009157896.004 (Table 2.2, p. 302: N₂O's
+     global mean of 2011, 324.2 ppb by NOAA, the CERES test's; methane's,
+     1803.1 ppb).
 
 ## See also
 

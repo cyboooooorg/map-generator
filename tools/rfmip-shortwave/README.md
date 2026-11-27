@@ -6,8 +6,8 @@ crate's tests read (`science::radiation::rfmip_tests`), and
 `crates/science/data/rfmip-longwave.tsv`, the field of all 100 sites
 the infrared column's tier-3 test reads (methane's and N₂O's steps,
 `science::radiation::column::rfmip_tests`), and prints the
-six weighted line-by-line and RRTMGP shortwave values and the two
-present-day outgoing longwave values the tests quote. Nothing
+six weighted line-by-line and RRTMGP shortwave values and the four
+outgoing longwave values (present day and "PI HCs") the tests quote. Nothing
 derived from the flux files (CC BY-NC-SA 4.0) is written. The generator
 never runs this tool: the table is committed, and the tool only
 regenerates it. Provenance, terms and method:
@@ -47,7 +47,7 @@ tools/rfmip-shortwave/fetch.sh
 cargo run --release -p rfmip-shortwave
 ```
 
-It writes the two tables and prints the eight values; compare them with
+It writes the two tables and prints the ten values; compare them with
 the `Source:` constants of `crates/science/src/radiation/rfmip_tests.rs`
 and `column_rfmip_tests.rs`.
 

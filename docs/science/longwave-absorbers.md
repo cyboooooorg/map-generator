@@ -9,22 +9,23 @@ albedo?](radiative-transfer.md).
 
 ## Short answer
 
-The app's infrared column holds the lines of water vapour and carbon
-dioxide, their continua, and the brief pairs that colliding molecules form
-(CO₂–CO₂, and since study 36 N₂–N₂, O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄);
-the pairs replaced a grey stand-in for Titan's methane. Earth's real air
-also traps heat with ozone, methane's and nitrous oxide's (N₂O) lines and
-halocarbons. Line-by-line codes put methane, N₂O and the halocarbons at
-about 3.39 W/m² of Earth's clear-sky outgoing infrared at present-day
-amounts (3.6 with the N₂ and O₂ pairs, which the column now holds), and
-methane and N₂O at 2 to 3 W/m² at pre-industrial ones. Two findings
-matter more than the numbers:
+The app's infrared column holds the lines of water vapour, carbon
+dioxide, methane, ozone and nitrous oxide (N₂O; the last three since
+study 36's second pull request, issue #704), the continua, and the brief
+pairs that colliding molecules form (CO₂–CO₂, and since study 36 N₂–N₂,
+O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄); the pairs replaced a grey stand-in
+for Titan's methane. Of Earth's real absorbers it still misses the
+halocarbons: line-by-line codes put them at about 0.4 to 0.55 W/m² of
+Earth's clear-sky outgoing infrared at present-day amounts (Hogan &
+Matricardi 2020; RFMIP's field). Methane and N₂O take about 1.5 to
+1.9 W/m² each at present-day amounts. Two findings matter more than the
+numbers:
 
-- The model's Earth carries **no methane and no N₂O** at all: the chain
-  has no law that makes them. Adding their lines to the column changes
-  nothing for the reference Earth until a law of life's methane and N₂O
-  exists. Only the nitrogen and oxygen pairs act at once: about +0.1 to
-  +0.2 K.
+- The model's Earth carries **no N₂O** and, until planet PR 2d-4 calls
+  study 37's law of a modern biosphere's methane (now in `science`),
+  **no methane**: their lines change nothing for the reference Earth
+  until then, and N₂O waits for a law of its own (#737). The nitrogen
+  and oxygen pairs act at once: about +0.1 to +0.2 K.
 - The **nitrogen and methane pairs** of HITRAN's collision-induced files
   put a spectral Titan at 92.30 K without any fitted constant (measured:
   93.65 K; 91.81 K since N₂ condenses in its upper troposphere, issue
@@ -289,13 +290,13 @@ do now.
 | Case | Column without N₂O | Column with N₂O | Reference | Verdict |
 | --- | --- | --- | --- | --- |
 | Ozone's 300 DU taken out, Earth clear | 8.371 W/m² | 8.366 W/m² | 4.185 to 10 (Schmidt et al. 2010; Kiehl & Trenberth 1997) | inside |
-| Methane's 1803 ppb taken out, Earth clear | 2.436 W/m² | 1.977 W/m² | 1.5 (Hogan & Matricardi 2020, 1921 ppb) to 1.87 (Höpfner et al. 2012), ± 8.2 %: 1.377 to 2.023 | inside (20 % over without N₂O) |
-| RFMIP, methane's step "PI CH4" − "PD" | 0.7479 W/m² | 0.6262 W/m² (OLR 264.530 − 263.903) | 0.613 ± 0.050 (line by line; RRTMGP 0.563) | +2.2 %, inside (22 % over without N₂O) |
-| RFMIP, N₂O's step "PI N2O" − "PD" | | 0.2117 W/m² (OLR 264.115 − 263.903) | 0.204 ± 0.024 (line by line; RRTMGP 0.180) | +3.8 %, inside |
+| Methane's 1803 ppb taken out, Earth clear | 2.436 W/m² | 1.977 W/m² | 1.5 (Hogan & Matricardi 2020, 1921 ppb) to 1.87 (Höpfner et al. 2012), ± 8.2 % (RRTMGP's 0.563 against 0.613): 1.378 to 2.023 | inside (20 % over without N₂O) |
+| RFMIP, methane's step "PI CH4" − "PD" | 0.7479 W/m² | 0.6206 W/m² (OLR 263.555 − 262.934, grey grounds; 0.6262 over black ones) | 0.613 ± 0.050 (line by line; RRTMGP 0.563) | +1.2 %, inside (22 % over without N₂O) |
+| RFMIP, N₂O's step "PI N2O" − "PD" | | 0.2094 W/m² (OLR 263.143 − 262.934; 0.2117 over black grounds) | 0.204 ± 0.024 (line by line; RRTMGP 0.180) | +2.6 %, inside |
 | N₂O's 324.2 ppb taken out, Earth clear (a probe, no test) | | 2.179 W/m² | 1.5 (Hogan & Matricardi 2020, 332 ppb); 1.88 (Höpfner et al. 2012) | 16 % over the larger |
 | RFMIP, CO₂'s step "PI CO2" − "PD" (a probe, without N₂O) | 1.379 W/m² | | LBLRTM 12.8 1.322 (Pincus et al. 2020's fluxes) | 4.3 % over |
-| Earth's clear sky against CERES like for like (printed since study 40) | 263.41 W/m² (window 266.14 to 274.58) | 261.24 W/m² | 264.64 to 273.08 (N₂O's 1.5 W/m² out of `MINOR_GASES_W_M2`) | 3.40 under |
-| RFMIP's present-day clear sky, the column on the 100 profiles (tier 1 since study 40) | | 263.903 W/m² | LBLRTM 263.229 with the halocarbons, 263.619 without (0.39 W/m²), within 0.4 % (1.053 W/m², Pincus et al. 2019) | +0.284, inside |
+| Earth's clear sky against CERES like for like (test removed by study 40) | 263.41 W/m² (window 266.14 to 274.58) | 261.24 W/m² | 264.64 to 273.08 (N₂O's 1.5 W/m² out of `MINOR_GASES_W_M2`) | 3.41 under |
+| RFMIP's present-day clear sky without the halocarbons, the column on the 100 profiles over grey grounds (tier 1 since study 40) | | 262.934 W/m² (263.903 over black grounds) | the five line-by-line codes' "PI HCs", 263.429, within 0.700 (a calibration, radiative-transfer.md) | −0.495, inside |
 | Titan's sourced column | 92.300 K | 92.300 K (91.813 K since N₂ condenses, #741) | 92.296 K before the lines (91.809 K on `main` with #741); measured 93.65 ± 0.25 | +0.004 K |
 
 The methane step hardly depends on the bins (0.710 on 20 cm⁻¹, 0.720
@@ -308,13 +309,14 @@ Höpfner et al.'s: Earth's test column takes more than the sources' from
 both, which points at the column (its upper air, its stratosphere at
 the skin temperature) more than at the lines. Ozone's 8.4 W/m² sits
 under that stratosphere (on RFMIP's own temperatures it takes
-7.46 W/m²). The CERES test's clear sky is 3.4 W/m² under its window,
-while on RFMIP's 100 profiles the column is 0.28 W/m² from LBLRTM:
-the single column's profile, not the lines, is dark. Study 40 found the
-stratosphere's heat is not the cause; the CERES test now only prints
-the gap, the RFMIP field holds the radiation, and the single column's
-upper atmosphere goes to track T11 (issue #757; see "Where it departs"
-in [radiative-transfer.md](radiative-transfer.md)).
+7.46 W/m²). The CERES test's clear sky was 3.41 W/m² under its window,
+while on RFMIP's 100 profiles the column is 0.50 W/m² under the
+line-by-line codes' mean, inside their spread: the single column's
+profile, not the lines, is dark. Study 40 found the stratosphere's heat
+is not the cause; the CERES test is removed (its gap recorded and held
+by track T11's acceptance criteria, issue #757), and the RFMIP field
+holds the radiation (see "Where it departs" in
+[radiative-transfer.md](radiative-transfer.md)).
 
 The clouds' infrared emissivity was then refitted on CERES (#705,
 `CLOUD_EMISSIVITY` 0.848, [radiative-transfer.md](radiative-transfer.md)),
@@ -435,6 +437,19 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give
 - **Then the CERES test and Earth's measured air are measured again**,
   and `CLOUD_ALBEDO` and the clouds' longwave part of #705 are refitted
   by their own methods in the same pull request.
+- **After study 40: no stratosphere change in this pull request.** The
+  CERES test is removed; the single column's gap goes to track T11
+  (#757). The column's radiation is held on RFMIP's field against the
+  five line-by-line codes, over RFMIP's grey grounds.
+- **The field test's tolerance is a calibration** of what its inputs
+  leave unknown, each measured on the field (the codes' spread, the
+  ground's reflection bound, the pre-industrial halocarbons;
+  [radiative-transfer.md](radiative-transfer.md), "The radiation on
+  RFMIP's field"). This amends the rule of 2026-11-25 ("no worse than
+  RRTMGP") for that test only: RRTMGP is within 0.033 W/m² of LBLRTM
+  there (Pincus et al. 2019, Table 1), while the five codes themselves
+  spread over 1.35 W/m², so the reference is less certain than RRTMGP's
+  error. The methane and N₂O steps keep the rule.
 
 ## What we do not know
 

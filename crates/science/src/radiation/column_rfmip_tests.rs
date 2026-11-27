@@ -7,8 +7,8 @@
 //! codes' air does: N₂O's band overlaps methane's.
 
 use super::*;
-use crate::constants::{AVOGADRO, PASCALS_PER_BAR, STANDARD_GRAVITY};
-use crate::radiation::ozone::molecules_per_cm2;
+use crate::constants::{PASCALS_PER_BAR, STANDARD_GRAVITY};
+use crate::radiation::test_points::dobson_column;
 
 /// The longwave field: RFMIP's 100 sites at present day, with the
 /// well-mixed gases of each experiment it holds.
@@ -32,14 +32,14 @@ const PI_N2O: usize = 10;
 /// line-by-line codes, s.d. 0.003 (Pincus et al. 2020, *J. Geophys.
 /// Res. Atmos.* 125, e2020JD033483, doi:10.1029/2020JD033483, their
 /// published fluxes, `docs/science/longwave-absorbers.md`).
-const LINE_BY_LINE_W_M2: f64 = 0.613;
+pub(super) const LINE_BY_LINE_W_M2: f64 = 0.613;
 
 /// Source: the same step by RRTMGP, the k-distribution of the same
 /// group on the same profiles, 0.563 W/m² (Pincus et al. 2020's fluxes):
 /// the tolerance study 36 decided (`longwave-absorbers.md`,
 /// "Decisions"), no worse than RRTMGP against the line-by-line codes,
 /// `|0.563 / 0.613 − 1|`, 8.2 %.
-const RRTMGP_W_M2: f64 = 0.563;
+pub(super) const RRTMGP_W_M2: f64 = 0.563;
 
 /// Source: N₂O's step from pre-industrial to present day on the same
 /// profiles, "PI N2O" less "PD": 0.204 W/m² as the mean of the five
@@ -51,39 +51,60 @@ const N2O_LINE_BY_LINE_W_M2: f64 = 0.204;
 /// 2020's fluxes): study 36's tolerance, `|0.180 / 0.204 − 1|`, 11.8 %.
 const N2O_RRTMGP_W_M2: f64 = 0.180;
 
-/// Source: LBLRTM-12-8's clear-sky outgoing longwave at the top of
-/// RFMIP's present day, 263.2287 W/m²: the top level's `rlu` of
-/// experiment 0 weighted by the sites' `profile_weight` (Mlawer, E.,
-/// Pernak, R. 2019, AER LBLRTM model output prepared for CMIP6 RFMIP
-/// rad-irf, ESGF, doi:10.22033/ESGF/CMIP6.2528,
-/// `rlu_Efx_LBLRTM-12-8_rad-irf_r1i1p1f1_gn.nc`, v20190514; derived by
-/// `tools/rfmip-shortwave`, `crates/science/data/RFMIP.md`). Its air holds
-/// the halocarbons the column lacks. Pincus et al. 2019 (Table 1) give
-/// 263.197 W/m² on the same profiles.
-const LBLRTM_PRESENT_DAY_W_M2: f64 = 263.2287;
+/// Source: the clear-sky outgoing infrared of RFMIP's 100 profiles,
+/// weighted to the global mean, W/m², by the five line-by-line codes of
+/// Pincus et al. 2020 (*J. Geophys. Res. Atmos.* 125, e2020JD033483,
+/// doi:10.1029/2020JD033483; their published fluxes, `lw-lbl-models.nc`
+/// of `RobertPincus/rfmip-benchmark-paper-figures` at `76f2bff4`, the top
+/// level's `rlu`): ARTS 2.3, GRTCODE, RFM-DISORT, LBLRTM 12.8 and 4A/OP
+/// 1.5, each `p1-f1` but RFM-DISORT's `p1-f2` (its only one). Each pair
+/// is present day ("PD", experiment 0) and "PI HCs" (experiment 12),
+/// present day with the halocarbons at their pre-industrial amounts: the
+/// column has no halocarbons, so the test reads the second. LBLRTM's
+/// equal its ESGF files' (263.2287 and 263.7138,
+/// `crates/science/data/RFMIP.md`).
+const LINE_BY_LINE_FIELD_W_M2: [[f64; 2]; 5] = [
+    [261.8933, 262.4495],
+    [262.9521, 263.5135],
+    [263.2488, 263.7986],
+    [263.2287, 263.7139],
+    [263.1728, 263.6705],
+];
 
-/// Source: the accuracy RTE+RRTMGP's authors give for it against LBLRTM
-/// on RFMIP's 100 profiles, "accurate to within 0.4% at the top of the
-/// atmosphere" (Pincus, R., Mlawer, E. J., Delamere, J. S. 2019, *J.
-/// Adv. Model. Earth Syst.* 11, 3074, doi:10.1029/2019MS001621, §3.2 and
-/// Table 1), as a share of the flux; the bound covers both bands, the
-/// shortwave's 0.165 of 47.315 W/m² setting it. On the longwave alone
-/// RRTMGP comes closer (0.033 W/m² in their Table 1, 0.0014 in the ESGF
-/// files of RTE-RRTMGP-181204), closer than the test's own inputs are
-/// known: the halocarbons estimated on another air
-/// ([`super::tests::MINOR_GASES_W_M2`]) and a black ground where RFMIP's
-/// emits 0.98. The test takes the paper's stated accuracy.
-const RRTMGP_TOP_SHARE: f64 = 0.004;
+/// Source: the halocarbons of RFMIP's present day and "PI HCs", ppt, as
+/// the equivalents the input file gives (`cfc11eq_GM`, `cfc12eq_GM`,
+/// `hfc134aeq_GM`, experiments 0 and 12; Pincus et al. 2016, *Geosci.
+/// Model Dev.* 9, 3447, the input file of `crates/science/data/RFMIP.md`).
+/// "PI HCs" keeps their pre-industrial amounts (methyl chloride and
+/// bromide, CF₄), which the column lacks too.
+const HALOCARBON_EQUIVALENTS_PPT: [[f64; 2]; 3] = [
+    [809.18646, 32.1102],
+    [1049.5128, 16.512882],
+    [257.0642, 19.15331],
+];
 
-/// Source: the mean molar mass of the U.S. Standard Atmosphere 1976's
-/// dry air, 28.964 g/mol (NASA-TM-X-74335), kg/mol: the air whose
-/// weight carries a site's ozone.
-const DRY_AIR_MOLAR_MASS: f64 = 28.964e-3;
+/// Calibration: how far the light [`Ground::sent`] takes the air to send
+/// down to RFMIP's grey grounds (an air at the ground's temperature)
+/// exceeds what the air sends down, in the outgoing infrared of the
+/// field: 0.0968 W/m², measured by
+/// `the_grounds_reflection_bound_is_within_its_calibration` (the
+/// double-precision sum from the ground up), rounded up. A term of the
+/// field test's tolerance (`docs/science/radiative-transfer.md`, "The
+/// radiation on RFMIP's field").
+const REFLECTION_BOUND_W_M2: f64 = 0.1;
 
 /// Definition: a mole fraction per ppm.
 const PER_PPM: f64 = 1e-6;
 /// Definition: a mole fraction per ppb.
 const PER_PPB: f64 = 1e-9;
+
+/// Study 36's tolerance of a k-distribution against the line-by-line
+/// codes on a step, relative: RRTMGP's error on it,
+/// `|rrtmgp / line_by_line − 1|` (`docs/science/longwave-absorbers.md`,
+/// "Decisions").
+pub(super) fn rrtmgp_error(rrtmgp: f64, line_by_line: f64) -> f64 {
+    (rrtmgp / line_by_line - 1.0).abs()
+}
 
 /// One experiment's well-mixed gases, as mole fractions.
 #[derive(Clone, Copy, Debug)]
@@ -95,12 +116,13 @@ struct Gases {
     n2o: f64,
 }
 
-/// One site: its weight (over the 100 sites), surface temperature and
-/// levels from the surface up: pressure (Pa), temperature (K), water and
-/// ozone mole fractions.
+/// One site: its weight (over the 100 sites), its ground's temperature
+/// and infrared emissivity, and its levels from the surface up: pressure
+/// (Pa), temperature (K), water and ozone mole fractions.
 struct Site {
     weight: f64,
     surface_k: f64,
+    emissivity: f64,
     levels: Vec<[f64; 4]>,
 }
 
@@ -120,6 +142,7 @@ fn field() -> (Vec<Gases>, Vec<Site>) {
             "S" => sites.push(Site {
                 weight: f(2),
                 surface_k: f(3),
+                emissivity: f(4),
                 levels: Vec::new(),
             }),
             "L" => sites
@@ -149,29 +172,37 @@ fn at(levels: &[[f64; 4]], p_pa: f64, field: usize) -> f64 {
     levels[levels.len() - 1][field]
 }
 
-/// The ozone column of a site, Dobson units: `∫ x dp N_A / (M̄ g)` over
-/// its levels (trapezoids), in a dry air of [`DRY_AIR_MOLAR_MASS`] on
-/// the standard gravity.
+/// The ozone column of a site, Dobson units ([`dobson_column`]): its
+/// mixing ratio linear in `ln p` between its levels, as [`at`] reads its
+/// temperature and water, held at its top above it.
 fn ozone_column(site: &Site) -> DobsonUnit {
-    let molar = DRY_AIR_MOLAR_MASS;
-    let per_m2: f64 = site
-        .levels
-        .windows(2)
-        .map(|w| 0.5 * (w[0][3] + w[1][3]) * (w[0][0] - w[1][0]))
-        .sum::<f64>()
-        * AVOGADRO
-        / (molar * STANDARD_GRAVITY.0);
-    DobsonUnit(per_m2 / (molecules_per_cm2(DobsonUnit(1.0)) * 1e4))
+    DobsonUnit(dobson_column(
+        |p| at(&site.levels, p * PASCALS_PER_BAR, 3) * p,
+        site.levels[0][0] / PASCALS_PER_BAR,
+        STANDARD_GRAVITY.0,
+    ))
 }
 
 /// The clear-sky outgoing infrared of `site` under `gases`, W/m², on the
 /// climate's levels per decade from its surface up to its top level:
 /// temperature and water linear in `ln p` between its levels, the
-/// ground a black body at its surface temperature, its ozone column laid
-/// out as the app lays it ([`OzoneProfile`]). Water is a mole fraction
+/// ground grey at its surface temperature and emissivity ([`Ground`]),
+/// its ozone column laid out as the app lays it ([`OzoneProfile`]). Water is a mole fraction
 /// of the dry air (RFMIP's convention); N₂ is the rest of the dry air,
 /// argon in its place.
 fn outgoing(site: &Site, gases: Gases, water_scale: f64) -> f64 {
+    with_site_column(site, gases, water_scale, |column| {
+        radiate(column, &mut Scratch::new()).iter().sum()
+    })
+}
+
+/// `use_column` of the column [`outgoing`] radiates.
+fn with_site_column<R>(
+    site: &Site,
+    gases: Gases,
+    water_scale: f64,
+    use_column: impl FnOnce(&Column) -> R,
+) -> R {
     let (surface, top) = (site.levels[0][0], site.levels[site.levels.len() - 1][0]);
     let span = (surface / top).ln();
     let step = std::f64::consts::LN_10 / LEVELS_PER_DECADE;
@@ -190,11 +221,7 @@ fn outgoing(site: &Site, gases: Gases, water_scale: f64) -> f64 {
         let h2o = x / (1.0 + x) * p;
         let dry = p - h2o;
         let (co2, ch4, o2) = (gases.co2 * dry, gases.ch4 * dry, gases.o2 * dry);
-        temperature.push(if i == 0 {
-            site.surface_k
-        } else {
-            at(&site.levels, p_pa, 1)
-        });
+        temperature.push(at(&site.levels, p_pa, 1));
         levels.push(PartialPressures {
             n2: dry - co2 - ch4 - o2,
             co2,
@@ -214,10 +241,15 @@ fn outgoing(site: &Site, gases: Gases, water_scale: f64) -> f64 {
         ozone: OzoneProfile::NONE,
         n2o: 0.0,
         cloud: None,
+        ground: None,
     };
     let with_ozone = column.with_ozone(ozone_column(site));
-    let column = with_ozone.with_n2o(gases.n2o);
-    radiate(&column, &mut Scratch::new()).iter().sum()
+    let with_n2o = with_ozone.with_n2o(gases.n2o);
+    let column = with_n2o.with_ground(Ground {
+        temperature_k: site.surface_k,
+        emissivity: site.emissivity,
+    });
+    use_column(&column)
 }
 
 /// The weighted mean over the sites of `f`.
@@ -226,25 +258,56 @@ fn mean(sites: &[Site], f: impl Fn(&Site) -> f64) -> f64 {
     sites.iter().map(|s| s.weight * f(s)).sum::<f64>() / total
 }
 
+/// The mean and the sample standard deviation of `xs`.
+fn mean_and_deviation(xs: &[f64]) -> (f64, f64) {
+    let n = xs.len() as f64;
+    let mean = xs.iter().sum::<f64>() / n;
+    let variance = xs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0);
+    (mean, variance.sqrt())
+}
+
 #[test]
-fn the_columns_clear_sky_is_lblrtms_on_rfmips_field() {
-    // Study 40 (issue #704): the column's radiation on RFMIP's 100
-    // present-day profiles, each at its own temperatures, against
-    // LBLRTM's with the halocarbons the column lacks added back
-    // (Hogan & Matricardi 2020's 0.39 W/m²). The single column of the
-    // climate is darker than CERES (`earths_single_column_against_ceres`,
-    // printed): its profile, not its radiation (issue #757).
+fn the_columns_clear_sky_is_the_line_by_line_codes_on_rfmips_field() {
+    // Study 40 and the user's decision of 2026-11-27 (issue #704): the
+    // column's radiation on RFMIP's 100 present-day profiles, each at its
+    // own temperatures and over its own grey ground, against the five
+    // line-by-line codes on the same air without its halocarbons ("PI
+    // HCs"). The single column of the climate is darker than CERES: its
+    // profile, not its radiation (track T11, issue #757).
+    //
+    // The tolerance is what the inputs leave unknown, each measured on
+    // the field (a calibration, `docs/science/radiative-transfer.md`):
+    // the codes' spread, the ground's reflection bound, and the
+    // pre-industrial halocarbons "PI HCs" keeps, which the column lacks
+    // (their removal is linear in their amounts, so they take at most the
+    // largest share of the three equivalents of what removing the rest
+    // takes).
     let (gases, sites) = field();
     let present = *gases
         .iter()
         .find(|g| g.expt == PRESENT_DAY)
         .expect("present day");
     let olr = mean(&sites, |s| outgoing(s, present, 1.0));
-    let expected = LBLRTM_PRESENT_DAY_W_M2 + super::tests::MINOR_GASES_W_M2;
-    let tolerance = RRTMGP_TOP_SHARE * LBLRTM_PRESENT_DAY_W_M2;
+    let without: Vec<f64> = LINE_BY_LINE_FIELD_W_M2
+        .iter()
+        .map(|[_, hcs]| hcs)
+        .copied()
+        .collect();
+    let (expected, spread) = mean_and_deviation(&without);
+    let removal = LINE_BY_LINE_FIELD_W_M2
+        .iter()
+        .map(|[pd, hcs]| hcs - pd)
+        .sum::<f64>()
+        / LINE_BY_LINE_FIELD_W_M2.len() as f64;
+    let share = HALOCARBON_EQUIVALENTS_PPT
+        .iter()
+        .map(|[pd, pi]| pi / (pd - pi))
+        .fold(0.0, f64::max);
+    let tolerance = spread + REFLECTION_BOUND_W_M2 + share * removal;
     println!(
-        "RFMIP's field: the column {olr:.3} W/m², LBLRTM {LBLRTM_PRESENT_DAY_W_M2} with its \
-         halocarbons, {expected:.3} without them, within {tolerance:.3}"
+        "RFMIP's field: the column {olr:.3} W/m², the codes {expected:.3} (s.d. {spread:.3}) \
+         without the halocarbons ({removal:.3} of them, {:.3} left), within {tolerance:.3}",
+        share * removal
     );
     assert!(
         (olr - expected).abs() <= tolerance,
@@ -273,7 +336,7 @@ fn methanes_and_n2os_rfmip_steps_are_within_rrtmgps_error() {
     ] {
         let olr_pi = mean(&sites, |s| outgoing(s, of(expt), 1.0));
         let step = olr_pi - olr_pd;
-        let tolerance = (rrtmgp / line_by_line - 1.0).abs();
+        let tolerance = rrtmgp_error(rrtmgp, line_by_line);
         println!(
             "RFMIP: PI {name} {olr_pi:.3} W/m²; step {step:.4} against {line_by_line} ± {:.4}",
             tolerance * line_by_line
@@ -285,4 +348,31 @@ fn methanes_and_n2os_rfmip_steps_are_within_rrtmgps_error() {
         }
     }
     assert!(failed.is_empty(), "{failed:?}");
+}
+
+#[test]
+#[ignore = "heavy: 100 columns in double precision, from the ground up"]
+fn the_grounds_reflection_bound_is_within_its_calibration() {
+    let (gases, sites) = field();
+    let present = *gases
+        .iter()
+        .find(|g| g.expt == PRESENT_DAY)
+        .expect("present day");
+    let excess = |site: &Site| {
+        with_site_column(site, present, 1.0, |column| {
+            let (down, total) = ground_downward(column);
+            let mut planck = [0.0; BANDS];
+            planck_spectrum(site.surface_k, &mut planck);
+            let grey = 1.0 - site.emissivity;
+            (0..BANDS)
+                .map(|k| grey * total[k] * ((1.0 - total[k]) * planck[k] - down[k]))
+                .sum::<f64>()
+        })
+    };
+    let bound = mean(&sites, excess);
+    println!("RFMIP's field: the ground's reflection bound over the air's {bound:.4} W/m²");
+    assert!(
+        (0.0..=REFLECTION_BOUND_W_M2).contains(&bound),
+        "{bound} against {REFLECTION_BOUND_W_M2}"
+    );
 }

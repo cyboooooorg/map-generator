@@ -270,17 +270,21 @@ fn run(raw: &Path, out: &Path, longwave_out: &Path, fluxes: bool) -> Result<(), 
                 println!("  {m}, {name}: {change:.4}");
             }
         }
-        println!("weighted clear-sky outgoing longwave at the top, present day, W/m²:");
+        println!("weighted clear-sky outgoing longwave at the top, W/m²:");
         for m in ["LBLRTM-12-8", "RTE-RRTMGP-181204"] {
             let up = read(raw, &format!("rlu_Efx_{m}_rad-irf_r1i1p1f1_gn.txt"))?;
             let rlu = up.get("rlu").ok_or("no rlu")?;
-            let olr: f64 = weights
-                .iter()
-                .enumerate()
-                .map(|(s, w)| w * rlu.at(&[0, s, top]))
-                .sum::<f64>()
-                / total;
-            println!("  {m}: {olr:.4}");
+            // Present day (0) and "PI HCs" (12), present day with the
+            // halocarbons at their pre-industrial amounts.
+            for (name, e) in [("present day", 0), ("PI HCs", 12)] {
+                let olr: f64 = weights
+                    .iter()
+                    .enumerate()
+                    .map(|(s, w)| w * rlu.at(&[e, s, top]))
+                    .sum::<f64>()
+                    / total;
+                println!("  {m}, {name}: {olr:.4}");
+            }
         }
     }
     let mut sunlit = 0;
