@@ -244,7 +244,13 @@ runaway greenhouse (see the
 [habitable zone](habitable-zone.md)). The plateau is flat "between 300 and
 1800 K in the 260 bar case, and between 300 and 1050 K in the 10 bar
 case", and rises again past about 1500 K through the 4 µm window
-(Boukrouche et al. 2021; Goldblatt 2015).
+(Boukrouche et al. 2021; Goldblatt 2015). Goldblatt et al.'s 282 W/m²
+is that of "a pure water atmosphere: neither any background gas nor any
+greenhouse gas other than water", and they add that it "depends on the
+minimum absorption cross section in the 10 µm water vapour window; any
+additional opacity here would raise the τλ = 1 surface to a higher
+altitude that radiates at a lower temperature": 1 % of CO₂ lowers it by
+2 W/m², 1 % of NH₃ by 6 (accepted manuscript, pp. 4 and 6).
 
 **Orders of magnitude.** An Earth that absorbs 240 W/m² is about 40 W/m²
 below the plateau. It would need to absorb about 282 W/m², 17 % more light than
@@ -1081,6 +1087,24 @@ the Bond albedo are there too (change 2b-2).
   greenhouse effect", and do not use the Manabe–Wetherald profile (it
   appears only in their reference list). The app attributes the falling
   humidity to Manabe & Wetherald only.
+- **The runaway's plateau and its floor.** A body in a water runaway
+  binds its runaway albedo to its own steam column's plateau
+  (`ClimateBody::plateau`, legacy `Body::plateau`) where it exceeds
+  Earth's air's: a thick air (hundreds of bar of CO₂) has no plateau of
+  its own, and Earth's air's stands in for it. Both are taken under the
+  body's own ozone (`balance::earth_moist_plateau_under`, #761): ozone's
+  9.6 µm band lies in the window that sets the limit, and an ozone-free
+  floor would give an ozone-bearing runaway up to 0.35 W/m² (at 300 DU)
+  its air cannot send out. The ozone-free reference plateau
+  (`balance::earth_moist_plateau`, 289.710 W/m²), the one checked
+  against Goldblatt et al.'s 282 W/m², holds no ozone by definition
+  (`EARTH_PLATEAU_OZONE`, a `Definition:`), as their pure water
+  atmosphere holds none; Earth's 300 DU lower it to 289.356 W/m². It
+  also holds Earth's N₂, O₂ and CO₂, which theirs does not: varying its
+  CO₂ and N₂ moves it by under 3 %
+  (`the_plateau_ignores_co2_and_nitrogen`). The floor at the body's own
+  ozone is the user's decision (2026-11-27). See [ozone.md](ozone.md),
+  "Ozone on the moist plateau".
 - **The ideal-vapour latent heat of CO₂.** The moist CO₂ adiabat takes
   $L = R T^2\,d\ln p/dT$ from the saturation curve, which treats the
   vapour as ideal. CO₂'s vapour is not ideal at its saturation pressures:
@@ -2053,7 +2077,8 @@ publisher's page (Tables 1 to 5).
 34. Goldblatt, C. 2015, *Astrobiology* 15, 362, doi:10.1089/ast.2014.1268,
     arXiv:1503.04835.
 35. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013, *Nature
-    Geosci.* 6, 661, doi:10.1038/ngeo1892.
+    Geosci.* 6, 661, doi:10.1038/ngeo1892 (the accepted manuscript in
+    the University of Victoria's repository, read).
 36. Gordon, I. E. et al. 2022, *J. Quant. Spectrosc. Radiat. Transf.* 277,
     107949, doi:10.1016/j.jqsrt.2021.107949 (HITRAN2020), and Gordon, I. E.
     et al. 2026, *J. Quant. Spectrosc. Radiat. Transf.* 353, 109807,
