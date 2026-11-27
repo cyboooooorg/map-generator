@@ -3963,6 +3963,32 @@ climate falls onto its frozen branch in the most albedo steps (7):
 | 1.3276 AU | 273.4592 K | 273.4592 K | 9.4980 bar |
 | 1.333 AU | 235.2849 K | 235.2849 K | 9.2392 bar |
 
+Since #767 the test places its orbits at run time instead of pinning
+them, so that a climate PR no longer re-probes them: round the Sun it
+bisects the methane Earth's edge and holds 0.995 of it, the edge, and
+the first orbit past it, by steps of 0.001 AU, whose climate is
+ice-covered (under `ICE_COVERED_TEMPERATURE`, about 254 K), the jump
+onto the frozen branch; round a 3300 K star it bisects the edge and
+scans down from it by 0.001 AU for the first three bistable orbits
+whose icy start settles frozen at the geometric mean above. It prints
+each orbit it reads, and an absent feature (no ice-covered orbit, no
+bistable orbit within 0.03 AU) is printed rather than failed. On main
+85c92921 it places:
+
+| Placed climate | Step rules | Half the step | Plain step |
+| --- | --- | --- | --- |
+| Sun, 1.3210 AU (0.995 of the edge) | 280.0400 K | 280.0400 K | |
+| Sun, 1.3276 AU (the edge) | 273.4178 K | 273.4178 K | |
+| Sun, 1.3336 AU (ice-covered) | 235.2033 K | 235.2033 K | |
+| 3300 K, 1.3079 AU, 33.64 bar | 247.2523 K | 247.2523 K | 247.2849 K |
+| 3300 K, 1.3069 AU, 32.78 bar | 247.9740 K | 247.9740 K | 248.0264 K |
+| 3300 K, 1.3059 AU, 32.41 bar | 249.0429 K | 249.0433 K | 249.0673 K |
+
+The 3300 K edge is 1.3079 AU, as #749 measured; its warm climate cycles
+at 1.3069 AU on its regulated side, which the test prints. The test
+takes 483 s in release against 150 s with pinned orbits: the two edge
+bisections cost the difference.
+
 Measured on 2026-11-26 at the old
 `COLLAPSE_STEP` (0.005), half, a quarter and the plain step, the
 climates just past the edge stay within:

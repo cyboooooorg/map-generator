@@ -23,7 +23,7 @@
 //! answer" on a bistable body (`earth_twice_is_the_same_earth`).
 
 use super::body::ClimateBody;
-use super::branches::{Solved, frozen_over, solve, solve_with};
+use super::branches::{Bistable, Solved, frozen_over, solve, solve_with};
 use super::fixture::{EARTH_OBLIQUITY, earth, moved, rotation, titan};
 use super::settle::{Settle, albedo_for, frozen_at, pair_residuals};
 use super::settle_tests::{cold_methane_world, settled, triton_like};
@@ -427,10 +427,15 @@ fn lit(inputs: &ClimateInputs, flux: f64) -> ClimateInputs {
     lit
 }
 
-/// Whether Earth on its temperate branch keeps liquid water at `au`
-/// round a star of `teff`.
-fn wet_at(teff: Kelvin, au: f64, numerics: &Numerics) -> bool {
-    let solved = solve_with(&inputs_at(&EARTH, au, teff), WARM_DRAW, numerics);
+/// Whether the body `build` places at `au` round a star of `teff` keeps
+/// liquid water on its temperate branch.
+fn wet_at(
+    build: &impl Fn(f64, Kelvin) -> ClimateInputs,
+    teff: Kelvin,
+    au: f64,
+    numerics: &Numerics,
+) -> bool {
+    let solved = solve_with(&build(au, teff), WARM_DRAW, numerics);
     solved.settle.liquid == Some(Liquid::Water)
 }
 
@@ -438,17 +443,33 @@ fn wet_at(teff: Kelvin, au: f64, numerics: &Numerics) -> bool {
 /// the largest orbit at which it keeps liquid water, bisected in
 /// [`EDGE_STEPS`] steps (legacy `outer_edge_au`).
 fn outer_edge_au(teff: Kelvin, numerics: &Numerics) -> f64 {
+    outer_edge_of(|au, teff| inputs_at(&EARTH, au, teff), teff, numerics)
+}
+
+/// The outer edge of the body `build` places at an orbit round a star of
+/// `teff`, AU, as [`outer_edge_au`] finds Earth's.
+fn outer_edge_of(
+    build: impl Fn(f64, Kelvin) -> ClimateInputs,
+    teff: Kelvin,
+    numerics: &Numerics,
+) -> f64 {
     // A star cooler than the Sun has its runaway limit under one Earth
     // flux (Kopparapu et al. 2014): Earth rebuilt at 1 AU round it is a
     // runaway with no water, so the search starts just past the orbit of
     // that limit, where the water is kept.
     let runaway_orbit = runaway_flux(teff).0.powf(-0.5) * PAST_RUNAWAY;
     let (mut wet, mut dry) = (EDGE_BRACKET_AU.0.max(runaway_orbit), EDGE_BRACKET_AU.1);
-    assert!(wet_at(teff, wet, numerics), "{teff:?}: frozen at {wet} AU");
-    assert!(!wet_at(teff, dry, numerics), "{teff:?}: wet at {dry} AU");
+    assert!(
+        wet_at(&build, teff, wet, numerics),
+        "{teff:?}: frozen at {wet} AU"
+    );
+    assert!(
+        !wet_at(&build, teff, dry, numerics),
+        "{teff:?}: wet at {dry} AU"
+    );
     for _ in 0..EDGE_STEPS {
         let mid = 0.5 * (wet + dry);
-        if wet_at(teff, mid, numerics) {
+        if wet_at(&build, teff, mid, numerics) {
             wet = mid;
         } else {
             dry = mid;
@@ -1961,48 +1982,47 @@ fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
     assert!(under_steam(&s));
 }
 
-/// Definition: test inputs placed around a methane Earth's outer edge,
-/// where the collapse's step is held, AU: just inside it (1.321), at the
-/// edge measured by `one_greenhouse_search_on_a_condensing_air` (1.3276
-/// since the climate keeps its air in weights, #749: on its air there,
-/// 0.746 bar of N₂, 0.013 of Ar, 2.11 of CH₄ and 9.50 of CO₂ by weight,
-/// Titan's methane is 35 % of the moles, 4.35 bar of partial pressure,
-/// where read as a partial pressure it was 2.11 bar, 17 % of the
-/// pressure) and past it, where the climate falls onto its frozen branch in
-/// the most albedo steps of the orbits probed every 0.001 AU from 1.322
-/// to 1.352 (1.333, 7 steps, 235.3 K). No orbit of it cycles now
-/// (probed every 0.005 AU from 1.20 to 1.50 AU and every 0.001 AU from
-/// 1.305 to 1.352). Before #749 the edge was 1.2720 AU and the orbits
-/// were 1.265, 1.272 and 1.282 AU, the last where the climate cycled (its
-/// test, `a_climate_with_no_fixed_point_stops_on_its_cold_side`, was
-/// deleted in #749 since no methane Earth reaches it; #767); before #703 the edge was
-/// 1.4365 AU and the orbits 1.42875, 1.4355 and 1.44 AU; before #704,
-/// 1.25, 1.2534 and 1.264 AU.
-const STEP_ORBITS: [f64; 3] = [1.321, 1.3276, 1.333];
+/// Definition: the share of a methane Earth's outer edge at which the
+/// collapse's step is held just inside it, 0.995 (#767; 1.321 AU of the
+/// 1.3276 AU edge #749 measured). The test holds three orbits round the
+/// Sun, placed at run time from the edge it bisects ([`moved_edge_au`]):
+/// this one, the edge, and the first orbit past it where the climate
+/// falls onto its frozen branch, ice-covered (under
+/// [`ICE_COVERED_TEMPERATURE`]; scanned by [`SCAN_AU`]), where a collapse
+/// starts at the fold. History of the orbits pinned before #767: 1.321, 1.3276 and
+/// 1.333 AU since #749 (no orbit cycles); 1.265, 1.272 and 1.282 AU
+/// since #704 (the last where the climate cycled); 1.42875, 1.4355 and
+/// 1.44 AU before #703; 1.25, 1.2534 and 1.264 AU after #746
+/// (`docs/science/planet-atmospheres.md`, "A collapse from the fold").
+const INSIDE_EDGE: f64 = 0.995;
 
-/// Definition: frozen climates where the collapse's step is held round
-/// cool stars (star, AU, CO₂ by weight): a methane Earth round a 3300 K
-/// star near its outer edge (1.3079 AU since #749), at the geometric
-/// mean of the CO₂ it froze with and the most its thaw search leaves
-/// frozen, a CO₂ the search passes through frozen. Since #749 it is
-/// bistable only within 0.5 % of its edge (probed every 0.001 AU from
-/// 1.2880 to 1.3120: bistable from 1.3030 to 1.3080, cycling from 1.2950
-/// to 1.3000 and at 1.3070 and 1.3080), so the three are its bistable
-/// orbits that settle, 1.3030, 1.3050 and 1.3060 AU (31.27 and 31.52,
-/// 32.04 and 32.44, 32.05 and 32.95 bar). Before #749 they were 0.94,
-/// 0.96 and 0.98 of an edge at 1.4147 AU (1.3298, 1.3581 and 1.3864 AU
-/// with 18.27, 27.96 and 39.31 bar: 215.72, 210.37 and 205.46 K); at the
-/// most it left frozen, within 0.004 bar of its thaw, an icy start's
-/// branch depended on the step (at 0.94 the plain step landed warm,
-/// 316.1 K, where the step rules stayed frozen; at 0.98 all three landed
-/// warm, 385.0 K, since #759). On #731 (main a97c1ca1), before #704 and
-/// #705, they were 4500 K at 1.2828 AU with 19.0296 and 19.6173 bar and
-/// 3300 K at 1.3586 AU with 45.9 bar.
-const COOL_FROZEN: [(Kelvin, f64, Bar); 3] = [
-    (Kelvin(3300.0), 1.3030, Bar(31.39)),
-    (Kelvin(3300.0), 1.3050, Bar(32.24)),
-    (Kelvin(3300.0), 1.3060, Bar(32.50)),
-];
+/// Definition: the step of the scans from a methane Earth's outer edge,
+/// 0.001 AU, the step its orbits were probed by since #746 (#767).
+const SCAN_AU: f64 = 0.001;
+
+/// Definition: the most steps of a scan from the edge, 30 (0.03 AU, #767):
+/// several times the distances measured on #749, the jump onto the
+/// frozen branch 0.006 AU past the Sun's methane Earth's edge and the 3300 K one's
+/// bistable band within 0.005 AU inside its edge. A scan that finds no
+/// such orbit prints that the feature is absent rather than failing.
+const SCAN_STEPS: usize = 30;
+
+/// Definition: the star of the frozen climates where the collapse's step
+/// is held round cool stars, 3300 K (`COOL_STARS`), where a methane Earth
+/// near its outer edge is bistable since #704 and #749 and its frozen
+/// branch collapses at every albedo step.
+const COOL_STAR: Kelvin = COOL_STARS[1];
+
+/// Definition: the frozen climates held round [`COOL_STAR`], 3 (#767):
+/// scanning down from its methane Earth's edge by [`SCAN_AU`], the first
+/// bistable orbits whose icy start settles frozen at the geometric mean of
+/// the CO₂ it froze with and the most its thaw search leaves frozen, a CO₂
+/// the search passes through frozen. Pinned before #767: 1.3030, 1.3050
+/// and 1.3060 AU with 31.39, 32.24 and 32.50 bar by weight since #749
+/// (edge 1.3079 AU, bistable from 1.3030 to 1.3080 AU); 1.3298, 1.3581
+/// and 1.3864 AU with 18.27, 27.96 and 39.31 bar before it (0.94, 0.96
+/// and 0.98 of an edge at 1.4147 AU).
+const COOL_FROZEN_COUNT: usize = 3;
 
 /// Earth at `au` round a star of `teff` with Titan's methane in its air
 /// (the methane Earth of #729 and #731).
@@ -2018,13 +2038,15 @@ fn methane_earth_at(au: f64, teff: Kelvin) -> ClimateInputs {
 }
 
 #[test]
-#[ignore = "heavy: a methane Earth at three orbits around its outer edge, and three frozen climates round cool stars, twice"]
+#[ignore = "heavy: a methane Earth's outer edge round the Sun and round a 3300 K star, the orbits placed from them, and their climates twice"]
 fn collapse_step_is_converged() {
     // The longest rising step of a collapse (`COLLAPSE_STEP`): at half of
     // it the climates around the edge, where collapses start at the fold,
     // keep their branch and move under `ALBEDO_TOLERANCE_K`. Each is converged
     // or cycles: a collapse stopped at `COLLAPSE_ITERATIONS` would leave
-    // it neither, and its climate would depend on the step.
+    // it neither, and its climate would depend on the step. The orbits are
+    // placed at run time (#767): each climate PR's output shows where the
+    // edge, the frozen jump and the bistable band moved.
     let like = ClimateInputs {
         air: Weights {
             ch4: titan().air.ch4,
@@ -2036,15 +2058,34 @@ fn collapse_step_is_converged() {
         collapse_step: super::COLLAPSE_STEP / 2.0,
         ..Numerics::DEFAULT
     };
-    for au in STEP_ORBITS {
+    let edge = moved_edge_au(&like, &Numerics::DEFAULT);
+    let past = (1..=SCAN_STEPS)
+        .map(|i| edge + SCAN_AU * i as f64)
+        .find(|&au| {
+            let settled = solve_with(&moved(&like, au), WARM_DRAW, &Numerics::DEFAULT).settle;
+            settled.temperature.0 < ICE_COVERED_TEMPERATURE.0
+        });
+    match past {
+        Some(au) => {
+            println!("methane Earth round the Sun: edge {edge:.4} AU, ice-covered from {au:.4} AU")
+        }
+        None => println!(
+            "methane Earth round the Sun: edge {edge:.4} AU, no ice-covered orbit \
+             within {:.3} AU past it (feature absent)",
+            SCAN_AU * SCAN_STEPS as f64
+        ),
+    }
+    let orbits = [Some(INSIDE_EDGE * edge), Some(edge), past];
+    for au in orbits.into_iter().flatten() {
         let far = moved(&like, au);
         let (a, b) = (
             solve_with(&far, WARM_DRAW, &Numerics::DEFAULT).settle,
             solve_with(&far, WARM_DRAW, &half).settle,
         );
         println!(
-            "{au} AU: {:.4} K against {:.4} K at half the step, CO2 {:.4} and {:.4} bar",
-            a.temperature.0, b.temperature.0, a.air.co2, b.air.co2
+            "{au:.4} AU: {:.4} K against {:.4} K at half the step, CO2 {:.4} and {:.4} bar, \
+             cycles {} and {}",
+            a.temperature.0, b.temperature.0, a.air.co2, b.air.co2, a.cycles, b.cycles
         );
         assert!(a.converged || a.cycles, "{au} AU: {a:?}");
         assert!(b.converged || b.cycles, "{au} AU, half the step: {b:?}");
@@ -2055,10 +2096,60 @@ fn collapse_step_is_converged() {
         );
     }
     // Round cool stars the frozen branch collapses at every albedo step.
-    for (teff, au, co2) in COOL_FROZEN {
+    let teff = COOL_STAR;
+    let cool_edge = outer_edge_of(methane_earth_at, teff, &Numerics::DEFAULT);
+    println!(
+        "methane Earth round a {} K star: edge {cool_edge:.4} AU",
+        teff.0
+    );
+    let mut frozen = Vec::new();
+    for i in 0..SCAN_STEPS {
+        let au = cool_edge - SCAN_AU * i as f64;
+        let inputs = methane_earth_at(au, teff);
+        let solved = solve_with(&inputs, WARM_DRAW, &Numerics::DEFAULT);
+        let warm = solved.settle;
+        let Some(Bistable {
+            froze,
+            still_frozen,
+            thaw: Some(_),
+            ..
+        }) = solved.bistable
+        else {
+            println!(
+                "  {au:.4} AU: {:.4} K, cycles {}, not bistable",
+                warm.temperature.0, warm.cycles
+            );
+            continue;
+        };
+        let co2 = Bar((froze.0 * still_frozen.0).sqrt());
+        let icy = frozen_at(&mut ClimateBody::new(&inputs, Numerics::DEFAULT), co2);
+        let settles = icy.converged && !icy.cycles && frozen_over(&icy);
+        println!(
+            "  {au:.4} AU: {:.4} K, cycles {}, bistable, icy start at {:.2} bar: {:.4} K, \
+             cycles {}{}",
+            warm.temperature.0,
+            warm.cycles,
+            co2.0,
+            icy.temperature.0,
+            icy.cycles,
+            if settles { ", held" } else { "" }
+        );
+        if settles {
+            frozen.push((au, co2, icy));
+            if frozen.len() == COOL_FROZEN_COUNT {
+                break;
+            }
+        }
+    }
+    if frozen.is_empty() {
+        println!(
+            "no frozen climate that settles within {:.3} AU inside the edge (feature absent)",
+            SCAN_AU * SCAN_STEPS as f64
+        );
+    }
+    for (au, co2, a) in frozen {
         let inputs = methane_earth_at(au, teff);
         let frozen = |numerics: Numerics| frozen_at(&mut ClimateBody::new(&inputs, numerics), co2);
-        let a = frozen(Numerics::DEFAULT);
         // Half the step holds the rising cap. The falling step goes to the
         // secant's zero, with no constant to halve: the plain step, which
         // finds every root, holds it.
@@ -2069,7 +2160,7 @@ fn collapse_step_is_converged() {
         for (name, numerics) in [("half the step", half), ("the plain step", plain)] {
             let b = frozen(numerics);
             println!(
-                "{} K, {au} AU, {:.4} bar: {:.4} K against {:.4} K at {name}, CO2 {:.4} and \
+                "{} K, {au:.4} AU, {:.4} bar: {:.4} K against {:.4} K at {name}, CO2 {:.4} and \
                  {:.4} bar, cycles {} and {}",
                 teff.0,
                 co2.0,
