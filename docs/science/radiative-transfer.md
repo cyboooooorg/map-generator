@@ -1725,7 +1725,7 @@ absolute fluxes; their spread is the measure taken here), and a
 line-by-line value with RFMIP's halocarbons removed entirely. Carbon
 monoxide (120 ppb in RFMIP's present day) is not in the column and was
 not measured. The test costs 25 s of the tier-1 run (100 columns in a
-debug build); with it `mise run ci` ran tier 1 in TIER1_SECONDS s of
+debug build); with it `mise run ci` ran tier 1 in 74.4 s of
 its 120 s budget.
 
 Two direct checks agree:
