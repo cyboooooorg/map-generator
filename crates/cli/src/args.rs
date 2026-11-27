@@ -16,6 +16,8 @@ use crate::system::SystemCommand;
 #[derive(Parser, Debug)]
 #[command(version, about = "Draws planetary systems and explains their values")]
 pub struct Cli {
+    #[command(flatten)]
+    pub global: GlobalArgs,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -306,18 +308,36 @@ mod tests {
         }
     }
 
-    #[derive(Parser)]
-    struct Probe {
-        #[command(flatten)]
-        g: GlobalArgs,
+    #[test]
+    fn global_options_default() {
+        let cli = Cli::try_parse_from(["map-generator", "system"]).unwrap();
+        assert_eq!(cli.global.root, PathBuf::from("map-generator-store"));
+        assert_eq!(cli.global.cache_budget, catalogue::DEFAULT_BUDGET);
     }
 
     #[test]
-    fn global_args_default_and_override() {
-        let probe = Probe::try_parse_from(["probe"]).unwrap();
-        assert_eq!(probe.g.root, PathBuf::from("map-generator-store"));
-        assert_eq!(probe.g.cache_budget, catalogue::DEFAULT_BUDGET);
-        let probe = Probe::try_parse_from(["probe", "--cache-budget", "512MiB"]).unwrap();
-        assert_eq!(probe.g.cache_budget, 512 << 20);
+    fn global_options_go_before_or_after_the_command() {
+        for argv in [
+            &[
+                "map-generator",
+                "--cache-budget",
+                "1GiB",
+                "--root",
+                "r",
+                "system",
+            ][..],
+            &[
+                "map-generator",
+                "system",
+                "--cache-budget",
+                "1GiB",
+                "--root",
+                "r",
+            ][..],
+        ] {
+            let cli = Cli::try_parse_from(argv).unwrap();
+            assert_eq!(cli.global.cache_budget, 1 << 30);
+            assert_eq!(cli.global.root, PathBuf::from("r"));
+        }
     }
 }
