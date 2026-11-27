@@ -109,10 +109,16 @@ pub const HOTTEST: Kelvin = Kelvin(1.0e6);
 /// star's light cannot grow hotter than the star's photosphere in a
 /// steady state: an element hotter than every other would lose heat to
 /// all of them (study 41, issue #775). A greenhouse raises the surface
-/// over its equilibrium temperature, never over its source's. The body's
-/// internal heat (at most a few W/m² in the model) could in principle
-/// carry it higher; no body the model makes holds the `σ T_eff⁴`, some
-/// 10⁶ W/m², that would take.
+/// over its equilibrium temperature, never over its source's.
+///
+/// The bound holds for the starlight alone: under a greenhouse the
+/// body's internal heat is amplified as the starlight is, and a body
+/// heated from inside can be hotter than its star. What makes the cap
+/// hold in the model is the ratio of the internal heat, 0.2 to 4.3 W/m²
+/// on the runaways of study 41, to the light they absorb, 10³ to
+/// 10⁶ W/m². A strongly tidally heated body under a cool star would be
+/// clipped by it. When the ceiling binds the balance is unmet, and no
+/// node of the cause tree says so yet (#782).
 pub fn second_law_ceiling(stars: impl IntoIterator<Item = Kelvin>) -> Kelvin {
     stars
         .into_iter()

@@ -959,7 +959,7 @@ reads the forcings, never the central object's kind).
    the shortwave table's bins up to 14 364 cm⁻¹ (0.7 µm), its lines and
    continua of water and CO₂ emitting and absorbing as in the bins, and
    past 0.7 µm the ground's light through the air's Rayleigh scattering
-   alone, `1/(1 + 0.83 τ_R)` per band of the star's (study 41, #775; see
+   alone, $1/(1 + 0.83\,\tau_R)$ per band of the star's (study 41, #775; see
    [Runaway surfaces past the published
    profiles](planet-atmospheres.md#runaway-surfaces-past-the-published-profiles-study-41-775)).
    In each bin,
