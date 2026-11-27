@@ -400,7 +400,11 @@ O₂'s bands. The order of the radiation studies' pull requests is 33, 35,
   band then emits about a quarter to two fifths less than the real
   layer at the band's centre (the Planck ratios above), and overstates
   ozone's longwave greenhouse: measured, 8.37 W/m² on Earth's column
-  against 7.46 on RFMIP's own temperatures (above).
+  against 7.46 on RFMIP's own temperatures (above). Study 40
+  ([radiative-transfer.md](radiative-transfer.md#where-it-departs-from-the-science),
+  "The column's stratosphere") found that an ozone-heated stratosphere in
+  radiative equilibrium takes 8.00 W/m², and sends out less, not more:
+  the clear sky's gap with CERES is not the stratosphere's heat.
 - **O₂ bands outside the table.** `shortwave.bin` starts at 0.7 µm
   (14 364 cm⁻¹): the A band and the 1.27 µm band fall inside it, the B
   and γ bands and the visible collision pairs do not.

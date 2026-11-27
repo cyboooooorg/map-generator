@@ -1733,6 +1733,107 @@ under a 214.4 K skin (the test's 214.51 K moves each by about
   sends out 233.90 W/m², 6.2 under CERES's 240.1: the clear sky's
   shortfall of the CERES test, the clouds now taking CERES's 25.7.
 
+**The column's stratosphere (study 40, 2026-11-27).** The user asked
+whether the CERES test's 3.40 W/m² come from the column's stratosphere,
+held at the skin temperature, and for a general law that heats it with
+the ozone it holds. Scratch probes on the test's column (288 K,
+280 ppm, 1803 ppb of methane, 324.2 ppb of N₂O, 300 DU, clear; nothing
+of them is in the code) measured it; Wiki study
+[40](https://github.com/cyboooooorg/map-generator/wiki/40-column-stratosphere)
+holds the details.
+
+The column's moist adiabat meets the 214.51 K skin at 0.256 bar and
+holds it above, with the cold trap's 9.3 ppmv of water. Against the
+U.S. Standard Atmosphere (AFGL `afglus.dat`, Anderson et al. 1986), the
+mean of RFMIP's 100 profiles (each pressure's temperature, weighted;
+Pincus et al. 2016) and a radiative–convective equilibrium (RCE, below)
+on the same column, K:
+
+| Pressure (bar) | Column | U.S. Standard | RFMIP mean | RCE |
+| --- | --- | --- | --- | --- |
+| 0.510 | 253.0 | 252.9 | 259.6 | 253.0 |
+| 0.287 | 217.8 | 226.7 | 231.8 | 217.8 |
+| 0.203 | 214.5 | 216.7 | 219.5 | 207.7 |
+| 0.102 | 214.5 | 216.7 | 205.6 | 202.5 |
+| 0.051 | 214.5 | 217.2 | 211.2 | 204.0 |
+| 0.029 | 214.5 | 220.8 | 217.4 | 207.8 |
+| 0.010 | 214.5 | 227.9 | 228.3 | 220.0 |
+| 0.0029 | 214.5 | 250.4 | 248.1 | 251.8 |
+| 0.0010 | 214.5 | 270.6 | 262.0 | 271.3 |
+
+The RCE is the column's own radiation solved to equilibrium above its
+adiabat: every level's net infrared (up and down fluxes from the same
+k-table, random overlap and layers as `radiate`, which it reproduces
+within 0.012 W/m² on the column's own profile) plus the light Earth's
+300 DU take above it (Serdyuchenko et al.'s 223 K cross-sections on
+the Sun of the table of spectra, 340.25 W/m² at the diffusivity's slant,
+a ground reflecting 0.29 of it back up through the ozone: 12.94 W/m²
+in all), the temperature the larger of the adiabat's and the
+radiative one (a convective adjustment, Manabe & Wetherald 1967),
+iterated with a diagonal Newton step until no radiative level gains
+more than 0.002 W/m². It warms the upper stratosphere as the
+observations do (271 K at 1 hPa) and cools the lower one to 202 to
+208 K, 6 to 13 K under the U.S. Standard and near RFMIP's mean at
+0.1 bar. What each stratosphere does to the test's column, W/m²
+(outgoing; then, at fixed temperatures, what ozone, N₂O and methane
+take and what doubling CO₂ takes):
+
+| Column | Outgoing | O₃ | N₂O | CH₄ | 2×CO₂ |
+| --- | --- | --- | --- | --- | --- |
+| As it is (skin) | 261.24 | 8.37 | 2.18 | 1.98 | 3.46 |
+| Stratosphere at the U.S. Standard (never under the skin) | 265.22 | 7.58 | 2.10 | 1.90 | 2.78 |
+| Stratosphere at RFMIP's mean (never under the skin) | 264.59 | 7.71 | 2.11 | 1.91 | 2.85 |
+| Stratosphere at RFMIP's mean | 263.56 | 7.77 | 2.14 | 1.93 | 2.83 |
+| U.S. Standard over the whole air (the column's water) | 266.99 | 7.59 | 2.08 | 1.88 | 2.75 |
+| RCE | 260.66 | 8.00 | 2.23 | 1.98 | 3.03 |
+| RCE, stratospheric water 5 ppmv | 262.36 | 7.87 | 2.21 | | |
+| RCE over a 6.5 K/km troposphere | 262.59 | 7.96 | 2.16 | | |
+| RCE over 6.5 K/km, water 5 ppmv | 264.32 | 7.83 | 2.14 | | |
+
+The test's window is 264.64 to 273.08 W/m²; N₂O's sources give at
+most 1.88, ozone's RFMIP temperatures 7.46. Findings:
+
+- **The stratosphere's heat is not the gap.** An ozone-heated
+  stratosphere in radiative equilibrium sends out 0.58 W/m² less than
+  the skin's, not more: its warm top (above 10 hPa) is thin, and its
+  cold lower layers, where CO₂'s and ozone's bands emit, are colder than
+  the skin. Only the observed stratospheres (U.S. Standard, RFMIP's
+  mean, both warmer than the RCE at 0.03 to 0.1 bar) close 2.3 to
+  4.0 W/m², which no law of the column reproduces.
+- **Three parts of the single column add up.** The moist adiabat from
+  288 K runs 7 to 9 K under the U.S. Standard at 0.2 to 0.3 bar (+1.2
+  to +1.9 W/m² at 6.5 K/km, Manabe & Wetherald's critical lapse rate);
+  the cold trap at the skin leaves 9.3 ppmv of water in the
+  stratosphere, about twice Manabe & Wetherald's floor of 3e-6 g/g
+  (4.8 ppmv; +0.5 to +1.7 W/m² at 5 ppmv); and the stratosphere's
+  temperature (−0.6 to +4.0 W/m²). Together, in the RCE, 264.32 W/m²,
+  0.32 under the window.
+- **N₂O's excess is not the stratosphere's.** It takes 2.08 to
+  2.23 W/m² in every profile, against 1.5 to 1.88.
+- **Without ozone the RCE's stratosphere is far under the skin.** With
+  no light absorbed above the troposphere, CO₂'s cooling takes Earth's
+  stratosphere down to 97 to 174 K (0.13 to 0.001 bar), an M dwarf's
+  Earth (71 DU, 0.30 W/m² absorbed) to 126 to 184 K, and Titan's (no
+  haze heating) to 45 to 65 K. A general law needs the light every
+  absorber takes at each level (CO₂'s, water's and methane's near
+  infrared, the haze), which the shortwave column does not resolve
+  above 1 % of the surface pressure. Robinson & Catling 2014 (Table 1)
+  heat Earth's stratosphere with 7 W/m² and Titan's with 1.49, and
+  Titan's upper troposphere is radiative because its haze absorbs there
+  ("significant shortwave absorption in its upper hazy troposphere
+  causes stability against convection"): the same RCE would serve
+  issue #750, with that heating.
+- **The cost.** The probe's RCE takes 19 to 31 iterations of an
+  all-pairs flux sum, about 3 s per column in a release build, where
+  `radiate` takes 3.5 ms; a production version would cost at least one
+  up-and-down flux sum per iteration.
+
+The analytic alternatives (Guillot 2010, eq. 49; Robinson & Catling
+2012, eqs. 15 to 18) heat a grey stratosphere through
+`k = τ_sw / τ_IR`, a ratio fitted per world (Robinson & Catling 2014,
+Table 1: 90 for Earth's stratosphere, 180 for Titan's), not derived
+from the gases. No change was made: the options went back to the user.
+
 **Sources the audit could not read.** Kasting 1991 (Appendix B),
 Pierrehumbert 2010 (equation 2.33), the CRC polarizabilities and Sobolev
 1975 are behind paywalls or out of print. For each but the CRC, the
@@ -1982,7 +2083,8 @@ publisher's page (Tables 1 to 5).
     Band of Carbon Dioxide*, PhD thesis, University of Michigan, NASA
     contract NASr-54(03), NTRS 19690019487 (read).
 85. Robinson, T. D., Catling, D. C. 2014, *Nature Geosci.* 7, 12,
-    doi:10.1038/ngeo2020, arXiv:1312.6859.
+    doi:10.1038/ngeo2020, arXiv:1312.6859 (Table 1 and its text read for
+    study 40).
 86. Romps, D. M., Seeley, J. T., Edman, J. P. 2022, *J. Climate* 35, 4027,
     doi:10.1175/JCLI-D-21-0275.1.
 87. Rossow, W. B., Schiffer, R. A. 1999, *Bull. Am. Meteorol. Soc.* 80,
@@ -2075,6 +2177,16 @@ publisher's page (Tables 1 to 5).
      fusion, 0.172 kcal/mole at 63.15 K; read in the NIST scan,
      <https://nvlpubs.nist.gov/nistpubs/Legacy/circ/nbscircular500.pdf>,
      PDF page 569).
+118. Robinson, T. D., Catling, D. C. 2012, *ApJ* 757, 104,
+     doi:10.1088/0004-637X/757/1/104, arXiv:1209.1833 (read: §2.4,
+     eqs. 15 to 18, and §2.5).
+119. Guillot, T. 2010, *A&A* 520, A27,
+     doi:10.1051/0004-6361/200913396, arXiv:1006.4702 (its global-mean
+     profile, eq. 49, located; not used).
+120. Manabe, S., Strickler, R. F. 1964, *J. Atmos. Sci.* 21, 361,
+     doi:10.1175/1520-0469(1964)021<0361:TEOTAW>2.0.CO;2 (the first
+     radiative–convective equilibrium with ozone; not read: the
+     publisher refused the download).
 
 ## See also
 
