@@ -39,8 +39,10 @@ pub enum CliError {
     Codec(CodecError),
     /// The PNG width is odd or zero.
     Width(u32),
-    /// The system has no such body.
-    NoSuchBody(Designation),
+    /// `--body` is not a designation's body part (`b`, `c`…, `A`).
+    InvalidBody(String),
+    /// The system has no such body; carries the body part asked for.
+    NoSuchBody(String),
     /// The body is a star: only planets have a surface to map.
     NotAPlanet(Designation),
     /// The body's timeline has no keyframe at its present.
@@ -62,6 +64,7 @@ impl fmt::Display for CliError {
             Self::World(error) => write!(f, "{error}"),
             Self::Codec(error) => write!(f, "cli.world.codec: {error}"),
             Self::Width(width) => write!(f, "cli.world.width: {width} (even, above 0)"),
+            Self::InvalidBody(body) => write!(f, "cli.world.invalid-body: {body:?}"),
             Self::NoSuchBody(body) => write!(f, "cli.world.no-such-body: {body}"),
             Self::NotAPlanet(body) => write!(f, "cli.world.not-a-planet: {body}"),
             Self::NoPresentKeyframe(body) => {

@@ -26,7 +26,9 @@ use crate::error::CliError;
 )]
 #[derive(Clone, Debug)]
 pub struct WorldRequest {
-    pub body: Designation,
+    /// The body part of the designation: `b`, `c`… for the planets, `A`
+    /// for the star. The system number comes from the drawn system.
+    pub body: String,
     /// The cell size, [`world::DEFAULT_CELL`] by default.
     pub cell: Metre,
     /// The field to project, `relief.height` by default.
@@ -60,8 +62,10 @@ pub struct WorldRun {
 ///
 /// # Errors
 ///
-/// An odd or zero width, a store, producer, relief or export failure, or
-/// a body that is missing, is a star, or has no keyframe at its present.
+/// A body text that is not a designation's body part (refused before the
+/// producer runs), an odd or zero width, a store, producer, relief or
+/// export failure, or a body that is missing, is a star, or has no
+/// keyframe at its present.
 #[cfg_attr(
     not(test),
     expect(dead_code, reason = "called by the world command, pull request B")
@@ -75,6 +79,14 @@ pub fn run<E>(
 where
     CliError: From<E>,
 {
+    // Any valid system number: the body part is checked before the engine
+    // runs, the real number is known only once the timelines exist.
+    if format!("MGS 10000 {}", request.body)
+        .parse::<Designation>()
+        .is_err()
+    {
+        return Err(CliError::InvalidBody(request.body.clone()));
+    }
     if request.width == 0 || !request.width.is_multiple_of(2) {
         return Err(CliError::Width(request.width));
     }
@@ -90,22 +102,27 @@ where
             (all, false)
         }
     };
+    let no_such_body = || CliError::NoSuchBody(request.body.clone());
+    let number = all.first().ok_or_else(no_such_body)?.body.system.get();
+    let body: Designation = format!("MGS {number} {}", request.body)
+        .parse()
+        .map_err(|_| CliError::InvalidBody(request.body.clone()))?;
     let timeline = all
         .iter()
-        .find(|timeline| timeline.body == request.body)
-        .ok_or(CliError::NoSuchBody(request.body))?;
+        .find(|timeline| timeline.body == body)
+        .ok_or_else(no_such_body)?;
     let index = timeline
         .keyframes
         .iter()
         .position(|keyframe| keyframe.date() == timeline.present)
-        .ok_or(CliError::NoPresentKeyframe(request.body))?;
+        .ok_or(CliError::NoPresentKeyframe(body))?;
     let BodyState::Planet(state) = timeline.keyframes[index].state() else {
-        return Err(CliError::NotAPlanet(request.body));
+        return Err(CliError::NotAPlanet(body));
     };
     let grid = Grid::for_radius(Metre::from(*state.bulk.radius.value()), request.cell);
     let key = WorldKey {
         system: id,
-        body: request.body,
+        body,
         keyframe: u32::try_from(index).expect("a timeline has fewer than 2^32 keyframes"),
         grid: grid.n(),
         engine: timeline.engine,
@@ -170,10 +187,13 @@ mod tests {
     use std::path::Path;
 
     use science::units::Gyr;
+    use science::units::{Dex, Kelvin, SolarLuminosity, SolarMass, SolarRadius};
     use system::{BodyRequest, INPUTS_SCHEMA, Request};
     use tempfile::TempDir;
-    use timeline::fixtures::earth_like_fixture;
-    use timeline::{Code, ContractError, Keyframe, Seed, SystemNumber, Trace};
+    use timeline::fixtures::{earth_like_fixture, leaf};
+    use timeline::{
+        Code, ContractError, Keyframe, Seed, StarPhase, StarState, SystemNumber, Trace,
+    };
 
     use super::*;
 
@@ -192,8 +212,42 @@ mod tests {
         }
     }
 
+    fn number() -> SystemNumber {
+        SystemNumber::new(10_001).unwrap()
+    }
+
     fn designation(rank: u32) -> Designation {
-        Designation::planet(SystemNumber::new(10_001).unwrap(), rank).unwrap()
+        Designation::planet(number(), rank).unwrap()
+    }
+
+    /// The Sun's nominal values, as in `timeline`'s keyframe tests.
+    fn sun(trace: &mut Trace) -> StarState {
+        StarState {
+            phase: StarPhase::MainSequence,
+            mass: leaf(trace, "star.mass", SolarMass(1.0)),
+            radius: leaf(trace, "star.radius", SolarRadius(1.0)),
+            luminosity: leaf(trace, "star.luminosity", SolarLuminosity(1.0)),
+            effective_temperature: leaf(trace, "star.teff", Kelvin(5772.0)),
+            metallicity: leaf(trace, "star.metallicity", Dex(0.0)),
+            interior: None,
+        }
+    }
+
+    /// A star timeline followed by the planet of [`timelines`].
+    fn star_and_planet() -> Result<Vec<Timeline>, ContractError> {
+        let mut trace = Trace::new();
+        let state = sun(&mut trace);
+        let keyframe = Keyframe::new(Gyr(4.57), BodyState::Star(state), &trace)?;
+        let star = Timeline::new(
+            Designation::star(number()),
+            Seed::new(1),
+            ENGINE_VERSION,
+            Gyr(4.57),
+            vec![keyframe],
+        )?;
+        let mut all = vec![star];
+        all.extend(timelines(false)?);
+        Ok(all)
     }
 
     fn timelines(surfaceless: bool) -> Result<Vec<Timeline>, ContractError> {
@@ -228,9 +282,9 @@ mod tests {
         )?])
     }
 
-    fn request(out: &Path, rank: u32) -> WorldRequest {
+    fn request(out: &Path, body: &str) -> WorldRequest {
         WorldRequest {
-            body: designation(rank),
+            body: body.to_owned(),
             cell: Metre(2_000_000.0),
             field: FieldId(Code::of(HEIGHT)),
             width: WIDTH,
@@ -247,7 +301,7 @@ mod tests {
     fn first_run_generates_then_second_hits_caches() {
         let dir = TempDir::new().unwrap();
         let store = FsStore::new(dir.path().join("store"), u64::MAX);
-        let request = request(dir.path(), 1);
+        let request = request(dir.path(), "c");
         let first = run(&store, &inputs(), &request, |_| timelines(false)).unwrap();
         assert!(!first.timelines_cached && !first.world_cached);
         assert_eq!(first.system, first.key.system);
@@ -266,10 +320,43 @@ mod tests {
     }
 
     #[test]
+    fn malformed_body_is_refused_before_the_engine_runs() {
+        let dir = TempDir::new().unwrap();
+        let store = FsStore::new(dir.path().join("store"), u64::MAX);
+        for bad in ["", "b c", "aa", "MGS 10001 b"] {
+            let request = request(dir.path(), bad);
+            let error = run(
+                &store,
+                &inputs(),
+                &request,
+                |_| -> Result<_, ContractError> { panic!("the engine must not run") },
+            )
+            .unwrap_err();
+            assert!(
+                matches!(error, CliError::InvalidBody(_)),
+                "{bad:?}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn star_is_refused() {
+        let dir = TempDir::new().unwrap();
+        let store = FsStore::new(dir.path().join("store"), u64::MAX);
+        let request = request(dir.path(), "A");
+        let error = run(&store, &inputs(), &request, |_| star_and_planet()).unwrap_err();
+        assert!(
+            matches!(error, CliError::NotAPlanet(d) if d == Designation::star(number())),
+            "{error}"
+        );
+        assert_eq!(count(&request.out), 0);
+    }
+
+    #[test]
     fn unknown_body_is_refused() {
         let dir = TempDir::new().unwrap();
         let store = FsStore::new(dir.path().join("store"), u64::MAX);
-        let request = request(dir.path(), 2);
+        let request = request(dir.path(), "d");
         let error = run(&store, &inputs(), &request, |_| timelines(false)).unwrap_err();
         assert!(matches!(error, CliError::NoSuchBody(_)), "{error}");
         assert_eq!(count(&request.out), 0);
@@ -279,7 +366,7 @@ mod tests {
     fn surfaceless_planet_is_refused() {
         let dir = TempDir::new().unwrap();
         let store = FsStore::new(dir.path().join("store"), u64::MAX);
-        let request = request(dir.path(), 1);
+        let request = request(dir.path(), "c");
         let error = run(&store, &inputs(), &request, |_| timelines(true)).unwrap_err();
         assert!(
             matches!(error, CliError::Relief(relief::ReliefError::NoSurface)),
@@ -293,7 +380,7 @@ mod tests {
     fn zero_budget_still_exports() {
         let dir = TempDir::new().unwrap();
         let store = FsStore::new(dir.path().join("store"), 0);
-        let request = request(dir.path(), 1);
+        let request = request(dir.path(), "c");
         let run = run(&store, &inputs(), &request, |_| timelines(false)).unwrap();
         assert!(run.exported.world.exists() && run.exported.png.exists());
         assert!(run.evicted.contains(&CacheKey::World(run.key.clone())));
@@ -323,7 +410,7 @@ mod tests {
     fn producer_error_is_passed_through() {
         let dir = TempDir::new().unwrap();
         let store = FsStore::new(dir.path().join("store"), u64::MAX);
-        let request = request(dir.path(), 1);
+        let request = request(dir.path(), "c");
         let called = Cell::new(false);
         let error = run(&store, &inputs(), &request, |_| {
             called.set(true);
@@ -343,7 +430,7 @@ mod tests {
         let store = FsStore::new(dir.path().join("store"), u64::MAX);
         let request = WorldRequest {
             width: 63,
-            ..request(dir.path(), 1)
+            ..request(dir.path(), "c")
         };
         let error = run(
             &store,
@@ -362,7 +449,7 @@ mod tests {
     fn no_present_keyframe_is_refused() {
         let dir = TempDir::new().unwrap();
         let store = FsStore::new(dir.path().join("store"), u64::MAX);
-        let request = request(dir.path(), 1);
+        let request = request(dir.path(), "c");
         let error = run(&store, &inputs(), &request, |_| two_keyframes(4.3)).unwrap_err();
         assert!(matches!(error, CliError::NoPresentKeyframe(_)), "{error}");
         assert_eq!(count(&request.out), 0);
