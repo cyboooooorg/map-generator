@@ -44,7 +44,7 @@ const GIANT_FRACTION_RANGE: (f64, f64) = (0.07, 0.40);
 /// spin); every other class takes the rocky law. Ice giants share it for
 /// want of a sourced primordial spin (Uranus 0.17 and Neptune 0.16 lie
 /// inside the range, derived).
-pub(crate) fn is_giant(class: PlanetClass) -> bool {
+pub fn is_giant(class: PlanetClass) -> bool {
     matches!(
         class,
         PlanetClass::GasGiant | PlanetClass::HotJupiter | PlanetClass::IceGiant

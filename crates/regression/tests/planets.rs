@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 
 use regression::{LoggedRead, Reference, digest, reference_requests, references};
 use science::escape::MIN_ENVELOPE;
-use system::planet::class_of;
+use system::planet::{ALBEDO_TOLERANCE_K, class_of, is_giant};
 use system::{ArchetypeId, Placement, draw_with};
 use timeline::{Biosphere, Code, LiquidKind, NodeId, Origin, PlanetClass, PlanetState, Trace};
 
@@ -20,21 +20,10 @@ use timeline::{Biosphere, Code, LiquidKind, NodeId, Origin, PlanetClass, PlanetS
 /// `regression::reference_requests()` (seed 7).
 const EARTH_LIKE_REFERENCE: usize = 6;
 
-/// Calibration: the tolerance on a pinned surface temperature, K, the
-/// albedo's fixed point `ALBEDO_TOLERANCE_K` of
-/// `system::planet::climate` (0.1 K, study 25, "Solver constants"): a
-/// change of the draw under it is not a change of the planet.
-const TEMPERATURE_TOLERANCE_K: f64 = 0.1;
-
-/// Definition: the classes the spin draws with the giant law, as
-/// `system::spin::is_giant` (private to the crate): a body of one of them
-/// has no surface.
-fn is_giant(class: PlanetClass) -> bool {
-    matches!(
-        class,
-        PlanetClass::GasGiant | PlanetClass::HotJupiter | PlanetClass::IceGiant
-    )
-}
+/// Definition: the tolerance on a pinned surface temperature, K, the
+/// tolerance of the albedo's fixed point (`system::planet::ALBEDO_TOLERANCE_K`):
+/// a change of the draw under it is not a change of the planet.
+const TEMPERATURE_TOLERANCE_K: f64 = ALBEDO_TOLERANCE_K.0;
 
 fn name(reference: &Reference, placement: &Placement) -> String {
     format!(
@@ -78,7 +67,6 @@ fn reads_of<'a>(reference: &'a Reference, placement: &Placement) -> Vec<&'a Logg
 fn the_reference_planets() {
     golden_digests();
     the_draw_is_pure_within_a_run();
-    asked_archetypes_are_placed();
     every_reference_planet_is_modelled();
     every_trial_seed_is_unique();
     the_earth_like_reference_has_a_surface();
@@ -122,21 +110,6 @@ fn the_draw_is_pure_within_a_run() {
     assert_eq!(digest(&again), digest(&references()[0].drawn), "purity");
 }
 
-/// An asked archetype is placed: reference 7 asks for an earth-like and
-/// one of its placements carries it (the tier-3 CLI test checks the
-/// report; this keeps the coverage on the shared draw).
-fn asked_archetypes_are_placed() {
-    let earth_like = ArchetypeId(Code::of("earth-like"));
-    assert!(
-        references()[EARTH_LIKE_REFERENCE]
-            .drawn
-            .placements
-            .iter()
-            .any(|p| p.trial.archetype.as_ref() == Some(&earth_like)),
-        "reference 7 has no earth-like placement"
-    );
-}
-
 fn every_reference_planet_is_modelled() {
     let mut count = 0;
     for r in references() {
@@ -174,8 +147,9 @@ fn every_trial_seed_is_unique() {
 fn the_earth_like_reference_has_a_surface() {
     // The archetype's promise (a definition, not a pin): an asked
     // earth-like is a planet with a surface, whatever its envelope draw
-    // would have given (#695). Folded into the shared build (ruling of
-    // 2025-11-25: its own draw alone took 138 s of tier 2).
+    // would have given (#695). Finding it also checks that the asked
+    // archetype is placed. Folded into the shared build (ruling of
+    // 2026-11-25: its own draw alone took 138 s of tier 2).
     let earth_like = ArchetypeId(Code::of("earth-like"));
     let r = &references()[EARTH_LIKE_REFERENCE];
     let (placement, state) = r
@@ -251,7 +225,8 @@ fn draw_class(reference: &Reference, placement: &Placement) -> PlanetClass {
 /// Pin (first run, 2026-11-27, macOS): the placements whose class changes
 /// between the draw (circular trial) and the model (drawn eccentric
 /// orbit, higher mean flux, K1): system, designation, eccentricity, draw
-/// class, model class.
+/// class, model class. Empty, so the check is vacuous until a reference
+/// planet changes class.
 const CLASS_CHANGES: &[(&str, &str, f64, &str, &str)] = &[];
 
 fn class_changes_between_draw_and_model_are_pinned() {
@@ -272,8 +247,6 @@ fn class_changes_between_draw_and_model_are_pinned() {
                 drawn_class.code(),
                 state.class.value().code(),
             ));
-        } else if e == 0.0 {
-            // Same trial, same answer: nothing to count.
         }
     }
     let actual: Vec<String> = changes
@@ -296,6 +269,8 @@ fn class_changes_between_draw_and_model_are_pinned() {
 /// Pin (first run, 2026-11-27, macOS; a regression net, not a source):
 /// designation, class, liquid, biosphere, surface temperature in K. The
 /// temperature is within `TEMPERATURE_TOLERANCE_K`; the rest is exact.
+/// The temperatures of the runaway-greenhouse and steam-world rows (up to
+/// 10 334 K) are under study in #775: pinned as the model gives them.
 const PLANETS: &[(&str, &str, &str, &str, Option<f64>)] = &[
     ("MGS 17371 b@1", "hot-jupiter", "none", "none", None),
     ("MGS 17371 c@1", "gas-giant", "none", "none", None),
@@ -417,7 +392,8 @@ fn the_reference_planets_are_pinned() {
 
 /// Pin (first run, 2026-11-27, macOS): how many reference planets have a
 /// biosphere (none: the one earth-like planet drew `lifeless`), and how
-/// many of them have no liquid water in their second climate.
+/// many of them have no liquid water in their second climate. The check
+/// is vacuous until a reference has a living planet.
 const LIVING: usize = 0;
 const LIVING_WITHOUT_WATER_AFTER_OXYGEN: usize = 0;
 

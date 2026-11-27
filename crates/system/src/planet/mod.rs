@@ -109,6 +109,8 @@ mod volcanism_tests;
 #[cfg(test)]
 mod water_tests;
 
+pub use crate::spin::is_giant;
+pub use climate::ALBEDO_TOLERANCE_K;
 pub use interior::InteriorError;
 
 use crate::{Placement, SystemError, Trial, TrialOutcome};
