@@ -424,13 +424,17 @@ pub fn moist_plateau(
     plateau
 }
 
-/// Source: the ozone column of the plateau checked against the
-/// Simpson–Nakajima limit ([`earth_moist_plateau`],
-/// [`SIMPSON_NAKAJIMA_W_M2`]), none: Goldblatt et al. 2013's 282 W/m²
-/// is that of "a pure water atmosphere: neither any background gas nor
-/// any greenhouse gas other than water" (*Nature Geosci.* 6, 661,
-/// accepted manuscript p. 4). Earth holds 300 DU; a body's runaway
-/// takes its own ozone, and Earth's air's plateau under it
+/// Definition: the ozone column of the ozone-free reference plateau
+/// ([`earth_moist_plateau`]), none: the plateau checked against the
+/// Simpson–Nakajima limit ([`SIMPSON_NAKAJIMA_W_M2`]), Goldblatt et al.
+/// 2013's 282 W/m², that of "a pure water atmosphere: neither any
+/// background gas nor any greenhouse gas other than water" (*Nature
+/// Geosci.* 6, 661, accepted manuscript p. 4). The plateau also holds
+/// Earth's N₂, O₂ and CO₂ ([`EARTH_DRY_AIR`]), which Goldblatt's does
+/// not: the column's test holds that its CO₂ (400 ppm to 1 %) and N₂
+/// (one to three Earth's) move its outgoing radiation by under 3 %
+/// (`the_plateau_ignores_co2_and_nitrogen`; its O₂ is not varied). Earth holds 300 DU; a
+/// runaway's floor takes the runaway's own ozone
 /// ([`earth_moist_plateau_under`]; `docs/science/ozone.md`, "Ozone on
 /// the moist plateau", #761).
 pub const EARTH_PLATEAU_OZONE: DobsonUnit = DobsonUnit(0.0);
@@ -469,14 +473,12 @@ pub fn earth_moist_plateau() -> WattPerSquareMetre {
 /// additional opacity here would raise the τλ = 1 surface to a higher
 /// altitude that radiates at a lower temperature"); a floor without it
 /// would hand an ozone-bearing runaway a plateau its air cannot send
-/// out (#761). `ozone` of [`EARTH_PLATEAU_OZONE`] or less (none, or a
-/// negative or NaN column read as none) returns [`earth_moist_plateau`]
-/// itself, solved once.
+/// out (#761). No ozone (zero, or a negative or NaN column read as
+/// none) returns [`earth_moist_plateau`] itself, solved once.
 pub fn earth_moist_plateau_under(ozone: DobsonUnit, cache: &mut ColumnCache) -> WattPerSquareMetre {
-    let anchor = earth_moist_plateau();
-    if ozone.0.is_nan() || ozone.0 <= EARTH_PLATEAU_OZONE.0 {
-        return anchor;
-    }
+    let Some(ozone) = floor_ozone(ozone) else {
+        return earth_moist_plateau();
+    };
     moist_plateau(
         &EARTH_DRY_AIR,
         ozone,
@@ -484,9 +486,16 @@ pub fn earth_moist_plateau_under(ozone: DobsonUnit, cache: &mut ColumnCache) -> 
         STANDARD_GRAVITY,
         Profile::PLATEAU,
         &PLATEAU_SURFACES,
-        anchor,
+        earth_moist_plateau(),
         cache,
     )
+}
+
+/// The ozone column [`earth_moist_plateau_under`] solves a floor under:
+/// `None` for no ozone, a column of zero, a negative or a NaN one, whose
+/// floor is [`earth_moist_plateau`] itself.
+fn floor_ozone(ozone: DobsonUnit) -> Option<DobsonUnit> {
+    (ozone.0 > 0.0).then_some(ozone)
 }
 
 /// Definition: the least and greatest Bond albedo of a body in a water

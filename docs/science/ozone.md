@@ -300,11 +300,15 @@ surface albedo raised to reproduce Earth.
   under the same ozone (`balance::earth_moist_plateau_under`); the floor
   stands for a body whose air has no plateau of its own (a thick CO₂
   air, legacy `Body::plateau`), and taking it at the body's ozone keeps
-  the floor from handing back the light the ozone holds in. The plateau
-  checked against Goldblatt et al.'s 282 W/m²
-  (`balance::earth_moist_plateau`) holds none (`EARTH_PLATEAU_OZONE`, a
-  `Source:`): their limit is that of "a pure water atmosphere: neither
-  any background gas nor any greenhouse gas other than water" (p. 4).
+  the floor from handing back the light the ozone holds in. The
+  ozone-free reference plateau (`balance::earth_moist_plateau`), the one
+  checked against Goldblatt et al.'s 282 W/m², holds none by definition
+  (`EARTH_PLATEAU_OZONE`, a `Definition:`): their limit is that of "a
+  pure water atmosphere: neither any background gas nor any greenhouse
+  gas other than water" (p. 4). The plateau also holds Earth's N₂, O₂
+  and CO₂, which theirs does not; the column's test holds that its CO₂
+  (400 ppm to 1 %) and N₂ (one to three Earth's) move it by under 3 %
+  (`the_plateau_ignores_co2_and_nitrogen`; its O₂ is not varied).
   Measured: Earth's 300 DU lower Earth's air's plateau by 0.354 W/m²
   (289.710 to 289.356 W/m², the fine column `Profile::PLATEAU`) and the
   saturated column's by 0.353 (289.718 to 289.365), the drop's sign
@@ -315,6 +319,15 @@ surface albedo raised to reproduce Earth.
   Sun (`S_rg` about 1.107 S⊕, 1507 W/m²) its runaway albedo rises by
   4 × 0.345 / 1507, 0.0009. Each ozone-bearing runaway solves one more
   plateau, Earth's air's under its ozone.
+- **Decision (user, 2026-11-27): the floor at the body's own ozone.**
+  Two other fixes were set aside. Anchoring the floor on Earth's 300 DU
+  would still clamp a body holding more than 300 DU, and the two sides
+  of the comparison would hold different ozone. Dropping the floor for
+  ozone-bearing bodies would give a thick air, which has no plateau of
+  its own (hundreds of bar of CO₂, legacy `Body::plateau`), the low
+  mean of a column still rising over 500 to 640 K (112 to 282 W/m² for
+  the five heavy-test runaways that take the floor today), a runaway
+  albedo bound to a plateau that air does not have.
 - **Measured** (the CERES test's clear column, 288 K, 280 ppm, 1803 ppb
   of methane, 324.2 ppb of N₂O): Earth's 300 DU take 8.366 W/m² of the
   outgoing radiation (8.371 before N₂O's lines), inside 4.185 to
@@ -539,9 +552,9 @@ Earth's moist plateau used to hold no ozone as a calibration, the floor
 of every runaway's plateau included, so that a runaway whose own ozone
 lowered its plateau under Earth's ozone-free one took Earth's, up to
 0.35 W/m² too bright at 300 DU. The floor now takes the runaway's own
-ozone. The ozone-free plateau is the one checked against Goldblatt et
-al. 2013, whose limit holds no gas but water (a `Source:`), and the
-floor of a runaway without ozone: see "Ozone on the moist plateau"
+ozone. The ozone-free plateau is the reference checked against
+Goldblatt et al. 2013, whose limit holds no gas but water (a
+`Definition:`), and the floor of a runaway without ozone: see "Ozone on the moist plateau"
 above. The number is kept so that the
 calibrations after it keep theirs.
 

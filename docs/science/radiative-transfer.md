@@ -1095,11 +1095,16 @@ the Bond albedo are there too (change 2b-2).
   body's own ozone (`balance::earth_moist_plateau_under`, #761): ozone's
   9.6 µm band lies in the window that sets the limit, and an ozone-free
   floor would give an ozone-bearing runaway up to 0.35 W/m² (at 300 DU)
-  its air cannot send out. The plateau checked against Goldblatt et
-  al.'s 282 W/m² (`balance::earth_moist_plateau`, 289.710 W/m²) holds
-  no ozone, as their pure water atmosphere holds none
-  (`EARTH_PLATEAU_OZONE`); Earth's 300 DU lower it to 289.356 W/m². See
-  [ozone.md](ozone.md), "Ozone on the moist plateau".
+  its air cannot send out. The ozone-free reference plateau
+  (`balance::earth_moist_plateau`, 289.710 W/m²), the one checked
+  against Goldblatt et al.'s 282 W/m², holds no ozone by definition
+  (`EARTH_PLATEAU_OZONE`, a `Definition:`), as their pure water
+  atmosphere holds none; Earth's 300 DU lower it to 289.356 W/m². It
+  also holds Earth's N₂, O₂ and CO₂, which theirs does not: varying its
+  CO₂ and N₂ moves it by under 3 %
+  (`the_plateau_ignores_co2_and_nitrogen`). The floor at the body's own
+  ozone is the user's decision (2026-11-27). See [ozone.md](ozone.md),
+  "Ozone on the moist plateau".
 - **The ideal-vapour latent heat of CO₂.** The moist CO₂ adiabat takes
   $L = R T^2\,d\ln p/dT$ from the saturation curve, which treats the
   vapour as ideal. CO₂'s vapour is not ideal at its saturation pressures:
@@ -2070,7 +2075,8 @@ publisher's page (Tables 1 to 5).
 34. Goldblatt, C. 2015, *Astrobiology* 15, 362, doi:10.1089/ast.2014.1268,
     arXiv:1503.04835.
 35. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013, *Nature
-    Geosci.* 6, 661, doi:10.1038/ngeo1892.
+    Geosci.* 6, 661, doi:10.1038/ngeo1892 (the accepted manuscript in
+    the University of Victoria's repository, read).
 36. Gordon, I. E. et al. 2022, *J. Quant. Spectrosc. Radiat. Transf.* 277,
     107949, doi:10.1016/j.jqsrt.2021.107949 (HITRAN2020), and Gordon, I. E.
     et al. 2026, *J. Quant. Spectrosc. Radiat. Transf.* 353, 109807,

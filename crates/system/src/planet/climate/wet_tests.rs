@@ -343,7 +343,6 @@ fn a_runaways_ozone_lowers_its_plateau() {
     }
     let plateau = ClimateBody::new(&inputs, Numerics::DEFAULT).plateau().0;
     let anchor = earth_moist_plateau().0;
-    println!("plateau {plateau:.3} W/m² under {EARTH_OZONE_COLUMN:?}, anchor {anchor:.3}");
     assert!(plateau < anchor, "{plateau} against the anchor {anchor}");
 }
 

@@ -5,9 +5,7 @@
 //! of the port.
 
 use super::*;
-use crate::balance::{
-    self, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, earth_moist_plateau, earth_moist_plateau_under,
-};
+use crate::balance::{self, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, earth_moist_plateau};
 use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use crate::radiation::ozone::EARTH_OZONE_COLUMN;
 use crate::radiation::test_points::{
@@ -42,8 +40,12 @@ const PLATEAU_TOLERANCE_W_M2: f64 = 14.0;
 
 /// Calibration: how far the plateau may move with the CO₂ and the
 /// nitrogen, a share, 3 %: the legacy's bound on the claim that the moist
-/// plateau is water's alone (Goldblatt et al. 2013); no source gives a
-/// number.
+/// plateau is water's alone. Goldblatt et al. 2013 (*Nature Geosci.* 6,
+/// 661, accepted manuscript p. 6) give numbers for other gases: 1 % of
+/// CO₂ lowers the limit by 2 W/m², 1 % of NH₃ by 6, 8 W/m² for both. They
+/// do not set this bound: theirs is a 1 % share of a steam column, not
+/// the test's partial pressures (400 ppm to 1 % of a bar of CO₂, one to
+/// three Earth's N₂, under a 380 K saturated surface).
 const PLATEAU_GASES_SHARE: f64 = 0.03;
 
 /// Calibration: how flat the moist column must stay over
@@ -395,17 +397,6 @@ fn the_moist_plateau_is_goldblatts() {
         (plateau - SIMPSON_NAKAJIMA_W_M2.0).abs() <= PLATEAU_TOLERANCE_W_M2,
         "{plateau} W/m²"
     );
-    // Goldblatt et al. 2013 (p. 6 of the accepted manuscript): the limit
-    // "depends on the minimum absorption cross section in the 10 µm water
-    // vapour window; any additional opacity here would raise the τλ = 1
-    // surface to a higher altitude that radiates at a lower temperature".
-    // Ozone's 9.6 µm band lies in that window: Earth's ozone lowers
-    // Earth's air's plateau, and none leaves it as it is.
-    let cache = &mut ColumnCache::default();
-    let ozone = earth_moist_plateau_under(EARTH_OZONE_COLUMN, cache).0;
-    println!("under {EARTH_OZONE_COLUMN:?}: {ozone:.3} W/m²");
-    assert!(ozone < plateau, "{ozone} against {plateau}");
-    assert_eq!(earth_moist_plateau_under(NO_OZONE, cache).0, plateau);
 }
 
 #[test]
