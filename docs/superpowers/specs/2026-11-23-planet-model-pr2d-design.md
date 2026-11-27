@@ -359,7 +359,9 @@ regression net.
   600 Myr ago). The third state changes `timeline::Life`, agreed with
   the other sessions. The modern air holds `O2_PER_N2` × N₂, the ratio
   computed in `science` from the CIPM-2007 shares (Picard et al. 2008,
-  `Source:`), and no CH₄ (`Definition:`).
+  `Source:`), 0.306 by weight (the chain keeps its gases as weights),
+  and the methane of `modern_methane` (Task 7b, #717): the CH₄ a modern
+  biosphere keeps under its stars on its gravity.
 - **Class** (`classify.rs`): the 14 classes of `timeline::PlanetClass`
   in legacy's order (giants, mini-Neptune, the surface classes, ice
   world, volcanic, super-Earth, rocky). `AIRLESS_BAR` is not a class

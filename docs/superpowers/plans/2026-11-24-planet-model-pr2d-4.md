@@ -305,8 +305,10 @@ D2 and D5 by mapgen3), as proposed except D5's alias:
   (`regression` may depend on `cli`: it is a test-only crate).
 - `crates/system/src/draw/**`: only `draw/mod.rs` (the spin seed line
   and its doc) and the one draw test of B4. `placement.rs`: doc only.
-  `archetype.rs`: untouched. `families/mod.rs` and `families/laws.rs`:
-  the rename of S5 (D5). `spin.rs`: B2, the seed and its docs, `is_giant` `pub(crate)`.
+  `archetype.rs`: changed by Task 6b only (#695, `ArchetypeComposition`,
+  agreed with mapgen3). `families/mod.rs` and `families/laws.rs`: the
+  rename of S5 (D5). `spin.rs`: B2, the seed and its docs, `is_giant`
+  `pub`, re-exported from `system::planet` for the tier-2 checks.
 - Every number in `science` (and every new number in the engines and
   tests) has a doc comment starting with `Source:`, `Calibration:` or
   `Definition:`. Two new calibrations, no more: `DENSE_AIR_BAR`,
