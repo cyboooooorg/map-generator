@@ -1413,7 +1413,17 @@ w_i = p_i M_i / M̄,    M̄ = Σ_j p_j M_j / Σ_j p_j               (PartialPres
 ```
 
 the sums over the dry gases; the water vapour is kept apart, as the
-column takes it: a pressure added to the dry air's. A measured air given
+column takes it: a pressure added to the dry air's. Its one meaning, at
+every stage, is its weight taken as its pressure at the surface (the
+column's convention, `p = Σ w_dry + e`, so the surface pressure stays
+the sum of the weights): the chain's runaway steam is the weight of the
+water in its air (`planet.air.outgassed.h2o`, `planet.air.kept.h2o`),
+and a wet climate sets it to the saturation pressure at its surface
+(`surface_vapour`), the vapour weighing what it presses
+(`planet.climate.air.h2o`). That is exact for a pure steam air; in a
+mixed air the vapour's partial pressure would be `M̄ / M_H₂O` of its
+weight (a departure kept from the column; a runaway's 270 bar of steam
+over 50 bar of CO₂ would press about 10 % more than it weighs). A measured air given
 by its shares by volume becomes weights through the second line: Earth's
 78.08 % N₂ and 9340 ppm Ar by volume (NASA Earth fact sheet) are 0.7555
 and 1.289 % of the mass among N₂, O₂ and Ar alone, the 0.7551 and 1.288 %
@@ -1460,11 +1470,13 @@ dissolved nitrogen reads the N₂'s partial pressure, and whether an air
 is a Titan's reads its total, a sum of weights.
 
 *How the chain uses them.* The chain's steps add and scale weights. The
-two that read a partial pressure convert the air as it stands: the
-cold trap (`cold_trapped`, *How the rewrite computes the cold trap*) and
-the wash-out, whose oxidising threshold (`OXIDISING_O2`, a twentieth of
-Earth's O₂ by volume) reads the O₂'s partial pressure; its column, the
-surface pressure, is the sum of the weights. The chain's O₂ is 0 until
+two that read a partial pressure convert the same air, as it stands
+when they run (its kept gases and its photolysed methane): the wash-out
+first, whose oxidising threshold (`OXIDISING_O2`, a twentieth of
+Earth's O₂ by volume) reads the O₂'s partial pressure, with the SO₂ the
+shoreline kept before it and as its column the surface pressure, the
+sum of the weights; then the cold trap (`cold_trapped`, *How the
+rewrite computes the cold trap*), with the SO₂ washed. The chain's O₂ is 0 until
 life gives it some (2d-4), so the wash-out's reading moves no reference
 body today; the trap moves Callisto's CO₂ alone among them.
 
@@ -1612,11 +1624,12 @@ before and after). Titan: N₂ 2.876 to 1.422 bar, CH₄ unchanged (2.11 bar
 photolysed), 4.99 to 3.54 bar in all; on the chain's own air its climate
 settles at 94.24 K and 1.512 bar, where it settled at 104.84 K and
 3.15 bar (measured 93.65 ± 0.25 K and 1.467 bar). Its seas hold
-hydrocarbons, and its air keeps 0.091 bar of CH₄: the climate caps the
-CH₄ at its activity times its saturation pressure (`condense`), a
-partial pressure, which compares with the 0.083 bar measured by volume,
-while its N₂ is a weight; the measured air by weight is 1.418 bar of N₂
-and 0.049 bar of CH₄. Earth: its ocean's N₂ ice was 8.85 % of its N₂,
+hydrocarbons, and its air kept 0.091 bar of CH₄, then a partial
+pressure the climate read as a weight. Since the climate keeps its air
+in weights (#749) its CH₄ is a weight too: the climate caps it at the
+weight whose partial pressure is its activity times its saturation
+pressure (`condense`), and the measured air by weight is 1.418 bar of
+N₂ and 0.049 bar of CH₄ (0.083 bar of CH₄ by volume). Earth: its ocean's N₂ ice was 8.85 % of its N₂,
 0.7458 to 0.6799 bar; `NITROGEN_RECYCLED_UNDER_PLATES`, fitted on that
 target, is refitted (above). Callisto: 0.060 to 0.030 bar. A Triton-like
 body (0.0036 M⊕ at 30 au) keeps its ice N₂ and gains its NH₃'s, 0.338 to
@@ -1641,7 +1654,7 @@ Earth row and the rewrite's values below it are at 4.567 Gyr):
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
-| Venus | 87 bar, 98 % CO₂, 1.7 bar N₂ | 60 to 120 bar, CO₂ over 90 %, N₂ 1 to 6 bar | 92 bar, 96.5 % CO₂, about 3 bar N₂ |
+| Venus | 87 bar, 98 % CO₂, 1.7 bar N₂ (legacy's, read as weights) | 60 to 120 bar, CO₂ over 90 %, N₂ 1 to 6 bar | 92 bar, 96.5 % CO₂, about 3 bar N₂ (by volume) |
 | Earth | 0.7458 bar N₂, no CH₄ or NH₃ (52 bar CO₂ before the thermostat) | N₂ 0.746 bar within 10 %; CH₄ and NH₃ under 1e-3 bar | 0.746 bar N₂ by weight (0.78 by volume) |
 | Mars | 0.006 bar (legacy scaled its CO₂ to the real 6.1 mbar with `MARS_CO2_FACTOR`, not ported; 0.014 bar from the rule alone) | 0.002 to 0.05 bar | 0.006 bar |
 | Titan | 2.2 bar, 95 % N₂, 0.11 bar CH₄ after the climate (6.3 bar before it condenses) | 0.5 to 5 bar; CH₄ over 0.01 bar | 1.5 bar, about 5 % CH₄ |
@@ -1650,7 +1663,10 @@ Earth row and the rewrite's values below it are at 4.567 Gyr):
 
 The Earth row is the rewrite's; the other results are `legacy-final`'s,
 after its climate where the row says so. The rewrite's chain, before
-the climate (2d-3), gives Venus 89.5 bar, 98 % CO₂ and 1.75 bar N₂;
+the climate (2d-3), gives Venus 89.5 bar, 98 % CO₂ and 1.75 bar N₂ by
+weight, which are 96.9 % CO₂ and 3.05 % N₂ of its moles (a partial
+pressure of 2.73 bar of N₂; the tests compare the partial pressures
+with the shares by volume, #749);
 Titan 3.54 bar, of which 1.422 bar N₂ and 2.11 bar CH₄ (4.99 bar and
 2.88 bar of N₂ before #679); Callisto 0.030 bar of N₂ and no CH₄. Titan's
 target in the rewrite is its N₂ by weight, 1.418 bar within 10 %, and its bare N₂
@@ -2102,7 +2118,8 @@ bar), Venus 2.80e17 mol (0.70 of Kaula's), Titan 5.09e15 mol (0.45), Mars
 within 2 % (the chain's Earth has its own radius, gravity and mantle). The
 climate's Triton-like body (`triton_like`, 1.8 Pa of argon, test
 `a_triton_like_body_keeps_its_argon_as_frost`) settles at 37.97 K with 0.38
-µbar of argon in its air, 1.7 % of it, the rest frost.
+µbar of argon's partial pressure in its air (its frost pressure; 0.54 µbar by
+weight, #749), 1.7 % of its moles, the rest frost.
 
 **In the climate column.** Argon weighs: on Earth 0.0127 bar, 1.29 % of the air.
 It joins the column's partial pressures as a gas of 39.95 g/mol that absorbs
@@ -3519,19 +3536,29 @@ unnoticed (issue #706).
 
 #### Condensation at the surface
 
-`condense` keeps in the air at most `a · p_sat(T_s)` of each condensing
-gas and puts the rest on the ground, nitrogen first, then methane:
-`p_sat` the pure gas's saturation pressure at the surface temperature
-(`science::volatiles`), `a` the activity, 1 for nitrogen and for
-methane ice, `SEA_METHANE_SHARE` over a sea, ramped over `PHASE_BAND`.
-A `Definition:` (phase equilibrium and Raoult's law); its one number
-is `SEA_METHANE_SHARE`. CO₂ is lowered to its saturation by the
+`condense` keeps in the air at most the weight whose partial pressure
+is `a · p_sat(T_s)` for each of the three gases that condense,
+nitrogen, methane and argon, and puts the rest of its weight on the
+ground: `p_sat` the pure gas's saturation pressure at the surface
+temperature (`science::volatiles`), `a` the activity, 1 for nitrogen,
+argon and methane ice, `SEA_METHANE_SHARE` over a sea, ramped over
+`PHASE_BAND`. The weight is the closed form of *Weights and partial
+pressures* (`Weights::weight_at`) over the other gases of the air the
+climate solved with (`condensables`, issue #749); since each gas that
+leaves raises the others' shares, the three are capped in turn, in
+rounds until no weight moves by more than `CONDENSE_SETTLED` (1e-12 of
+it), at most `CONDENSE_ROUNDS` (50, a guard). A `Definition:` (phase
+equilibrium and Raoult's law, on partial pressures); its one number is
+`SEA_METHANE_SHARE`. CO₂ is lowered to its saturation by the
 collapse, and NH₃ is frozen by the cold trap at the equilibrium
 temperature only, as in legacy (kept by the user's decision of
-2026-11-24: no NH₃ liquid curve is in `science`). Titan's methane, 0.0829 ± 0.0026 bar,
-sits 0.6 σ under the cap at 93.65 K, 0.0845 bar (derived): a Titan
-whose inventory exceeds the cap gets seas and an air of 0.0845 bar,
-inside the measurement; the tests give Titan an inventory, not its
+2026-11-24: no NH₃ liquid curve is in `science`). Titan's methane, a
+partial pressure of 0.0829 ± 0.0026 bar, sits 0.6 σ under the cap at
+93.65 K, 0.0845 bar of partial pressure (derived): a Titan whose
+inventory exceeds the cap gets seas and an air of 0.0845 bar of
+methane's partial pressure, inside the measurement, which is about
+0.050 bar of methane by weight over its 1.418 bar of N₂ (0.0496,
+`weight_at`, derived); the tests give Titan an inventory, not its
 air, and the surface liquid reads the condensate `condense` returns.
 
 #### Calibration of `FROST_ALBEDO` and the N₂ ice emissivity (issue #673)
@@ -3653,8 +3680,10 @@ arithmetic of the fit on the measured `d⊕` and `rate⊕`.
 Hoffman et al. quote Walker et al. 1981: "Even the present rate of
 release would yield 1 bar of carbon dioxide in only 20 million years",
 so 6.4 bar would be about 130 My of today's outgassing per temperate
-phase, and 13.2 bar by weight (about 8.7 bar read as a partial
-pressure in Earth's air) about 260 My.
+phase, and 13.2 bar by weight about 260 My (in the chain Earth's air,
+over its 0.746 bar of N₂ and 0.013 bar of argon, 13.2 bar of CO₂ by
+weight is a partial pressure of 12.8 bar, `Weights::partial_pressures`,
+derived).
 Searched and not found: a snowball frequency for another planet, and
 the length of the Paleoproterozoic snowballs. Where no CO₂ thaws the
 body, `thaw_bar` is infinite and the trace takes no non-finite value:
@@ -3776,8 +3805,11 @@ as they were); the test moved to 1.282 AU, where the climate cycles for
 19 steps and is stored at 234.08 K with 10.39 bar (233.92 K and
 10.33 bar under the collapse's step rules of 2026-11-27, #756).
 Once the climate keeps its air in weights (#749), Titan's 2.11 bar of
-methane by weight is about a third of the methane Earth's moles, not
-4 %, and the edge moves to 1.3276 AU: the thermostat holds 288 K to
+methane by weight is 35 % of the moles of the methane Earth's air at
+its edge (0.746 bar of N₂, 0.013 of Ar and 9.50 of CO₂ by weight
+beside it), a partial pressure of 4.35 bar, where read as a partial
+pressure it was 17 % of that air's pressure (derived), and the edge
+moves to 1.3276 AU: the thermostat holds 288 K to
 1.311 AU, the climate settles warm and unregulated to 1.327 AU, and
 frozen beyond, with a jump at 1.333 AU (267.2 to 235.3 K). No orbit
 cycles, probed every 0.005 AU from 1.20 to 1.50 AU and every 0.001 AU
@@ -3865,7 +3897,13 @@ Earth's edge is 1.3079 AU, and it is bistable only within 0.5 % of it
 0.96 and 0.98 of the edge are temperate with no frozen branch). The
 test holds its bistable orbits that settle, at the same geometric
 mean: 1.3030 AU and 31.39 bar, 1.3050 AU and 32.24 bar, 1.3060 AU and
-32.50 bar (by weight).
+32.50 bar (by weight):
+
+| Frozen climate | Step rules | Half the step | Plain step |
+| --- | --- | --- | --- |
+| 3300 K, 1.3030 AU, 31.39 bar | 251.8200 K | 251.8036 K | 251.8756 K |
+| 3300 K, 1.3050 AU, 32.24 bar | 250.1125 K | 250.1121 K | 250.1172 K |
+| 3300 K, 1.3060 AU, 32.50 bar | 248.9588 K | 248.9567 K | 249.0257 K |
 
 Before #749, at the most CO₂ each thaw search leaves frozen, within 0.004 bar of its
 thaw, the branch flipped with the step: at 1.3298 AU and 20.9095 bar the
@@ -3889,7 +3927,15 @@ size of the step's effect on a cycle's cold side measured below. Since
 become 288.0001, 283.8828 and 233.9140 K (under the step rules of
 2026-11-27). Since #749 the edge is 1.3276 AU and no orbit past it
 cycles: the test holds 1.321, 1.3276 and 1.333 AU, the last where the
-climate falls onto its frozen branch in the most albedo steps (7). Measured on 2026-11-26 at the old
+climate falls onto its frozen branch in the most albedo steps (7):
+
+| Orbit | Step rules | Half the step | CO₂ by weight |
+| --- | --- | --- | --- |
+| 1.321 AU | 280.0386 K | 280.0386 K | 9.8338 bar |
+| 1.3276 AU | 273.4592 K | 273.4592 K | 9.4980 bar |
+| 1.333 AU | 235.2849 K | 235.2849 K | 9.2392 bar |
+
+Measured on 2026-11-26 at the old
 `COLLAPSE_STEP` (0.005), half, a quarter and the plain step, the
 climates just past the edge stay within:
 
