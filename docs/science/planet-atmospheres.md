@@ -3787,8 +3787,12 @@ froze with and its maximum greenhouse, from an icy start at each CO₂
 frozen and the CO₂ where it thaws, a methane Earth near its outer edge
 round a 4500 K star has a band where the start has no fixed point and
 cycles: at 1.2828 AU (0.9 of the way from its runaway orbit to its
-edge) it stays frozen up to 19.34 bar, cycles from about 19.50 to 19.64
-bar, and thaws at 19.647 bar (measured on main f6462ba2, release).
+edge) it stays frozen up to about 19.40 bar, cycles from there to
+19.64 bar, and thaws at 19.647 bar (measured on main f6462ba2,
+release, with probes on each call of the search, 4 rayon threads, on a
+loaded shared machine: the times below compare runs of that setup, and
+#731's figures, 4 cycling calls and a 110 s solve, came from another
+run of it).
 Legacy's bisection, which the rewrite kept until 2026-11-27, counted a
 cycling start as frozen, since it is stored on its cold side (#729): it
 converged on the top of the band, spent 6 of its 13 calls there at 19
@@ -3837,7 +3841,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `COLLAPSE_TOLERANCE` | 1e-4 | Calibration | at 1e-5 the temperature moves under 0.01 K | 3 |
 | `COLLAPSE_STEP` | 0.05 of the CO₂, while the gap rises (0.005 for every step before 2026-11-27) | Calibration | at 0.025, and against the plain step for the falling rule, a methane Earth's frozen climates round 4500 and 3300 K stars move by at most 0.084 K (#731); at the old 0.0025 its climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs; since them and #746, 1.25, 1.2534 and 1.264 AU do not move, and from 1.262 to 1.268 AU full, half, quarter and plain steps stay within 0.11 K on a converged climate and 0.33 K on a cycle's cold side (5.6 K before the cap of #747) | 3 |
 | `PHASE_BAND` | 1 K | Calibration | Titan-like and Triton-like sweeps settle across their points | 3 |
-| `THAW_STEPS` | 13 | Calibration | at 16 steps Earth's thaw CO₂ moves under 0.1 % (measured: +0.165 % at 12 steps, +0.063 % at 13, 0.180932, 0.180748 and 0.180634 bar at 12, 13 and 16) | 3 |
+| `THAW_STEPS` | 13 | Calibration | at 16 steps Earth's thaw CO₂ moves under 0.1 % (measured: +0.165 % at 12 steps, +0.063 % at 13, 0.180932, 0.180748 and 0.180634 bar at 12, 13 and 16); fewer steps run when the search meets a cycling icy start (#731) | 3 |
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |
 | `ALBEDO_TOLERANCE_K` | 0.1 K | Calibration | at 0.01 K the reference climates move under 0.1 K | 1 |
 | `ALBEDO_DAMPING` | 0.5 | Definition | at 0.25 the converged climates agree | 3 |
@@ -4997,7 +5001,8 @@ another paper, from memory) is said where it is used.
 - Kadoya and Tajika 2014, *ApJ* 790, 107,
   doi:10.1088/0004-637X/790/2/107, the climate of Earth-like planets
   across the habitable zone with volcanic CO₂ degassing (cited for the
-  departure of #729; title and venue checked, not read).
+  departure of #729 and the thaw search of #731; title and venue
+  checked, not read).
 - Karkoschka 2001, albedos of the Uranian moons.
 - Karwat 1924, NH₃'s sublimation pressure at 162.39 K, through Fray
   and Schmitt 2009 as Blakley et al. 2024 quote it.
@@ -5115,8 +5120,8 @@ another paper, from memory) is said where it is used.
   doi:10.1126/science.11538492, Titan's greenhouse.
 - Menou 2015, *Earth Planet. Sci. Lett.* 429, 20,
   doi:10.1016/j.epsl.2015.07.046, climate stability of habitable
-  Earth-like planets (cited for the departure of #729; title and venue
-  checked, not read).
+  Earth-like planets (cited for the departure of #729 and the thaw
+  search of #731; title and venue checked, not read).
 - Meza et al. 2019, "Pluto's lower atmosphere and pressure evolution
   from ground-based stellar occultations, 1988-2016", *A&A* 625, A42,
   doi:10.1051/0004-6361/201834281, arXiv:1903.02315 (§ 4 read).

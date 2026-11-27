@@ -1998,6 +1998,19 @@ const COOL_FROZEN: [(Kelvin, f64, Bar); 3] = [
     (Kelvin(3300.0), 1.3586, Bar(45.9)),
 ];
 
+/// Earth at `au` round a star of `teff` with Titan's methane in its air
+/// (the methane Earth of #729 and #731).
+fn methane_earth_at(au: f64, teff: Kelvin) -> ClimateInputs {
+    let inputs = inputs_at(&EARTH, au, teff);
+    ClimateInputs {
+        air: PartialPressures {
+            ch4: titan().air.ch4,
+            ..inputs.air
+        },
+        ..inputs
+    }
+}
+
 #[test]
 #[ignore = "heavy: a methane Earth at three orbits around its outer edge, and three frozen climates round cool stars, twice"]
 fn collapse_step_is_converged() {
@@ -2037,14 +2050,7 @@ fn collapse_step_is_converged() {
     }
     // Round cool stars the frozen branch collapses at every albedo step.
     for (teff, au, co2) in COOL_FROZEN {
-        let inputs = inputs_at(&EARTH, au, teff);
-        let inputs = ClimateInputs {
-            air: PartialPressures {
-                ch4: titan().air.ch4,
-                ..inputs.air
-            },
-            ..inputs
-        };
+        let inputs = methane_earth_at(au, teff);
         let frozen = |numerics: Numerics| frozen_at(&mut ClimateBody::new(&inputs, numerics), co2);
         let a = frozen(Numerics::DEFAULT);
         // Half the step holds the rising cap. The falling step goes to the
@@ -2091,7 +2097,7 @@ fn collapse_step_is_converged() {
 /// Definition: a test input placed by a probe, not a fact of any body: a
 /// methane Earth round a 4500 K star at 0.9 of the way from its runaway
 /// orbit to its outer edge, 1.2828 AU (#731), whose icy start cycles
-/// between about 19.50 and 19.64 bar of CO₂ and thaws above (measured on
+/// between about 19.40 and 19.64 bar of CO₂ and thaws above (measured on
 /// main f6462ba2). Study 36's methane lines are expected to thaw it.
 const CYCLING_THAW: (Kelvin, f64) = (Kelvin(4500.0), 1.2828);
 
@@ -2099,14 +2105,7 @@ const CYCLING_THAW: (Kelvin, f64) = (Kelvin(4500.0), 1.2828);
 #[ignore = "heavy: the thaw search of a methane Earth round a 4500 K star, about 60 s"]
 fn a_snowball_thaws_where_its_icy_start_starts_cycling() {
     let (teff, au) = CYCLING_THAW;
-    let inputs = inputs_at(&EARTH, au, teff);
-    let inputs = ClimateInputs {
-        air: PartialPressures {
-            ch4: titan().air.ch4,
-            ..inputs.air
-        },
-        ..inputs
-    };
+    let inputs = methane_earth_at(au, teff);
     let solved = solve(&inputs, COLD_DRAW);
     let b = solved.bistable.expect("bistable");
     let thaw = b.thaw.expect("a CO₂ it holds thaws it");

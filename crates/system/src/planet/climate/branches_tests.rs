@@ -1,5 +1,6 @@
 use super::ClimateInputs;
-use super::branches::{IcyStart, Solved, solve, thaw_search};
+use super::THAW_STEPS;
+use super::branches::{IcyStart, Solved, frozen_branch, solve, thaw_search};
 use super::fixture::{earth, moved, titan};
 use science::surface::Liquid;
 use science::units::Kilogram;
@@ -136,8 +137,8 @@ const SEARCH: (f64, f64) = (1.0, 100.0);
 const SYNTHETIC_THAW: f64 = 30.0;
 const SYNTHETIC_BAND: f64 = 20.0;
 
-/// Definition: the synthetic search's steps, 13, as `THAW_STEPS`.
-const SEARCH_STEPS: usize = 13;
+/// The synthetic search's steps, the solver's.
+const SEARCH_STEPS: usize = THAW_STEPS;
 
 /// The synthetic icy start at `co2`, counting its calls in `calls`.
 fn synthetic(co2: f64, band: bool, calls: &mut usize) -> IcyStart {
@@ -172,20 +173,77 @@ fn a_thaw_search_stops_at_its_first_cycling_call() {
     // An icy start that cycles has no frozen balance: the snowball stops
     // holding there, so that CO₂ is its thaw, and the last CO₂ that stayed
     // frozen is the snowball's.
-    let mut calls = 0;
+    let mut seen = Vec::new();
     let (still_frozen, thaw) = thaw_search(SEARCH.0, SEARCH.1, SEARCH_STEPS, |c| {
-        synthetic(c, true, &mut calls)
+        let mut calls = 0;
+        let icy = synthetic(c, true, &mut calls);
+        seen.push((c, icy));
+        icy
     });
-    assert!(calls < SEARCH_STEPS, "{calls} calls");
-    let mut last = 0;
-    assert_eq!(
-        synthetic(thaw, true, &mut last),
-        IcyStart::Cycles,
-        "{thaw} bar"
+    assert!(seen.len() < SEARCH_STEPS, "{seen:?}");
+    // The search stops at its first cycling call: it is the last one.
+    let cycling: Vec<_> = seen.iter().filter(|s| s.1 == IcyStart::Cycles).collect();
+    assert_eq!(cycling.len(), 1, "{seen:?}");
+    assert_eq!(seen.last(), Some(&(thaw, IcyStart::Cycles)), "{seen:?}");
+    // The snowball's CO₂ is the most the search saw stay frozen.
+    let frozen = seen
+        .iter()
+        .filter(|s| s.1 == IcyStart::StaysFrozen)
+        .map(|s| s.0)
+        .fold(f64::NEG_INFINITY, f64::max);
+    assert_eq!(still_frozen, frozen, "{seen:?}");
+}
+
+/// The frozen branch of a synthetic body whose icy start is `at_froze` at
+/// [`SEARCH`]'s low end and `at_most` at its high end, thawing in between
+/// as [`synthetic`] with no cycle; and whether `most` was read.
+fn ends(at_froze: IcyStart, at_most: IcyStart) -> (Option<(f64, Option<f64>)>, bool) {
+    let mut read = false;
+    let branch = frozen_branch(
+        &mut read,
+        SEARCH.0,
+        |read| {
+            *read = true;
+            SEARCH.1
+        },
+        |_, co2| {
+            if co2 == SEARCH.0 {
+                at_froze
+            } else if co2 == SEARCH.1 {
+                at_most
+            } else {
+                synthetic(co2, false, &mut 0)
+            }
+        },
+        SEARCH_STEPS,
     );
-    assert_eq!(
-        synthetic(still_frozen, true, &mut last),
-        IcyStart::StaysFrozen,
-        "{still_frozen} bar"
-    );
+    (branch, read)
+}
+
+#[test]
+fn an_icy_start_that_cycles_at_the_frozen_co2_leaves_no_frozen_branch() {
+    for at_froze in [IcyStart::Cycles, IcyStart::Thaws] {
+        let (branch, read) = ends(at_froze, IcyStart::Thaws);
+        assert_eq!(branch, None, "{at_froze:?}");
+        assert!(
+            !read,
+            "{at_froze:?}: the maximum greenhouse is read only past the frozen CO₂"
+        );
+    }
+}
+
+#[test]
+fn an_icy_start_that_cycles_at_the_maximum_greenhouse_thaws_below_it() {
+    for at_most in [IcyStart::Cycles, IcyStart::Thaws] {
+        let (branch, _) = ends(IcyStart::StaysFrozen, at_most);
+        let (still_frozen, thaw) = branch.expect("a frozen branch");
+        let thaw = thaw.expect("a thaw");
+        assert!(
+            still_frozen < SYNTHETIC_THAW && SYNTHETIC_THAW <= thaw,
+            "{at_most:?}"
+        );
+    }
+    // Frozen at its maximum greenhouse too: frozen for good, at that CO₂.
+    let (branch, _) = ends(IcyStart::StaysFrozen, IcyStart::StaysFrozen);
+    assert_eq!(branch, Some((SEARCH.1, None)));
 }

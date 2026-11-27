@@ -96,7 +96,8 @@ fn icy_start(body: &mut ClimateBody, co2: Bar) -> IcyStart {
 /// The band where it cycles sits between the frozen and the thawed CO₂,
 /// and each call in it costs the most albedo steps; its bottom is known
 /// only to the bracket the search had reached (0.8 % of a methane
-/// Earth's thaw round a 4500 K star, measured).
+/// Earth's thaw round a 4500 K star: `docs/science/planet-atmospheres.md`,
+/// "A thaw search that meets a cycle").
 pub(crate) fn thaw_search(
     low: f64,
     high: f64,
@@ -113,6 +114,33 @@ pub(crate) fn thaw_search(
         }
     }
     (low, high)
+}
+
+/// The frozen branch beside a temperate one that froze with `froze`
+/// bar of CO₂, from its icy starts (`icy`, read on `context`): `None`
+/// when the start at `froze` does not stay frozen (no frozen branch);
+/// otherwise the most CO₂ known to stay frozen and the least known not
+/// to, `None` when the start at its maximum greenhouse (`most`, read only
+/// then) stays frozen too ([`thaw_search`] in between, from `THAW_FLOOR`
+/// of that maximum at least). An icy start that cycles counts as not
+/// frozen at both ends too: it holds no frozen balance (#731).
+pub(crate) fn frozen_branch<C>(
+    context: &mut C,
+    froze: f64,
+    most: impl FnOnce(&mut C) -> f64,
+    mut icy: impl FnMut(&mut C, f64) -> IcyStart,
+    steps: usize,
+) -> Option<(f64, Option<f64>)> {
+    if icy(context, froze) != IcyStart::StaysFrozen {
+        return None;
+    }
+    let most = most(context);
+    if most <= froze || icy(context, most) == IcyStart::StaysFrozen {
+        return Some((most.max(froze), None));
+    }
+    let low = froze.max(most * THAW_FLOOR);
+    let (low, high) = thaw_search(low, most, steps, |co2| icy(context, co2));
+    Some((low, Some(high)))
 }
 
 /// Whether `climate` is frozen over: no liquid water, and a surface under
@@ -137,20 +165,20 @@ pub(crate) fn branches(body: &mut ClimateBody) -> (Settle, Option<Bistable>) {
         return (warm, None);
     }
     let froze = Bar(warm.air.co2);
-    let thawed = |body: &mut ClimateBody, co2: Bar| icy_start(body, co2) != IcyStart::StaysFrozen;
-    if thawed(body, froze) {
+    let steps = body.numerics.thaw_steps;
+    let Some((still_frozen, thaw)) = frozen_branch(
+        body,
+        froze.0,
+        |body| {
+            let inventory = body.inputs.air;
+            body.greenhouse_co2(&inventory).0
+        },
+        |body, co2| icy_start(body, Bar(co2)),
+        steps,
+    ) else {
         return (warm, None);
-    }
-    let inventory = body.inputs.air;
-    let most = body.greenhouse_co2(&inventory);
-    let (still_frozen, thaw) = if most.0 <= froze.0 || !thawed(body, most) {
-        (Bar(most.0.max(froze.0)), None)
-    } else {
-        let low = froze.0.max(most.0 * THAW_FLOOR);
-        let steps = body.numerics.thaw_steps;
-        let (low, high) = thaw_search(low, most.0, steps, |co2| icy_start(body, Bar(co2)));
-        (Bar(low), Some(Bar(high)))
     };
+    let (still_frozen, thaw) = (Bar(still_frozen), thaw.map(Bar));
     let chance = snowball_chance(thaw.map(|t| Bar(t.0 - froze.0)), body.inputs.volcanism);
     let bistable = Bistable {
         froze,
