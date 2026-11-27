@@ -25,8 +25,9 @@ use timeline::ClimateState;
 /// Definition: the floor of the thaw's bisection in `ln CO₂`, as a share
 /// of the most CO₂ the body holds, 1e-12 (legacy `branches`, l.1916): it
 /// keeps the logarithm finite where the temperate branch froze with no
-/// CO₂ in its air.
-const THAW_FLOOR: f64 = 1e-12;
+/// CO₂ in its air. [`frozen_branch`] checks that its icy start stays
+/// frozen there (#758).
+pub(crate) const THAW_FLOOR: f64 = 1e-12;
 
 /// A frozen branch beside the temperate one.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -35,7 +36,8 @@ pub(crate) struct Bistable {
     pub froze: Bar,
     /// The most CO₂ known to leave the body frozen, in a frozen balance:
     /// just under the thaw (within the numerics' `thaw_steps`, or the
-    /// last CO₂ that stayed frozen before the first that cycles), or its
+    /// last CO₂ that stayed frozen before the first that cycles), `froze`
+    /// itself when the search's floor already thaws it (#758), or its
     /// maximum greenhouse when that never thaws it. The CO₂ a snowball
     /// holds.
     pub still_frozen: Bar,
@@ -121,9 +123,18 @@ pub(crate) fn thaw_search(
 /// when the start at `froze` does not stay frozen (no frozen branch);
 /// otherwise the most CO₂ known to stay frozen and the least known not
 /// to, `None` when the start at its maximum greenhouse (`most`, read only
-/// then) stays frozen too ([`thaw_search`] in between, from `THAW_FLOOR`
+/// then) stays frozen too ([`thaw_search`] in between, from [`THAW_FLOOR`]
 /// of that maximum at least). An icy start that cycles counts as not
 /// frozen at both ends too: it holds no frozen balance (#731).
+///
+/// Where the floor lies above `froze` (a temperate branch that froze with
+/// almost no CO₂), the start at the floor is read too, since the
+/// bisection holds only if its low end stays frozen (#758): if it does
+/// not, the floor is the thaw and `froze` the most CO₂ known to stay
+/// frozen. At that share of the maximum greenhouse, the floor's CO₂ has
+/// no measurable greenhouse, so this is a guard: no body traced so far
+/// (the heavy climate tests, an Earth from 0.80 to 1.00 AU) starts its
+/// search from the floor.
 pub(crate) fn frozen_branch<C>(
     context: &mut C,
     froze: f64,
@@ -139,6 +150,10 @@ pub(crate) fn frozen_branch<C>(
         return Some((most.max(froze), None));
     }
     let low = froze.max(most * THAW_FLOOR);
+    if low > froze && icy(context, low) != IcyStart::StaysFrozen {
+        // The bisection holds only where its low end stays frozen (#758).
+        return Some((froze, Some(low)));
+    }
     let (low, high) = thaw_search(low, most, steps, |co2| icy(context, co2));
     Some((low, Some(high)))
 }

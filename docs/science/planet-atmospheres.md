@@ -3875,6 +3875,15 @@ so the test was dropped; the ends of the search stay tested in tier 1.
 `collapse_step_is_converged` checks that the collapse's step does not
 flip its frozen climates between settling and cycling.
 
+The search starts from the frozen CO₂, or from `THAW_FLOOR` (1e-12) of
+the maximum greenhouse where the temperate branch froze with less (no
+CO₂, or the thermostat's trace). Since #758 the icy start at that floor
+is read too, since the bisection holds only if its low end stays frozen:
+if it does not, the floor is the thaw. At that share the CO₂ has no
+measurable greenhouse, so it is a guard: none of the 34 searches of the
+heavy climate tests, nor an Earth from 0.80 to 1.00 AU, starts from the
+floor (main 6fc12ab7).
+
 #### Solver constants (rule of #648)
 
 A guard (a cap on steps, a search range, a start or a damping that
