@@ -127,7 +127,9 @@ pub(crate) const COLLAPSE_STEP: f64 = 0.05;
 /// tier 3 (`thaw_steps_is_converged`). Measured on the reference Earth:
 /// 0.180932 bar at 12 steps (+0.165 % against 16), 0.180748 at 13
 /// (+0.063 %), 0.180657 at 14, 0.180634 at 16, 0.180625 at 19: 13 is the
-/// least count that holds the row. A search that meets an icy start
+/// least count that holds the row. Since the climate keeps its air in
+/// weights (#749): 0.2001206 bar by weight at 13 steps against 0.2001001
+/// at 16 (+0.0103 %, from the unrounded values), so 13 still holds. A search that meets an icy start
 /// that cycles stops there, in fewer steps (#731, [`branches::thaw_search`]).
 pub(crate) const THAW_STEPS: usize = 13;
 

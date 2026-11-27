@@ -3098,14 +3098,14 @@ counts as thawed, and the thaw search stops at the first one (see "A
 thaw search that meets a cycle" below).
 Where both exist the planet is a snowball (`Climate::snowball`) when its
 formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
-`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (9.85 bar in the
-rewrite, 0.8 bar in legacy): the share of its history it spends frozen,
+`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (13.2 bar by
+weight in the rewrite, 0.8 bar in legacy): the share of its history it spends frozen,
 with `d` the CO₂ that thaws it and `v / v⊕` its volcanism against Earth's
 (legacy's 0.8 bar gave Earth, which it remembered frozen about a tenth
 of its history, a chance of 0.1: on the spectral column Earth at 1 AU
 needed 0.091 bar more CO₂ to thaw, a chance of 0.102; 0.031 bar on the
 grey column. Study 25 found the dated snowballs are 1.4 % of Earth's
-history, not a tenth; the rewrite refits `W` to 9.85 bar and Earth's
+history, not a tenth; the rewrite refits `W` to 13.2 bar and Earth's
 chance is about 0.014, see "Calibration of `SNOWBALL_WARM_BAR`" below). Where no
 CO₂ up to its maximum greenhouse thaws it (the chance is then 1, from
 about 1.4 AU for an Earth-like planet round the Sun: an icy body's cold column condenses and scatters its CO₂ before it
@@ -3328,10 +3328,10 @@ their measured air (see "Test air and Solar System bounds" below):
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
-| Earth | 288 K, water, regulated, thermostat CO₂ 6.910e-3 bar, Bond albedo 0.3064 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone in the light and in the infrared (#704), Bond albedo 0.2906 and 289.39 K at 280 ppm (before #704 and the clouds' infrared emissivity of #705: 4.071e-3 bar, 0.3071, 0.2914 and 288.18 K; before the N₂ and O₂ pairs of #703: 4.206e-3 bar and 288.02 K; on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
+| Earth | 288 K, water, regulated, thermostat CO₂ 0.010605 bar by weight, a partial pressure of 6.819e-3 bar, Bond albedo 0.3066 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone in the light and in the infrared (#704), Bond albedo 0.2907 and 289.38 K at 280 ppm (before #749, which keeps the air in weights: 6.910e-3 bar read as a partial pressure, 0.3064, 0.2906 and 289.39 K; before #704 and the clouds' infrared emissivity of #705: 4.071e-3 bar, 0.3071, 0.2914 and 288.18 K; before the N₂ and O₂ pairs of #703: 4.206e-3 bar and 288.02 K; on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
 | Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the 577 K pin, the model's output (#594), moves to the tier-2 net in 2d-4 | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
-| Titan | 92.33 K on the measured air, hydrocarbons; the reference Titan settles at 92.61 K on the chain's own air (92.64 K and 92.97 K before N₂ condensed in the column, #741; 93.86 K and 94.24 K under methane's grey stand-in, before #703; 104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
+| Titan | 92.36 K on the measured air, hydrocarbons; the reference Titan settles at 92.39 K on the chain's own air (92.33 K and 92.62 K before #749, whose chain methane, 2.11 bar by weight, the column read as a partial pressure; 92.64 K and 92.97 K before N₂ condensed in the column, #741; 93.86 K and 94.24 K under methane's grey stand-in, before #703; 104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | its equilibrium temperature, dry, temperate | within 1 K of it | airless |
 
 The reference Titan settled at 104.8 K because of its upstream nitrogen
@@ -3355,7 +3355,10 @@ heavy tests' 0.30703 and 0.30708) and its thermostat holds 288 K with
 (4.206e-3 bar before the pairs). Since the clouds' infrared emissivity
 was fitted on CERES (0.848, #705's longwave part, with #704's gases)
 its clouds trap less: it holds 288 K with 6.910e-3 bar (Bond albedo
-0.3064), and the measured air settles at 289.39 K at 280 ppm. Dry bodies are never a runaway: Mercury
+0.3064), and the measured air settles at 289.39 K at 280 ppm. Since the
+climate keeps its air in weights (#749) it holds 288 K with 0.010605 bar
+of CO₂ by weight, 6.819e-3 bar of partial pressure (Bond albedo
+0.3066), and the measured air settles at 289.38 K. Dry bodies are never a runaway: Mercury
 and a dry Venus are `Temperate`.
 
 The wet column against CERES (#680, study 32): on Earth's measured air
@@ -3632,15 +3635,26 @@ too). Refitted again with the clouds' infrared emissivity of #705
 (0.848, fitted on CERES's longwave cloud effect once ozone, methane and
 N₂O absorb in the column, #704; after N₂'s condensation of #741): the
 reference Earth freezes with 0.006910 bar and thaws at 0.148532 bar, so
-`d⊕` = 0.1416 bar (0.141623) and `W` = 9.855, kept as **9.85 bar**
-(Earth's chance was 0.01408 under 9.80 bar, inside the window). The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
+`d⊕` = 0.1416 bar (0.141623) and `W` = 9.855, kept as 9.85 bar
+(Earth's chance was 0.01408 under 9.80 bar, inside the window).
+Refitted again once the climate kept its air in weights (#749): `d` and
+`W` are CO₂ weights, and the column reads the CO₂'s partial pressure
+from the whole air, which holds less CO₂ by moles than by weight (44.01
+against Earth's 28.96 g/mol). The reference Earth freezes with 0.010605
+bar of CO₂ by weight and thaws at 0.200121 bar, so `d⊕` = 0.1895 bar
+(0.189516) and `W` = 13.19, kept as **13.2 bar** (Earth's chance was
+0.01865 under 9.85 bar, out of the window, and is 0.01399 under 13.2
+bar). The thermostat's 0.010605 bar by weight is a partial pressure of
+6.82e-3 bar, against the 6.910e-3 bar the climate read before: the
+weights moved the reading, not the climate. The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
 holds Earth's chance in 0.013 to 0.016 on the full solve (65 s at the
 tier-1 opt-level); a tier-1 test of `science::snowball` holds the
 arithmetic of the fit on the measured `d⊕` and `rate⊕`.
 Hoffman et al. quote Walker et al. 1981: "Even the present rate of
 release would yield 1 bar of carbon dioxide in only 20 million years",
 so 6.4 bar would be about 130 My of today's outgassing per temperate
-phase, and 9.85 bar is about 200 My.
+phase, and 13.2 bar by weight (about 8.7 bar read as a partial
+pressure in Earth's air) about 260 My.
 Searched and not found: a snowball frequency for another planet, and
 the length of the Paleoproterozoic snowballs. Where no CO₂ thaws the
 body, `thaw_bar` is infinite and the trace takes no non-finite value:
@@ -3761,6 +3775,21 @@ before the emissivity, which leave the edge and the cycling at 1.282 AU
 as they were); the test moved to 1.282 AU, where the climate cycles for
 19 steps and is stored at 234.08 K with 10.39 bar (233.92 K and
 10.33 bar under the collapse's step rules of 2026-11-27, #756).
+Once the climate keeps its air in weights (#749), Titan's 2.11 bar of
+methane by weight is about a third of the methane Earth's moles, not
+4 %, and the edge moves to 1.3276 AU: the thermostat holds 288 K to
+1.311 AU, the climate settles warm and unregulated to 1.327 AU, and
+frozen beyond, with a jump at 1.333 AU (267.2 to 235.3 K). No orbit
+cycles, probed every 0.005 AU from 1.20 to 1.50 AU and every 0.001 AU
+from 1.305 to 1.352 AU (at 1.282 AU it now regulates at 288 K with
+7.08 bar). Round a 3300 K star the same methane Earth cycles from
+1.2950 to 1.3000 AU and at 1.3070 and 1.3080 AU (edge 1.3079 AU), but
+on its regulated side, near 288 K: not the frozen, unregulated cold
+side the test held. With no methane Earth to stand on, the tier-3 test
+`a_climate_with_no_fixed_point_stops_on_its_cold_side` and its orbit
+(`CYCLING_AU`) were deleted in #749; issue #767 records its intent and
+this orbit history, and rebuilds the stopping rule on constructed
+inputs.
 
 #### A collapse from the fold (#731)
 
@@ -3830,8 +3859,16 @@ and the most its thaw search leaves frozen:
 | 3300 K, 1.3581 AU, 27.96 bar | 210.3725 K | 210.3725 K | 210.4052 K |
 | 3300 K, 1.3864 AU, 39.31 bar | 205.4620 K | 205.4620 K | 205.4657 K |
 
-At the most CO₂ each thaw search leaves frozen, within 0.004 bar of its
-thaw, the branch flips with the step: at 1.3298 AU and 20.9095 bar the
+Since the climate keeps its air in weights (#749) the 3300 K methane
+Earth's edge is 1.3079 AU, and it is bistable only within 0.5 % of it
+(from 1.3030 to 1.3080 AU, probed every 0.001 AU; the solves at 0.94,
+0.96 and 0.98 of the edge are temperate with no frozen branch). The
+test holds its bistable orbits that settle, at the same geometric
+mean: 1.3030 AU and 31.39 bar, 1.3050 AU and 32.24 bar, 1.3060 AU and
+32.50 bar (by weight).
+
+Before #749, at the most CO₂ each thaw search leaves frozen, within 0.004 bar of its
+thaw, the branch flipped with the step: at 1.3298 AU and 20.9095 bar the
 rules land frozen (215.73 K) and the plain step warm (316.14 K); at
 1.3864 AU and 51.2841 bar the rules frozen (205.47 K) and half the step
 warm (384.96 K). The frozen branch a snowball is stored on sits at that
@@ -3850,7 +3887,9 @@ size of the step's effect on a cycle's cold side measured below. Since
 #704 and #705 the edge is 1.2720 AU and the test holds 1.265, 1.272 and
 1.282 AU, and at half the step 288.0001, 283.8828 and 233.9173 K
 become 288.0001, 283.8828 and 233.9140 K (under the step rules of
-2026-11-27). Measured on 2026-11-26 at the old
+2026-11-27). Since #749 the edge is 1.3276 AU and no orbit past it
+cycles: the test holds 1.321, 1.3276 and 1.333 AU, the last where the
+climate falls onto its frozen branch in the most albedo steps (7). Measured on 2026-11-26 at the old
 `COLLAPSE_STEP` (0.005), half, a quarter and the plain step, the
 climates just past the edge stay within:
 
@@ -3985,7 +4024,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |
 | `ALBEDO_TOLERANCE_K` | 0.1 K | Calibration | at 0.01 K the reference climates move under 0.1 K | 1 |
 | `ALBEDO_DAMPING` | 0.5 | Definition | at 0.25 the converged climates agree | 3 |
-| `ALBEDO_BRACKET` | 1e-6 in albedo | Definition | a cycling climate stops on its cold side within 40 steps (#729) | 3 |
+| `ALBEDO_BRACKET` | 1e-6 in albedo | Definition | a cycling climate stopped on its cold side within 40 steps (#729); the test was deleted in #749, no methane Earth cycling any more (#767) | 3 |
 | `CONDENSE_ITERATIONS` | 100 | Definition | Titan and Triton settle under it | 1 |
 | `THERMOSTAT_TOLERANCE` | 1e-3 in ln CO₂ | Calibration | at 1e-4 Earth moves under 0.01 K | 1 |
 | `GREENHOUSE_DECADES` | 4 | Definition | the reference maxima lie inside the range | 1 |

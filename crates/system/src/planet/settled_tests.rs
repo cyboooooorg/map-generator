@@ -140,7 +140,9 @@ const EARTH_SURFACE: Kelvin = Kelvin(288.0);
 const EARTH_WINDOW: Kelvin = Kelvin(6.0);
 
 /// Definition: the CO₂ under which the thermostat keeps an Earth whose
-/// air is not a runaway's, 0.01 bar (legacy `the_solar_system_has_its_climates`).
+/// air is not a runaway's, 0.01 bar of partial pressure (legacy
+/// `the_solar_system_has_its_climates`, whose climate read its air as
+/// partial pressures).
 const EARTH_CO2_BOUND: f64 = 0.01;
 
 /// Source: Earth's cloud cover, 0.68 ± 0.03 (Stubenrauch et al. 2013,
@@ -701,8 +703,11 @@ fn earth_has_its_climate() {
     );
     assert!(*c.regulated.value(), "{c:?}");
     assert_eq!(*c.global.state.value(), ClimateState::Temperate, "{c:?}");
-    let co2 = c.atmosphere.partial[&Gas::Co2].value().0;
-    println!("reference Earth: {t} K, thermostat CO₂ {co2} bar");
+    // The bound is on the CO₂'s partial pressure, the greenhouse the
+    // column reads; the climate records its weight (#749).
+    let weight = c.atmosphere.partial[&Gas::Co2].value().0;
+    let co2 = air_of(c).partial_pressures().co2;
+    println!("reference Earth: {t} K, thermostat CO₂ {weight} bar by weight, {co2} bar");
     assert!(co2 < EARTH_CO2_BOUND, "{co2} bar");
     assert!(
         (albedo(&earth) - EARTH_BOND).abs() <= EARTH_BOND_WINDOW,

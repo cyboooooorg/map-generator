@@ -221,12 +221,13 @@ const BRANCH_ALBEDO_STEP: f64 = 0.03;
 /// equilibrium temperature, K, at the settled albedo.
 const CENSUS_EQUILIBRIUM: (f64, f64) = (110.0, 120.0);
 
-/// Definition: the census case's nitrogen over its seas, bar (legacy
-/// `census_182_d`).
+/// Definition: the census case's nitrogen over its seas, bar of partial
+/// pressure (legacy `census_182_d`, whose climate read its air as
+/// partial pressures).
 const CENSUS_N2: (f64, f64) = (4.0, 5.0);
 
-/// Definition: the census case's methane over its seas, bar (legacy
-/// `census_182_d`).
+/// Definition: the census case's methane over its seas, bar of partial
+/// pressure (legacy `census_182_d`, as [`CENSUS_N2`]).
 const CENSUS_CH4: (f64, f64) = (0.5, 5.0);
 
 /// Definition: the census case's surface, under 150 K (legacy).
@@ -328,8 +329,9 @@ const HALF: f64 = 0.5;
 const ACID_ORBITS: (f64, f64, usize) = (0.8, 0.02, 60);
 
 /// Definition: the dry acid air: 3 bar of nitrogen, 0.05 bar of CO₂ and
-/// 0.02 bar of SO₂ (legacy), weights as legacy's chain gave its airs.
-const ACID_AIR: Weights = Weights {
+/// 0.02 bar of SO₂ (legacy), partial pressures as legacy's climate read
+/// them; the climate takes their weights ([`PartialPressures::weights`]).
+const ACID_AIR: PartialPressures = PartialPressures {
     n2: 3.0,
     co2: 0.05,
     h2o: 0.0,
@@ -694,7 +696,7 @@ fn thaw_steps_is_converged() {
     };
     let (a, b) = (thaw(THAW_STEPS), thaw(FINER_THAW_STEPS));
     println!(
-        "thaw CO2 {a:.6} bar at {THAW_STEPS} steps, {b:.6} at {FINER_THAW_STEPS} \
+        "thaw CO2 {a:.7} bar at {THAW_STEPS} steps, {b:.7} at {FINER_THAW_STEPS} \
          ({:+.4} %)",
         100.0 * (a / b - 1.0)
     );
@@ -1120,8 +1122,12 @@ fn census_182_d() {
         (CENSUS_EQUILIBRIUM.0..CENSUS_EQUILIBRIUM.1).contains(&c.equilibrium.0),
         "{c:?}"
     );
-    assert!((CENSUS_N2.0..CENSUS_N2.1).contains(&c.air.n2), "{c:?}");
-    assert!((CENSUS_CH4.0..CENSUS_CH4.1).contains(&c.air.ch4), "{c:?}");
+    // Over its seas: the partial pressures, methane's being its sea's
+    // vapour (#749; the census's air is weights).
+    let over = c.air.partial_pressures();
+    println!("over its seas: {over:?}");
+    assert!((CENSUS_N2.0..CENSUS_N2.1).contains(&over.n2), "{over:?}");
+    assert!((CENSUS_CH4.0..CENSUS_CH4.1).contains(&over.ch4), "{over:?}");
     assert!(c.equilibrium.0 < CENSUS_SURFACE_K && c.temperature.0 < CENSUS_SURFACE_K);
     assert_ne!(c.liquid, Some(Liquid::Water), "{c:?}");
 }
@@ -1472,10 +1478,10 @@ fn a_dry_acid_air_settles_through_the_deck_onset() {
     // between a warm deckless and a cold decked climate).
     let mars = inputs_at(&MARS, 1.0, SUN);
     let dry = ClimateInputs {
-        air: ACID_AIR,
+        air: ACID_AIR.weights(),
         water: science::units::Kilogram(0.0),
         runaway: false,
-        carbon: Bar(ACID_AIR.co2),
+        carbon: Bar(ACID_AIR.weights().co2),
         ..mars
     };
     let (start, step, count) = ACID_ORBITS;
@@ -1955,82 +1961,47 @@ fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
     assert!(under_steam(&s));
 }
 
-/// Definition: a test input placed by a probe, not a fact of any body:
-/// an orbit just past a methane Earth's outer edge where the albedo's
-/// fixed point has none (#729): a warm climate at its maximum greenhouse
-/// derives a Rayleigh albedo that collapses its CO₂, and the collapsed
-/// climate derives one that warms it back. The edge is 1.2720 AU since
-/// methane's lines (#704), measured by
-/// `one_greenhouse_search_on_a_condensing_air` (1.2534 AU since CO₂'s
-/// phase step was split, #746; 1.2588 AU with #703's pairs before it;
-/// 1.4365 AU under the grey stand-in, on `main` since #734, 1.4355 AU on
-/// #729's branch, when this orbit was 1.44 AU, then 1.272 and 1.264 AU).
-/// Orbits from 1.280 to 1.285 AU cycle (probed every 0.001 AU at the
-/// solver's numerics, before #741: 1.268 to 1.272 settle warm and
-/// unregulated, 1.273 to 1.279 and from 1.286 frozen), and this one is
-/// their middle.
-const CYCLING_AU: f64 = 1.282;
-
-/// Definition: the most albedo steps the cycling orbit may take before
-/// its bracket closes, 40: the bracket narrows from the swing (about
-/// 0.02 in albedo) to [`super::ALBEDO_BRACKET`] in about 15 halvings;
-/// before #729 it ran to the 200 of [`super::ALBEDO_ITERATIONS`].
-const CYCLING_STEPS: usize = 40;
-
-#[test]
-#[ignore = "heavy: a methane Earth just past its outer edge, a cycling climate"]
-fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
-    let like = ClimateInputs {
-        air: Weights {
-            ch4: titan().air.ch4,
-            ..earth().air
-        },
-        ..earth()
-    };
-    let solved = solve_with(&moved(&like, CYCLING_AU), WARM_DRAW, &Numerics::DEFAULT);
-    let c = &solved.settle;
-    println!(
-        "{CYCLING_AU} AU: {:.3} K, CO2 {:.4} bar, {} steps, cycles {}, converged {}",
-        c.temperature.0, c.air.co2, c.steps, c.cycles, c.converged
-    );
-    assert!(c.cycles && !c.converged, "{c:?}");
-    assert!(c.steps <= CYCLING_STEPS, "{} steps", c.steps);
-    // The colder side: frozen over, its thermostat lost.
-    assert!(frozen_over(c) && !c.regulated, "{c:?}");
-}
-
 /// Definition: test inputs placed around a methane Earth's outer edge,
-/// where the collapse's step is held, AU: just inside it (1.265), at the
-/// edge measured by `one_greenhouse_search_on_a_condensing_air` (1.2720
-/// since methane's lines, #704; 1.2534 since #746; 1.2588 with #703's
-/// pairs before it) and past it, where the fixed point cycles
-/// ([`CYCLING_AU`]). Before #703 the edge was 1.4365 AU and the orbits
-/// were 1.42875, 1.4355 and 1.44 AU; before #704, 1.25, 1.2534 and
-/// 1.264 AU.
-const STEP_ORBITS: [f64; 3] = [1.265, 1.272, CYCLING_AU];
+/// where the collapse's step is held, AU: just inside it (1.321), at the
+/// edge measured by `one_greenhouse_search_on_a_condensing_air` (1.3276
+/// since the climate keeps its air in weights, #749: on its air there,
+/// 0.746 bar of N₂, 0.013 of Ar, 2.11 of CH₄ and 9.50 of CO₂ by weight,
+/// Titan's methane is 35 % of the moles, 4.35 bar of partial pressure,
+/// where read as a partial pressure it was 2.11 bar, 17 % of the
+/// pressure) and past it, where the climate falls onto its frozen branch in
+/// the most albedo steps of the orbits probed every 0.001 AU from 1.322
+/// to 1.352 (1.333, 7 steps, 235.3 K). No orbit of it cycles now
+/// (probed every 0.005 AU from 1.20 to 1.50 AU and every 0.001 AU from
+/// 1.305 to 1.352). Before #749 the edge was 1.2720 AU and the orbits
+/// were 1.265, 1.272 and 1.282 AU, the last where the climate cycled (its
+/// test, `a_climate_with_no_fixed_point_stops_on_its_cold_side`, was
+/// deleted in #749 since no methane Earth reaches it; #767); before #703 the edge was
+/// 1.4365 AU and the orbits 1.42875, 1.4355 and 1.44 AU; before #704,
+/// 1.25, 1.2534 and 1.264 AU.
+const STEP_ORBITS: [f64; 3] = [1.321, 1.3276, 1.333];
 
 /// Definition: frozen climates where the collapse's step is held round
-/// cool stars (star, AU, CO₂): a methane Earth round a 3300 K star at
-/// 0.94, 0.96 and 0.98 of its outer edge (1.4147 AU), with methane's
-/// lines (#704) and the clouds' infrared emissivity (#705), at the
-/// geometric mean of the CO₂ it froze with and the most its thaw search
-/// leaves frozen (15.96 and 20.91, 20.81 and 37.56, 30.13 and 51.28 bar),
-/// a CO₂ the search passes through frozen: 215.72, 210.37 and 205.46 K.
-/// At the most it leaves frozen, within 0.004 bar of its thaw, an icy
-/// start's branch depends on the step: at 0.94 the plain step lands warm
-/// (316.1 K) where the step rules stay frozen; at 0.98 all three land
-/// warm (385.0 K) since #759, where the solve stores a frozen snowball
-/// (205.47 K). None of these thaw searches meets a cycling icy start
-/// (#759's stop). On #731 (main
-/// a97c1ca1), before #704 and #705, they were 4500 K at 1.2828 AU with
-/// 19.0296 and 19.6173 bar (the second cycled with the old step) and
-/// 3300 K at 1.3586 AU with 45.9 bar; with #704 and #705 those three thaw
-/// (308.6, 309.8 and 381.4 K), and a methane Earth round a 4500 K star
-/// is no longer bistable up to its edge (1.3315 AU).
+/// cool stars (star, AU, CO₂ by weight): a methane Earth round a 3300 K
+/// star near its outer edge (1.3079 AU since #749), at the geometric
+/// mean of the CO₂ it froze with and the most its thaw search leaves
+/// frozen, a CO₂ the search passes through frozen. Since #749 it is
+/// bistable only within 0.5 % of its edge (probed every 0.001 AU from
+/// 1.2880 to 1.3120: bistable from 1.3030 to 1.3080, cycling from 1.2950
+/// to 1.3000 and at 1.3070 and 1.3080), so the three are its bistable
+/// orbits that settle, 1.3030, 1.3050 and 1.3060 AU (31.27 and 31.52,
+/// 32.04 and 32.44, 32.05 and 32.95 bar). Before #749 they were 0.94,
+/// 0.96 and 0.98 of an edge at 1.4147 AU (1.3298, 1.3581 and 1.3864 AU
+/// with 18.27, 27.96 and 39.31 bar: 215.72, 210.37 and 205.46 K); at the
+/// most it left frozen, within 0.004 bar of its thaw, an icy start's
+/// branch depended on the step (at 0.94 the plain step landed warm,
+/// 316.1 K, where the step rules stayed frozen; at 0.98 all three landed
+/// warm, 385.0 K, since #759). On #731 (main a97c1ca1), before #704 and
+/// #705, they were 4500 K at 1.2828 AU with 19.0296 and 19.6173 bar and
+/// 3300 K at 1.3586 AU with 45.9 bar.
 const COOL_FROZEN: [(Kelvin, f64, Bar); 3] = [
-    (Kelvin(3300.0), 1.3298, Bar(18.27)),
-    (Kelvin(3300.0), 1.3581, Bar(27.96)),
-    (Kelvin(3300.0), 1.3864, Bar(39.31)),
+    (Kelvin(3300.0), 1.3030, Bar(31.39)),
+    (Kelvin(3300.0), 1.3050, Bar(32.24)),
+    (Kelvin(3300.0), 1.3060, Bar(32.50)),
 ];
 
 /// Earth at `au` round a star of `teff` with Titan's methane in its air
