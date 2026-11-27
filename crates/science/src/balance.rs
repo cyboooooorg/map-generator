@@ -424,22 +424,29 @@ pub fn moist_plateau(
     plateau
 }
 
-/// Calibration: the ozone column of Earth's moist plateau
-/// ([`earth_moist_plateau`]), none, where Earth holds 300 DU: the
-/// plateau is the anchor the Simpson–Nakajima limit and the runaway's
-/// albedo were checked on (study 25), without ozone, and kept so.
-/// Measured: Earth's 300 DU lower it by 0.354 W/m² (289.710 to
-/// 289.356), the saturated column's by 0.353; a runaway whose own
-/// ozone lowers its plateau under this one takes this one
-/// (`docs/science/ozone.md`, calibration 6).
+/// Definition: the ozone column of the ozone-free reference plateau
+/// ([`earth_moist_plateau`]), none: the plateau checked against the
+/// Simpson–Nakajima limit ([`SIMPSON_NAKAJIMA_W_M2`]), Goldblatt et al.
+/// 2013's 282 W/m², that of "a pure water atmosphere: neither any
+/// background gas nor any greenhouse gas other than water" (*Nature
+/// Geosci.* 6, 661, accepted manuscript p. 4). The plateau also holds
+/// Earth's N₂, O₂ and CO₂ ([`EARTH_DRY_AIR`]), which Goldblatt's does
+/// not: the column's test holds that its CO₂ (400 ppm to 1 %) and N₂
+/// (one to three Earth's) move its outgoing radiation by under 3 %
+/// (`the_plateau_ignores_co2_and_nitrogen`; its O₂ is not varied). Earth holds 300 DU; a
+/// runaway's floor takes the runaway's own ozone
+/// ([`earth_moist_plateau_under`]; `docs/science/ozone.md`, "Ozone on
+/// the moist plateau", #761).
 pub const EARTH_PLATEAU_OZONE: DobsonUnit = DobsonUnit(0.0);
 
 /// The column's own moist plateau on Earth's dry air
-/// ([`EARTH_DRY_AIR`]), with all the water it can hold, on the standard
-/// gravity and the plateau's clear, saturated, fine column
-/// ([`Profile::PLATEAU`]), started from [`SIMPSON_NAKAJIMA_W_M2`]: the
-/// plateau a runaway's albedo binds at its star's limit
-/// ([`runaway_albedo`]). Solved once per process.
+/// ([`EARTH_DRY_AIR`]), with all the water it can hold, without ozone
+/// ([`EARTH_PLATEAU_OZONE`]), on the standard gravity and the plateau's
+/// clear, saturated, fine column ([`Profile::PLATEAU`]), started from
+/// [`SIMPSON_NAKAJIMA_W_M2`]: the plateau checked against that limit,
+/// which a runaway's albedo binds at its star's limit
+/// ([`runaway_albedo`]) when its air holds no ozone. Solved once per
+/// process.
 pub fn earth_moist_plateau() -> WattPerSquareMetre {
     static PLATEAU: OnceLock<WattPerSquareMetre> = OnceLock::new();
     *PLATEAU.get_or_init(|| {
@@ -454,6 +461,41 @@ pub fn earth_moist_plateau() -> WattPerSquareMetre {
             &mut ColumnCache::default(),
         )
     })
+}
+
+/// The moist plateau of Earth's dry air ([`EARTH_DRY_AIR`]) holding
+/// `ozone` in its infrared column, otherwise as [`earth_moist_plateau`]
+/// (all the water it can hold, the standard gravity,
+/// [`Profile::PLATEAU`]), started from it, through `cache`: the floor
+/// of a runaway's own plateau, taken at the runaway's own ozone. Ozone's
+/// 9.6 µm band lies in water's 10 µm window, whose least opacity sets
+/// the limit, so ozone lowers it (Goldblatt et al. 2013, p. 6: "any
+/// additional opacity here would raise the τλ = 1 surface to a higher
+/// altitude that radiates at a lower temperature"); a floor without it
+/// would hand an ozone-bearing runaway a plateau its air cannot send
+/// out (#761). No ozone (zero, or a negative or NaN column read as
+/// none) returns [`earth_moist_plateau`] itself, solved once.
+pub fn earth_moist_plateau_under(ozone: DobsonUnit, cache: &mut ColumnCache) -> WattPerSquareMetre {
+    let Some(ozone) = floor_ozone(ozone) else {
+        return earth_moist_plateau();
+    };
+    moist_plateau(
+        &EARTH_DRY_AIR,
+        ozone,
+        Bar(f64::INFINITY),
+        STANDARD_GRAVITY,
+        Profile::PLATEAU,
+        &PLATEAU_SURFACES,
+        earth_moist_plateau(),
+        cache,
+    )
+}
+
+/// The ozone column [`earth_moist_plateau_under`] solves a floor under:
+/// `None` for no ozone, a column of zero, a negative or a NaN one, whose
+/// floor is [`earth_moist_plateau`] itself.
+fn floor_ozone(ozone: DobsonUnit) -> Option<DobsonUnit> {
+    (ozone.0 > 0.0).then_some(ozone)
 }
 
 /// Definition: the least and greatest Bond albedo of a body in a water

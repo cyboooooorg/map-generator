@@ -6,6 +6,7 @@
 use super::*;
 use crate::constants::SOLAR_EFFECTIVE_TEMPERATURE;
 use crate::orbit::EARTH_EQUILIBRIUM;
+use crate::radiation::ozone::EARTH_OZONE_COLUMN;
 use crate::radiation::test_points::{
     EARTH_SURFACE_K, NO_OZONE, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K,
 };
@@ -313,6 +314,16 @@ fn titans_pairs_hold_its_column_just_under_its_measured_surface() {
         (coldest..=warmest).contains(&t),
         "{t} K against {coldest} to {warmest} K"
     );
+}
+
+#[test]
+fn no_ozone_floors_at_the_ozone_free_plateau() {
+    // Zero, negative and NaN columns read as none: the floor is the
+    // ozone-free plateau itself, with no solve of its own.
+    for ozone in [0.0, -1.0, f64::NAN] {
+        assert_eq!(floor_ozone(DobsonUnit(ozone)), None, "{ozone} DU");
+    }
+    assert_eq!(floor_ozone(EARTH_OZONE_COLUMN), Some(EARTH_OZONE_COLUMN));
 }
 
 #[test]

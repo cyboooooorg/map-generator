@@ -40,8 +40,12 @@ const PLATEAU_TOLERANCE_W_M2: f64 = 14.0;
 
 /// Calibration: how far the plateau may move with the CO₂ and the
 /// nitrogen, a share, 3 %: the legacy's bound on the claim that the moist
-/// plateau is water's alone (Goldblatt et al. 2013); no source gives a
-/// number.
+/// plateau is water's alone. Goldblatt et al. 2013 (*Nature Geosci.* 6,
+/// 661, accepted manuscript p. 6) give numbers for other gases: 1 % of
+/// CO₂ lowers the limit by 2 W/m², 1 % of NH₃ by 6, 8 W/m² for both. They
+/// do not set this bound: theirs is a 1 % share of a steam column, not
+/// the test's partial pressures (400 ppm to 1 % of a bar of CO₂, one to
+/// three Earth's N₂, under a 380 K saturated surface).
 const PLATEAU_GASES_SHARE: f64 = 0.03;
 
 /// Calibration: how flat the moist column must stay over

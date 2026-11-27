@@ -2149,7 +2149,9 @@ runaway limit `S_rg` (`star::habitable_fluxes`), clamped to 0 to 0.9:
 behind `T_eq` (255 K at 1 S⊕ with albedo 0.3). `F_plateau` is the
 higher of Earth's air's plateau and the body's own (issue #523,
 `moist_plateau_of`: the asymptote of its dry air over a saturated
-surface, its vapour capped by its water, on its gravity), so that a
+surface, its vapour capped by its water, on its gravity; in the
+rewrite both under the body's own ozone, #761, see
+[ozone.md](ozone.md)), so that a
 runaway absorbs more than its own steam column can send out: on Earth's
 plateau the super-Earth of issue #492 (1.7 g, 0.45 bar of CO₂, its own
 plateau 299 W/m²) stayed at water's critical point, and now settles at
