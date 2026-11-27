@@ -27,7 +27,9 @@ use crate::radiation::column::{ColumnCache, Profile, outgoing_longwave, skin_tem
 use crate::radiation::gases::PartialPressures;
 use crate::radiation::methane::stratospheric_share;
 use crate::surface::surface_vapour;
-use crate::units::{Bar, Fraction, Kelvin, MetrePerSecondSquared, Pascal, WattPerSquareMetre};
+use crate::units::{
+    Bar, DobsonUnit, Fraction, Kelvin, MetrePerSecondSquared, Pascal, WattPerSquareMetre,
+};
 use crate::water::{TRIPLE_POINT_PRESSURE, boiling_temperature};
 
 /// The settings of a balance solve: the width under which a root's
@@ -220,7 +222,8 @@ pub fn absorbed(
     WattPerSquareMetre(light * (1.0 - share) + heat.0.max(0.0))
 }
 
-/// Mean surface temperature of a body with `gases` under `starlight`
+/// Mean surface temperature of a body with `gases` and the ozone column
+/// `ozone` (none in an air without O₂) under `starlight`
 /// (W/m² absorbed, after its albedo), plus its internal `heat`, whose
 /// surface radiates with `emissivity` (1 for a black body, held within
 /// [`LEAST_EMISSIVITY`] to 1), on `gravity`.
@@ -235,23 +238,38 @@ pub fn absorbed(
 /// sits at that lower bound: the light and the heat alone. The root is
 /// bracketed by [`bracket_up`] and found by [`regula_falsi`] within
 /// `solver.tolerance`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the inputs of one balance, and the caller's cache"
+)]
 pub fn surface_temperature(
     starlight: WattPerSquareMetre,
     gases: &PartialPressures,
+    ozone: DobsonUnit,
     heat: WattPerSquareMetre,
     emissivity: Fraction,
     gravity: MetrePerSecondSquared,
     solver: Solver,
     cache: &mut ColumnCache,
 ) -> Kelvin {
-    Kelvin(surface_root(starlight, gases, heat, emissivity, gravity, solver, cache).x)
+    Kelvin(
+        surface_root(
+            starlight, gases, ozone, heat, emissivity, gravity, solver, cache,
+        )
+        .x,
+    )
 }
 
 /// [`surface_temperature`] with the steps of its root search (none when
 /// the lower bound is the answer).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the inputs of one balance, and the caller's cache"
+)]
 pub(crate) fn surface_root(
     starlight: WattPerSquareMetre,
     gases: &PartialPressures,
+    ozone: DobsonUnit,
     heat: WattPerSquareMetre,
     emissivity: Fraction,
     gravity: MetrePerSecondSquared,
@@ -269,7 +287,16 @@ pub(crate) fn surface_root(
     }
     let skin = skin(starlight);
     let mut excess = |t: f64| {
-        e * outgoing_longwave(gases, Kelvin(t), skin, gravity, Profile::CLIMATE, cache).0 - absorbed
+        e * outgoing_longwave(
+            gases,
+            ozone,
+            Kelvin(t),
+            skin,
+            gravity,
+            Profile::CLIMATE,
+            cache,
+        )
+        .0 - absorbed
     };
     let vapour = Pascal::from(Bar(gases.h2o));
     let condenses = if vapour.0 > TRIPLE_POINT_PRESSURE.0 {
@@ -345,7 +372,8 @@ pub const EARTH_DRY_AIR: PartialPressures = PartialPressures {
     ar: 0.0,
 };
 
-/// The moist plateau, W/m², of the `dry` air over a saturated surface,
+/// The moist plateau, W/m², of the `dry` air and the ozone column `ozone`
+/// over a saturated surface,
 /// its vapour ([`surface_vapour`]) capped by the `water` supply, on
 /// `gravity` and the column of `profile`: the mean outgoing radiation over
 /// `surfaces` (the [`PLATEAU_SURFACES`]) under the [`skin`] of a body
@@ -357,8 +385,13 @@ pub const EARTH_DRY_AIR: PartialPressures = PartialPressures {
 /// pinned to water's saturation curve: the Simpson–Nakajima limit
 /// ([`SIMPSON_NAKAJIMA_W_M2`]). A body's own plateau starts from
 /// [`earth_moist_plateau`] (legacy `moist_plateau_of`).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the inputs of one plateau, and the caller's cache"
+)]
 pub fn moist_plateau(
     dry: &PartialPressures,
+    ozone: DobsonUnit,
     water: Bar,
     gravity: MetrePerSecondSquared,
     profile: Profile,
@@ -374,7 +407,7 @@ pub fn moist_plateau(
                     h2o: surface_vapour(t, water).0,
                     ..*dry
                 };
-                outgoing_longwave(&gases, t, skin, gravity, profile, cache).0
+                outgoing_longwave(&gases, ozone, t, skin, gravity, profile, cache).0
             })
             .sum();
         sum / surfaces.len() as f64
@@ -391,6 +424,14 @@ pub fn moist_plateau(
     plateau
 }
 
+/// Definition: the ozone column of Earth's moist plateau
+/// ([`earth_moist_plateau`]), none: the plateau is the anchor the
+/// Simpson–Nakajima limit and the runaway's albedo were checked on, and
+/// a saturated column over its hot surfaces closes the 9.6 µm window
+/// with water's continuum (measured: the 300 DU of Earth's O₂ move it by
+/// PLATEAU_OZONE_EFFECT W/m², `docs/science/ozone.md`).
+pub const EARTH_PLATEAU_OZONE: DobsonUnit = DobsonUnit(0.0);
+
 /// The column's own moist plateau on Earth's dry air
 /// ([`EARTH_DRY_AIR`]), with all the water it can hold, on the standard
 /// gravity and the plateau's clear, saturated, fine column
@@ -402,6 +443,7 @@ pub fn earth_moist_plateau() -> WattPerSquareMetre {
     *PLATEAU.get_or_init(|| {
         moist_plateau(
             &EARTH_DRY_AIR,
+            EARTH_PLATEAU_OZONE,
             Bar(f64::INFINITY),
             STANDARD_GRAVITY,
             Profile::PLATEAU,

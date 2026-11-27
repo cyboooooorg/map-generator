@@ -162,3 +162,65 @@ fn an_air_without_oxygen_holds_no_ozone() {
         assert_eq!(ozone_column(EARTH_O2, Kelvin(t)), EARTH_OZONE_COLUMN);
     }
 }
+
+/// Source: the ozone column of the U.S. Standard profile, 346 DU (study
+/// 34 integrated libRadtran's `afglus.dat`, `docs/science/ozone.md`,
+/// "Where ozone comes from"), at its surface, 1.013 bar.
+const AFGL_US_COLUMN: (f64, f64) = (1.013, 346.0);
+
+/// Definition: how far [`AFGL_US_OZONE`]'s own column may lie from
+/// [`AFGL_US_COLUMN`], relative: 1 %, for its 42 rows to 80 km (the file
+/// runs to 120 km) and its four digits.
+const AFGL_COLUMN_TOLERANCE: f64 = 0.01;
+
+/// Source: the mean molar mass of the U.S. Standard Atmosphere 1976's dry
+/// air, 28.964 g/mol (NASA-TM-X-74335), kg/mol.
+const DRY_AIR_MOLAR_MASS: f64 = 28.964e-3;
+
+/// The column, Dobson units, of `ozone_bar(p)` over an air of
+/// `surface_bar` on `gravity`: `∫ n_O₃ d ln p` from the surface to
+/// 1e-9 bar, summed on 4000 steps of `ln p` (midpoints).
+fn column_of(ozone_bar: impl Fn(f64) -> f64, surface_bar: f64, gravity: f64) -> f64 {
+    let (top, steps) = (1e-9_f64, 4000);
+    let span = (surface_bar / top).ln();
+    let per_ln_p: f64 = (0..steps)
+        .map(|i| ozone_bar(surface_bar * (-(i as f64 + 0.5) * span / steps as f64).exp()))
+        .sum::<f64>()
+        * span
+        / steps as f64;
+    per_ln_p * PASCALS_PER_BAR * AVOGADRO
+        / (DRY_AIR_MOLAR_MASS * gravity)
+        / (molecules_per_cm2(DobsonUnit(1.0)) * CM2_PER_M2)
+}
+
+#[test]
+fn the_afgl_shape_holds_the_us_standard_column() {
+    let (surface, column) = AFGL_US_COLUMN;
+    let own = column_of(
+        |p| afgl_mixing_ratio(p) * p,
+        surface,
+        crate::constants::STANDARD_GRAVITY.0,
+    );
+    assert!(
+        (own / column - 1.0).abs() < AFGL_COLUMN_TOLERANCE,
+        "{own} DU against {column}"
+    );
+}
+
+#[test]
+fn a_laid_out_column_holds_its_dobson_units() {
+    // Calibration 5: the shape scaled to the column, from the surface to
+    // space, on Earth's air, a thin air and a thick one.
+    let g = crate::constants::STANDARD_GRAVITY.0;
+    for surface in [0.006, 1.013, 90.0] {
+        let profile = OzoneProfile::of(EARTH_OZONE_COLUMN, surface, DRY_AIR_MOLAR_MASS, g);
+        assert!(profile.holds());
+        let column = column_of(|p| profile.bar_at(p), surface, g);
+        assert!(
+            (column / EARTH_OZONE_COLUMN.0 - 1.0).abs() < 1e-3,
+            "{surface} bar: {column} DU"
+        );
+    }
+    assert!(!OzoneProfile::of(DobsonUnit(0.0), 1.0, DRY_AIR_MOLAR_MASS, g).holds());
+    assert_eq!(OzoneProfile::NONE.bar_at(0.01), 0.0);
+}

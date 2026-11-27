@@ -1,6 +1,8 @@
 //! Builds `crates/science/data/rfmip-profiles.tsv` from the RFMIP-IRF
 //! profiles that `fetch.sh` downloads (see README.md): the field the
-//! science crate's shortwave is tested on. From the clear-sky shortwave
+//! science crate's shortwave is tested on; and
+//! `crates/science/data/rfmip-longwave.tsv`, the field of all 100 sites
+//! its infrared is tested on (methane's step, issue #704). From the clear-sky shortwave
 //! fluxes of LBLRTM and RTE-RRTMGP it prints the three weighted
 //! differences the tests quote (`science::radiation::rfmip_tests`), and
 //! writes nothing of them: those files' licence (CC BY-NC-SA 4.0) keeps
@@ -55,6 +57,36 @@ const HEADER: &str = "\
 # X expt co2_ppmv (carbon_dioxide_GM)
 # S site weight insolation_w_m2 surface_albedo (sunlit sites; weights over all)
 # L p_pa t_k x_h2o t_k(+4K) x_h2o(+4K) x_h2o(+4K const RH), surface first
+";
+
+/// Definition: the experiments the longwave field holds the gases of:
+/// present day, pre-industrial methane (`expt_label` "PI CH4") and
+/// pre-industrial N₂O ("PI N2O"), whose temperatures, water and ozone are
+/// present day's.
+const LONGWAVE_EXPERIMENTS: [usize; 3] = [0, 9, 10];
+
+/// The longwave field's header, as [`HEADER`]'s terms.
+const LONGWAVE_HEADER: &str = "\
+# RFMIP-IRF clear-sky longwave field: the atmospheric conditions of RFMIP's
+# rad-irf experiment, built by tools/rfmip-shortwave (map-generator).
+# Attribution: Pincus, R., Forster, P. M., Stevens, B. 2016, The Radiative
+# Forcing Model Intercomparison Project (RFMIP), Geosci. Model Dev. 9, 3447,
+# doi:10.5194/gmd-9-3447-2016; dataset input4MIPs.CMIP6.RFMIP.UColorado.
+# UColorado-RFMIP-1-2 (v20190401, hdl:21.14100/f379c294-f7bb-442d-bca7-64661d60780e),
+# University of Colorado.
+# Licence of this file (its data only, not the repository's code): the source
+# file says its data are licensed under a Creative Commons Attribution \"Share
+# Alike\" 4.0 International License, while its link points to CC BY 4.0; the
+# stricter reading is taken: CC BY-SA 4.0,
+# https://creativecommons.org/licenses/by-sa/4.0/. No warranty, as the source
+# states.
+# Changes made: present day's profiles only (the methane and N2O experiments
+# change only that gas); weights renormalised over the 100 sites; water vapour and
+# ozone moved from the layers to the levels (linear in ln p); rounded.
+# Details: crates/science/data/RFMIP.md.
+# X expt co2_ppmv ch4_ppbv n2 o2 n2o_ppbv (the *_GM mole fractions)
+# S site weight surface_k surface_emissivity
+# L p_pa t_k x_h2o x_o3, surface first
 ";
 
 /// The text view of one OPeNDAP variable: its dimensions and its values,
@@ -182,7 +214,7 @@ fn interpolate(xs: &[f64], ys: &[f64], x: f64) -> f64 {
     ys[ys.len() - 1]
 }
 
-fn run(raw: &Path, out: &Path, fluxes: bool) -> Result<(), String> {
+fn run(raw: &Path, out: &Path, longwave_out: &Path, fluxes: bool) -> Result<(), String> {
     let input = read(
         raw,
         "multiple_input4MIPs_radiation_RFMIP_UColorado-RFMIP-1-2_none.txt",
@@ -276,6 +308,67 @@ fn run(raw: &Path, out: &Path, fluxes: bool) -> Result<(), String> {
     }
     fs::write(out, text).map_err(|e| format!("{}: {e}", out.display()))?;
     println!("{}: {sunlit} sunlit sites of {sites}", out.display());
+
+    let extra = read(
+        raw,
+        "multiple_input4MIPs_radiation_RFMIP_UColorado-RFMIP-1-2_none-longwave.txt",
+    )?;
+    let more = |name: &str| extra.get(name).ok_or(format!("longwave input: no {name}"));
+    let (ozone, surface_t, emissivity) = (
+        more("ozone")?,
+        more("surface_temperature")?,
+        more("surface_emissivity")?,
+    );
+    let (methane, nitrogen, oxygen, nitrous) = (
+        more("methane_GM")?,
+        more("nitrogen_GM")?,
+        more("oxygen_GM")?,
+        more("nitrous_oxide_GM")?,
+    );
+    let mut text = String::new();
+    text.push_str(LONGWAVE_HEADER);
+    for e in LONGWAVE_EXPERIMENTS {
+        text.push_str(&format!(
+            "X\t{e}\t{}\t{}\t{}\t{}\t{}\n",
+            co2.values[e],
+            methane.values[e],
+            nitrogen.values[e],
+            oxygen.values[e],
+            nitrous.values[e]
+        ));
+    }
+    for (s, w) in weights.iter().enumerate() {
+        text.push_str(&format!(
+            "S\t{s}\t{:.8}\t{}\t{}\n",
+            w / total,
+            surface_t.at(&[PRESENT_DAY, s]),
+            emissivity.values[s]
+        ));
+        let ln_layer: Vec<f64> = (0..layers).map(|k| p_layer.at(&[s, k]).ln()).collect();
+        let mut order: Vec<usize> = (0..layers).collect();
+        order.sort_by(|a, b| ln_layer[*a].total_cmp(&ln_layer[*b]));
+        let xs: Vec<f64> = order.iter().map(|k| ln_layer[*k]).collect();
+        let at_level = |field: &Variable, p: f64| -> f64 {
+            let ys: Vec<f64> = order
+                .iter()
+                .map(|k| field.at(&[PRESENT_DAY, s, *k]))
+                .collect();
+            interpolate(&xs, &ys, p.ln())
+        };
+        let mut rows: Vec<usize> = (0..levels).collect();
+        rows.sort_by(|a, b| p_level.at(&[s, *b]).total_cmp(&p_level.at(&[s, *a])));
+        for k in rows {
+            let p = p_level.at(&[s, k]);
+            text.push_str(&format!(
+                "L\t{p}\t{}\t{:.6e}\t{:.6e}\n",
+                t_level.at(&[PRESENT_DAY, s, k]),
+                at_level(water, p),
+                at_level(ozone, p),
+            ));
+        }
+    }
+    fs::write(longwave_out, text).map_err(|e| format!("{}: {e}", longwave_out.display()))?;
+    println!("{}: {sites} sites", longwave_out.display());
     Ok(())
 }
 
@@ -283,20 +376,24 @@ fn main() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut raw = root.join("raw");
     let mut out = root.join("../../crates/science/data/rfmip-profiles.tsv");
+    let mut longwave_out = root.join("../../crates/science/data/rfmip-longwave.tsv");
     let mut fluxes = true;
     let mut args = env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--raw" => raw = PathBuf::from(args.next().unwrap_or_default()),
             "--out" => out = PathBuf::from(args.next().unwrap_or_default()),
+            "--longwave-out" => longwave_out = PathBuf::from(args.next().unwrap_or_default()),
             "--no-fluxes" => fluxes = false,
             _ => {
-                eprintln!("usage: rfmip-shortwave [--raw DIR] [--out FILE] [--no-fluxes]");
+                eprintln!(
+                    "usage: rfmip-shortwave [--raw DIR] [--out FILE] [--longwave-out FILE] [--no-fluxes]"
+                );
                 process::exit(2);
             }
         }
     }
-    if let Err(e) = run(&raw, &out, fluxes) {
+    if let Err(e) = run(&raw, &out, &longwave_out, fluxes) {
         eprintln!("rfmip-shortwave: {e}");
         process::exit(1);
     }

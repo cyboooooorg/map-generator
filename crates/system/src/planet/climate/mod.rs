@@ -248,6 +248,26 @@ pub(crate) struct ClimateInputs {
 }
 
 impl ClimateInputs {
+    /// The ozone column the infrared column lays out
+    /// (`science::radiation::column::outgoing_longwave`): each star's
+    /// ([`Light::ozone`]) weighted by its share of the planet's light,
+    /// none without light. The air holds one layer of ozone made by its
+    /// stars together; no source treats a planet of two hosts (a
+    /// departure, `docs/science/ozone.md`, "One column per star").
+    pub(crate) fn longwave_ozone(&self) -> DobsonUnit {
+        let total: f64 = self.sources.iter().map(|s| s.flux.0.max(0.0)).sum();
+        if total <= 0.0 {
+            return DobsonUnit(0.0);
+        }
+        DobsonUnit(
+            self.sources
+                .iter()
+                .map(|s| s.flux.0.max(0.0) * s.ozone.0)
+                .sum::<f64>()
+                / total,
+        )
+    }
+
     /// The inputs of `bare`'s climate under `rotation`, with `so2_frost`
     /// of volcanic SO₂ frost on its ground; `None` for a planet that kept
     /// an envelope. The heat flux is the total internal power over the

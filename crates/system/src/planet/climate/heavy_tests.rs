@@ -47,8 +47,8 @@ use crate::planet::tests::{
 use crate::planet::tests::{derived_from, trial, water_world_trial};
 use crate::planet::water::boiled;
 use science::balance::{
-    EARTH_DRY_AIR, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, TOLERANCE, absorbed,
-    earth_moist_plateau, moist_plateau, skin,
+    EARTH_DRY_AIR, EARTH_PLATEAU_OZONE, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, TOLERANCE,
+    absorbed, earth_moist_plateau, moist_plateau, skin,
 };
 use science::constants::{PASCALS_PER_BAR, STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss};
@@ -620,6 +620,7 @@ fn plateau_surfaces_are_converged() {
     assert!(surfaces.len() > PLATEAU_SURFACES.len());
     let finer = moist_plateau(
         &EARTH_DRY_AIR,
+        EARTH_PLATEAU_OZONE,
         Bar(f64::INFINITY),
         STANDARD_GRAVITY,
         Profile::PLATEAU,
@@ -874,6 +875,7 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
         let sent = c.emissivity.get()
             * outgoing_longwave(
                 &c.air,
+                at.longwave_ozone(),
                 c.temperature,
                 skin(light),
                 at.gravity,
@@ -1226,7 +1228,16 @@ fn doubling_the_nitrogen_warms_a_late_archean_earth_by_a_few_kelvin() {
                 ..gases
             };
             let mut at = |profile| {
-                outgoing_longwave(&wet, Kelvin(t), skin, faint.gravity, profile, &mut cache).0
+                outgoing_longwave(
+                    &wet,
+                    faint.longwave_ozone(),
+                    Kelvin(t),
+                    skin,
+                    faint.gravity,
+                    profile,
+                    &mut cache,
+                )
+                .0
             };
             let (clear, all) = (at(Profile::CLEAR), at(Profile::CLIMATE));
             let f = cover(t);
@@ -1922,15 +1933,17 @@ fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
 /// an orbit just past a methane Earth's outer edge where the albedo's
 /// fixed point has none (#729): a warm climate at its maximum greenhouse
 /// derives a Rayleigh albedo that collapses its CO₂, and the collapsed
-/// climate derives one that warms it back. The edge is 1.2534 AU since
-/// CO₂'s phase step was split (#746), measured by
-/// `one_greenhouse_search_on_a_condensing_air` (1.2588 AU with #703's
-/// pairs before it; 1.4365 AU under the grey stand-in, on `main` since
-/// #734, 1.4355 AU on #729's branch, when this orbit was 1.44 AU, then
-/// 1.272 AU). Orbits from 1.261 to 1.267 AU cycle (probed every 0.001 AU
-/// at the solver's numerics: 1.260 settles at its maximum greenhouse,
-/// 1.268 frozen), and this one is their middle.
-const CYCLING_AU: f64 = 1.264;
+/// climate derives one that warms it back. The edge is 1.2720 AU since
+/// methane's lines (#704), measured by
+/// `one_greenhouse_search_on_a_condensing_air` (1.2534 AU since CO₂'s
+/// phase step was split, #746; 1.2588 AU with #703's pairs before it;
+/// 1.4365 AU under the grey stand-in, on `main` since #734, 1.4355 AU on
+/// #729's branch, when this orbit was 1.44 AU, then 1.272 and 1.264 AU).
+/// Orbits from 1.280 to 1.285 AU cycle (probed every 0.001 AU at the
+/// solver's numerics, before #741: 1.268 to 1.272 settle warm and
+/// unregulated, 1.273 to 1.279 and from 1.286 frozen), and this one is
+/// their middle.
+const CYCLING_AU: f64 = 1.282;
 
 /// Definition: the most albedo steps the cycling orbit may take before
 /// its bracket closes, 40: the bracket narrows from the swing (about
@@ -1961,12 +1974,14 @@ fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
 }
 
 /// Definition: test inputs placed around a methane Earth's outer edge,
-/// where the collapse's step is held, AU: just inside it (1.25), at the
-/// edge measured by `one_greenhouse_search_on_a_condensing_air` (1.2534
-/// since #746; 1.2588 with #703's pairs before it) and past it, where
-/// the fixed point cycles ([`CYCLING_AU`]). Before #703 the edge was
-/// 1.4365 AU and the orbits were 1.42875, 1.4355 and 1.44 AU.
-const STEP_ORBITS: [f64; 3] = [1.25, 1.2534, CYCLING_AU];
+/// where the collapse's step is held, AU: just inside it (1.265), at the
+/// edge measured by `one_greenhouse_search_on_a_condensing_air` (1.2720
+/// since methane's lines, #704; 1.2534 since #746; 1.2588 with #703's
+/// pairs before it) and past it, where the fixed point cycles
+/// ([`CYCLING_AU`]). Before #703 the edge was 1.4365 AU and the orbits
+/// were 1.42875, 1.4355 and 1.44 AU; before #704, 1.25, 1.2534 and
+/// 1.264 AU.
+const STEP_ORBITS: [f64; 3] = [1.265, 1.272, CYCLING_AU];
 
 #[test]
 #[ignore = "heavy: a methane Earth at three orbits around its outer edge, twice"]

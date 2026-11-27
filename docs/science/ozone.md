@@ -5,8 +5,8 @@ air holds oxygen (the `Modern` biosphere of planet PR 2d-4; its
 `Oxidising` air keeps no O₂ for now, issue #717). It is the study behind issues #653 (ozone, O₂ and aerosols in
 the shortwave) and #704 (ozone in the longwave),
 [Wiki study 34](https://github.com/cyboooooorg/map-generator/wiki/34-ozone-oxygen-aerosols-audit).
-Ozone's shortwave is in the app (see [In the app](#in-the-app)); its
-longwave and O₂'s bands are not yet.
+Ozone's shortwave and its longwave (since #704) are in the app (see
+[In the app](#in-the-app)); O₂'s bands are not yet.
 
 ## Short answer
 
@@ -268,9 +268,36 @@ surface albedo raised to reproduce Earth.
   0.1 are merged, as for the gases. Without ozone the paths are the same
   as before, bit for bit.
 
-The longwave still holds water and CO₂ only, and O₂ enters only through
-its Rayleigh scattering and as a broadener (its bands are the third pull
-request of the plan below). `CLOUD_ALBEDO` (0.322) is fitted on Earth's
+**Ozone's longwave** (issue #704, study 36's second pull request):
+
+- **The lines.** HITRAN2024's lines of ozone's five isotopologues (ids
+  16-20), broadened by air, are `opacity.bin`'s seventh set: eight
+  g-points per 20 cm⁻¹ bin, overlapped at random with the other gases
+  (`crates/science/data/OPACITY.md`).
+- **The layer.** `outgoing_longwave` takes the air's ozone column and
+  lays it out on the U.S. Standard profile's mixing ratio against the
+  pressure (`ozone::OzoneProfile`, `AFGL_US_OZONE`, 0-80 km), scaled so
+  that the air from its surface to space holds the column: calibration 5
+  below. Each level holds `x(p) p` of ozone, a trace left out of its
+  pressure, at the level's own temperature: under the column's
+  stratosphere, the skin temperature (214.5 K for Earth).
+- **Which column.** The climate passes each body's
+  `ClimateInputs::longwave_ozone`: each star's column
+  (`Light::ozone`) weighted by its share of the planet's light, none
+  without light. The O₂-free bodies (all of them until planet PR 2d-4)
+  hold none, so their climates do not move. Earth's moist plateau keeps
+  none (`EARTH_PLATEAU_OZONE`, a definition): it anchors the runaway's
+  albedo, checked without ozone.
+- **Measured** (the CERES test's clear column, 288 K, 280 ppm, 1803 ppb
+  of methane): Earth's 300 DU take 8.371 W/m² of the outgoing
+  radiation, inside 4.185 to 10 W/m²
+  (`earths_ozone_takes_what_the_sources_find`). On RFMIP's 100 sites,
+  each with its own column (294.6 DU on average) on the AFGL shape and
+  the sites' own temperatures, ozone takes 7.46 W/m²: the column's cold
+  stratosphere adds about 0.9 W/m² (the "No ozone heating" departure).
+
+O₂ enters the infrared only through its pairs and as a broadener (its
+bands are the third pull request of the plan below). `CLOUD_ALBEDO` (0.322) is fitted on Earth's
 Bond albedo with ozone in, over the climate's own ground (calibration 2
 below). See
 [radiative-transfer.md](radiative-transfer.md#where-it-departs-from-the-science).
@@ -364,13 +391,16 @@ O₂'s bands. The order of the radiation studies' pull requests is 33, 35,
   crosses the column its own temperature gives (`Light::ozone`), as if
   each star alone made the planet's ozone; the air holds one column in
   reality, made by the stars' ultraviolet together. No source treats a
-  planet of two hosts.
+  planet of two hosts. The infrared, which has one column of air, takes
+  the stars' columns weighted by their shares of the light
+  (`ClimateInputs::longwave_ozone`): a choice, not a source.
 - **No ozone heating.** Ozone's absorption warms the stratosphere; the
   column's stratosphere is isothermal at its skin temperature, 214 K for
   Earth, colder than the 225 to 232 K of the ozone layer. Its 9.6 µm
-  band would then emit about a quarter to two fifths less than the real
-  layer at the band's centre (the Planck ratios above), and overstate
-  ozone's longwave greenhouse.
+  band then emits about a quarter to two fifths less than the real
+  layer at the band's centre (the Planck ratios above), and overstates
+  ozone's longwave greenhouse: measured, 8.37 W/m² on Earth's column
+  against 7.46 on RFMIP's own temperatures (above).
 - **O₂ bands outside the table.** `shortwave.bin` starts at 0.7 µm
   (14 364 cm⁻¹): the A band and the 1.27 µm band fall inside it, the B
   and γ bands and the visible collision pairs do not.
@@ -438,6 +468,24 @@ column of Serdyuchenko et al.'s file nearest the cold end of that range
 more (a single pass, table's Sun), and the study's probe found 243 K
 moves Earth's Bond albedo by 0.0002 or less. Searched and not found: an
 ozone-layer temperature for a planet of another host.
+
+### Calibration 5: the layer's height in the infrared (`OzoneProfile`)
+
+What: every air lays its ozone column out on the mixing ratio of the
+U.S. Standard profile (Anderson et al. 1986, libRadtran's `afglus.dat`,
+42 levels from 0 to 80 km, SHA-256
+`dab26290…cfb5` as study 34 recorded it), against the absolute pressure,
+scaled so that the air from its surface to space holds the column; the
+ratio is linear in `ln p` between the levels and held past them. Study 34
+proposed it as its third calibration, decided with the user on
+2026-11-25 for this pull request. It keeps the layer above the
+tropopause's 0.1 bar in a thick air, and in a thin one (under 0.5 bar)
+it crowds the layer into the whole air. Kozakis et al. 2022 (§4.1,
+Fig. 4) show the layer moving down when O₂ falls and with the host; no
+law of its height against the O₂, the host and the surface pressure was
+found. Tests: `earths_ozone_takes_what_the_sources_find` (Earth's
+300 DU within the sources' 4.185 to 10 W/m²); `OzoneProfile`'s own
+tests hold the column it lays out to its Dobson units.
 
 ## Sources
 

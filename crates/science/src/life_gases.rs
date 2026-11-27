@@ -14,7 +14,8 @@
 //! ([`methane_host_factor`]): a cooler host sends less of the near
 //! ultraviolet that makes the OH radical, so the same flux keeps more
 //! methane. No methane feedback (the lifetime does not grow with the
-//! methane, #738); N₂O comes with its lines (#737).
+//! methane, #738); N₂O comes with N₂O as a gas (#737; its lines are in
+//! the infrared column's table).
 
 use crate::constants::{
     DAY, EARTH_EQUATORIAL_RADIUS, JULIAN_YEAR_DAYS, SOLAR_EFFECTIVE_TEMPERATURE,
@@ -164,7 +165,7 @@ pub fn methane_lifetime(stars: &[(Kelvin, EarthFlux)]) -> Year {
 /// The infrared column reads the chain's weights as shares of the moles
 /// (`docs/science/radiative-transfer.md`, argon): it sees this methane
 /// as 16.043/28.96 of what it is, about 373 ppb of Earth's air (a
-/// departure, `docs/science/life-gases.md`).
+/// departure, `docs/science/life-gases.md`, issue #749).
 pub fn modern_methane(stars: &[(Kelvin, EarthFlux)], gravity: MetrePerSecondSquared) -> Bar {
     let g = gravity.0;
     if g.is_nan() || g <= 0.0 {

@@ -315,6 +315,7 @@ fn climate_of(
         let t = surface_temperature(
             starlight,
             air,
+            i.longwave_ozone(),
             i.heat_flux,
             emissivity,
             i.gravity,

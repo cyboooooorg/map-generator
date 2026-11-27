@@ -1,4 +1,4 @@
-# RFMIP clear-sky shortwave field
+# RFMIP clear-sky fields
 
 `rfmip-profiles.tsv` holds the clear-sky field of RFMIP-IRF (Pincus et
 al. 2016) the shortwave is tested on (`science::radiation::rfmip_tests`):
@@ -10,6 +10,13 @@ weighted values of it, cited like values from a paper (below).
 which terms, and how it was derived. Study 35 (Wiki
 `35-stellar-spectra-audit`, issue #655) chose the tests; the total comes
 with #715.
+
+`rfmip-longwave.tsv` holds the clear-sky field of all 100 sites the
+infrared column is tested on (`science::radiation::column::rfmip_tests`,
+tier 3): methane's and N₂O's steps from pre-industrial to present day,
+against the line-by-line codes' 0.613 and 0.204 W/m² and RRTMGP's 0.563
+and 0.180 (Pincus et al. 2020, quoted from
+`docs/science/longwave-absorbers.md`; issue #704).
 
 ## Format
 
@@ -29,6 +36,21 @@ tabs:
   pressure, Pa; present-day temperature, K, and water vapour, mol per mol
   of dry air; the same at +4 K; the water at +4 K at constant relative
   humidity. The CO₂ experiments keep the present-day profiles.
+
+`rfmip-longwave.tsv`, the same way:
+
+- `X expt co2_ppmv ch4_ppbv n2 o2 n2o_ppbv`: present day (0),
+  pre-industrial methane (9, "PI CH4", 808.249 ppb against 1831.471)
+  and pre-industrial N₂O (10, "PI N2O", 273.021 ppb against 326.988),
+  with their `carbon_dioxide_GM`, `methane_GM`, `nitrogen_GM`,
+  `oxygen_GM` and `nitrous_oxide_GM`.
+- `S site weight surface_k emissivity`: each of the 100 sites, its
+  weight (the 100 sum to 1), its present-day `surface_temperature` and
+  `surface_emissivity` (0.98 everywhere).
+- `L p t x x_o3`: the site's 61 levels from the surface up: pressure,
+  Pa; present-day temperature, K; water vapour and ozone, mol per mol of
+  dry air. The methane and N₂O experiments keep the present-day
+  profiles.
 
 ## The references' values
 
@@ -72,7 +94,10 @@ between two experiments. The tests hold them as `Source:` constants:
   only; the sunlight at the top made from `total_solar_irradiance` and
   `solar_zenith_angle`; the weights renormalised over all 100 sites; the
   water vapour moved from the layers to the levels (Method); the values
-  rounded. As the source states, no warranty.
+  rounded. As the source states, no warranty. `rfmip-longwave.tsv`
+  takes the same terms and attribution; its changes: present day's
+  profiles of the 100 sites, the weights renormalised, water and ozone
+  moved from the layers to the levels, the values rounded.
 - **Terms of the fluxes**: the LBLRTM and RRTMGP files are licensed under
   CC BY-NC-SA 4.0 (and the CMIP6 terms of use,
   `https://pcmdi.llnl.gov/CMIP6/TermsOfUse`). No data derived from them
@@ -83,12 +108,19 @@ between two experiments. The tests hold them as `Source:` constants:
 ## Files
 
 `tools/rfmip-shortwave/SHA256SUMS` lists the SHA-256 of the five netCDF
-files, equal to the checksums ESGF publishes for them, and of the five
+files, equal to the checksums ESGF publishes for them, and of the six
 OPeNDAP text views the tool reads (the same variables, served by the
 same ESGF node), as downloaded on 2026-11-25 from
-`https://esgf-node.ornl.gov/thredds/`. `fetch.sh` checks them. Study 35
-read the netCDF files with h5py and found the same weighted fluxes to
-four decimals.
+`https://esgf-node.ornl.gov/thredds/` (the longwave view of the input
+file, `ozone`, `surface_temperature`, `surface_emissivity`,
+`methane_GM`, `nitrogen_GM`, `oxygen_GM` and `nitrous_oxide_GM`, on
+2026-11-27, fetched again that day with `nitrous_oxide_GM` added, the
+other variables equal; the other nine matched again that day).
+`rfmip-longwave.tsv` has the SHA-256
+`c4d118bec7a3d1ca16a5eec5df6b4ee84f83d07e82e7703240a72c8d0ce9cbff`;
+rebuilding wrote `rfmip-profiles.tsv` byte for byte again. `fetch.sh`
+checks them. Study 35 read the netCDF files with h5py and found the same
+weighted fluxes to four decimals.
 
 ## Method
 
@@ -99,7 +131,17 @@ four decimals.
 - **Water at the levels** (`Definition:`): the files give water on the
   60 layers and temperature on the 61 levels; the water of a level is
   interpolated linearly in `ln p` between the layers around it, held at
-  the end layers' values outside them.
+  the end layers' values outside them. Ozone the same way.
+- **The longwave column of a site** (the test's, not the file's): the
+  climate's 20 levels per decade from the surface to the top level,
+  temperature, water and ozone linear in `ln p` between the file's
+  levels; the ground a black body at the surface temperature (RFMIP's
+  0.98 is not taken); N₂ the rest of the dry air, argon in its place;
+  the experiment's N₂O as a share of the dry air at every level (the
+  column's test-only `with_n2o`, since no air of the model holds N₂O);
+  the ozone column integrated from the file and laid out on the app's
+  AFGL shape (`docs/science/ozone.md`, calibration 5); weighted over the
+  sites.
 
 ## How far it can be trusted
 

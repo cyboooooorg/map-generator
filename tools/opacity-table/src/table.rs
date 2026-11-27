@@ -5,7 +5,7 @@
 //!
 //! | Field | Type |
 //! |---|---|
-//! | magic `MGOPACK2` | 8 bytes |
+//! | magic `MGOPACK3` | 8 bytes |
 //! | bins, g-points, pressures, temperatures, sets | 5 × u32 |
 //! | bin width, cm⁻¹ | f64 |
 //! | g-interval edges | (g-points + 1) × f64 |
@@ -28,8 +28,10 @@
 
 use crate::kdist::{BOUNDS, G};
 
-/// File signature.
-pub const MAGIC: &[u8; 8] = b"MGOPACK2";
+/// File signature of the longwave table: `MGOPACK2` held the first four
+/// sets of [`SETS`], `MGOPACK3` adds methane's two, ozone's and N₂O's
+/// (study 36, issues #703 and #737; study 34, issue #704).
+pub const MAGIC: &[u8; 8] = b"MGOPACK3";
 
 /// File signature of the shortwave table.
 pub const SHORTWAVE_MAGIC: &[u8; 8] = b"MGSWCK01";
@@ -57,9 +59,41 @@ pub enum Set {
     /// CO₂'s lines broadened by CO₂ (HITRAN's `γ_self`): the bulk gas of a
     /// thick CO₂ air.
     Co2Self,
+    /// Methane's lines broadened by air.
+    Ch4,
+    /// Methane's lines broadened by methane (HITRAN's `γ_self`): Titan's
+    /// and a methane Earth's few per cent, and a methane-rich air.
+    Ch4Self,
+    /// Ozone's lines broadened by air (ozone is never more than a trace,
+    /// so it has no self set).
+    O3,
+    /// N₂O's lines broadened by air (a trace too: no self set).
+    N2o,
 }
 
-pub const SETS: [Set; 4] = [Set::Co2, Set::WaterForeign, Set::WaterSelf, Set::Co2Self];
+impl Set {
+    /// Whether the set takes HITRAN's self-broadened width `γ_self`.
+    pub fn self_broadened(self) -> bool {
+        matches!(self, Set::WaterSelf | Set::Co2Self | Set::Ch4Self)
+    }
+}
+
+/// The sets of the longwave table, in file order: CO₂'s and water's four,
+/// then methane's two, ozone's and N₂O's.
+pub const SETS: [Set; 8] = [
+    Set::Co2,
+    Set::WaterForeign,
+    Set::WaterSelf,
+    Set::Co2Self,
+    Set::Ch4,
+    Set::Ch4Self,
+    Set::O3,
+    Set::N2o,
+];
+
+/// The sets of the shortwave table, in file order: CO₂'s and water's only
+/// (methane's near infrared is a later change).
+pub const SHORTWAVE_SETS: [Set; 4] = [Set::Co2, Set::WaterForeign, Set::WaterSelf, Set::Co2Self];
 
 /// Pressures of the grid, bar: every `step` decades from 1e-5 to 100
 /// (the table's: every half decade).
@@ -143,6 +177,16 @@ impl Header {
         }
     }
 
+    /// The sets of the table: [`SHORTWAVE_SETS`] for uneven bins (the
+    /// shortwave table), [`SETS`] for even ones.
+    pub fn sets(&self) -> &'static [Set] {
+        if self.edges_cm.is_some() {
+            &SHORTWAVE_SETS
+        } else {
+            &SETS
+        }
+    }
+
     /// Index of the codes of `(set, pressure, temperature)`, whose
     /// `bins × G` codes follow in bin-major order.
     pub fn offset(&self, set: usize, p: usize, t: usize) -> usize {
@@ -151,7 +195,7 @@ impl Header {
 
     /// Number of codes.
     pub fn codes(&self) -> usize {
-        self.offset(SETS.len(), 0, 0)
+        self.offset(self.sets().len(), 0, 0)
     }
 }
 
@@ -170,7 +214,7 @@ pub fn write(header: &Header, codes: &[u16]) -> Vec<u8> {
         G,
         header.pressures_bar.len(),
         header.temperatures_k.len(),
-        SETS.len(),
+        header.sets().len(),
     ] {
         out.extend_from_slice(&(n as u32).to_le_bytes());
     }
@@ -224,7 +268,12 @@ pub fn read(bytes: &[u8]) -> Option<(Header, Vec<u16>)> {
         *i = u32::from_le_bytes(take(4)?.try_into().ok()?) as usize;
     }
     let [bins, g, n_p, n_t, sets] = ints;
-    if g != G || sets != SETS.len() {
+    let expected = if shortwave {
+        SHORTWAVE_SETS.len()
+    } else {
+        SETS.len()
+    };
+    if g != G || sets != expected {
         return None;
     }
     let mut float = || -> Option<f64> { Some(f64::from_le_bytes(take(8)?.try_into().ok()?)) };

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Downloads what crates/science/data/rfmip-profiles.tsv and the RFMIP tests'
+# Downloads what crates/science/data/rfmip-profiles.tsv,
+# crates/science/data/rfmip-longwave.tsv and the RFMIP tests'
 # quoted reference values are built from into
 # raw/ (git-ignored, about 11 MB): the RFMIP-IRF atmospheric profiles
 # (input4MIPs UColorado-RFMIP-1-2, Pincus et al. 2016) and the clear-sky
@@ -41,6 +42,14 @@ for f in "${files[@]}"; do
     rsu_*) vars="rsu" ;;
   esac
   get "$server/dodsC/$f.ascii?$vars" "raw/${name%.nc}.txt"
+  case "$name" in
+    multiple_input4MIPs*)
+      # The longwave field (rfmip-longwave.tsv): ozone, the surface, and
+      # the well-mixed gases the methane and N2O steps change.
+      vars="ozone,surface_temperature,surface_emissivity,methane_GM,nitrogen_GM,oxygen_GM,nitrous_oxide_GM"
+      get "$server/dodsC/$f.ascii?$vars" "raw/${name%.nc}-longwave.txt"
+      ;;
+  esac
 done
 
 shasum -a 256 -c --quiet SHA256SUMS

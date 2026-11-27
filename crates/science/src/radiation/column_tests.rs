@@ -7,8 +7,9 @@
 use super::*;
 use crate::balance::{self, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, earth_moist_plateau};
 use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY, STEFAN_BOLTZMANN};
+use crate::radiation::ozone::EARTH_OZONE_COLUMN;
 use crate::radiation::test_points::{
-    EARTH_AIR, EARTH_MEASURED_AIR, EARTH_PRESSURE_BAR, EARTH_SURFACE_K, PER_MILLION,
+    EARTH_AIR, EARTH_MEASURED_AIR, EARTH_PRESSURE_BAR, EARTH_SURFACE_K, NO_OZONE, PER_MILLION,
     PREINDUSTRIAL_PPM, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K,
     VENUS_GRAVITY,
 };
@@ -208,17 +209,40 @@ const CERES_ALL_SKY_W_M2: f64 = 240.1;
 /// doi:10.1175/JCLI-D-19-0381.1, Table 3: 265.9 against 268.1).
 const TOTAL_REGION_W_M2: f64 = -2.2;
 
-/// Source: what methane, N₂O, CFC-11 (with the other halocarbons as its
-/// equivalent) and CFC-12 take from Earth's clear-sky outgoing
-/// radiation, each removed from a present-day atmosphere: 1.5, 1.5, 0.22
-/// and 0.17 W/m² (Hogan & Matricardi 2020, *Geosci. Model Dev.* 13,
-/// 6501, doi:10.5194/gmd-13-6501-2020, Table 4, line by line). The column
-/// has no lines of N₂O, the halocarbons or methane (methane absorbs only
-/// through its pairs, and Earth's test air holds none), so none of these
-/// absorbs in the test. N₂'s and O₂'s pairs (0.15 and 0.096 W/m² in the
-/// same table) are in the column since study 36
+/// Source: what CFC-11 (with the other halocarbons as its equivalent)
+/// and CFC-12 take from Earth's clear-sky outgoing radiation, each
+/// removed from a present-day atmosphere: 0.22 and 0.17 W/m² (Hogan &
+/// Matricardi 2020, *Geosci. Model Dev.* 13, 6501,
+/// doi:10.5194/gmd-13-6501-2020, Table 4, line by line). The column has
+/// no lines of the halocarbons, so neither absorbs in the test. Methane,
+/// N₂O (1.5 W/m² each in the same table) and ozone absorb in the column
+/// since #704: the test air carries CERES's ([`CERES_CH4_PPB`],
+/// [`CERES_N2O_PPB`], [`EARTH_OZONE_COLUMN`]). N₂'s and O₂'s pairs (0.15
+/// and 0.096 W/m² in the same table) are in the column since study 36
 /// ([`earths_nitrogen_and_oxygen_pairs_take_what_line_by_line_codes_find`]).
-const MINOR_GASES_W_M2: f64 = 1.5 + 1.5 + 0.22 + 0.17;
+const MINOR_GASES_W_M2: f64 = 0.22 + 0.17;
+
+/// Source: the methane of CERES's years, July 2005 to June 2015, ppb:
+/// its global mean of 2011, the middle of the span, 1803.1 ppb (NOAA;
+/// AGAGE 1803.6; IPCC AR6 WG1, Gulev et al. 2021, Table 2.2), rounded.
+const CERES_CH4_PPB: f64 = 1803.0;
+
+/// Source: the N₂O of CERES's years, ppb, as [`CERES_CH4_PPB`]: its
+/// global mean of 2011, 324.2 ppb (NOAA; AGAGE 324.7, CSIRO 324.0; IPCC
+/// AR6 WG1, Gulev et al. 2021, Table 2.2, p. 302). No air of the model
+/// holds N₂O (its law is #737); the CERES test's does, as Earth's
+/// measured air did, so that methane's band shares its overlap.
+const CERES_N2O_PPB: f64 = 324.2;
+
+/// Source: what methane takes from Earth's clear-sky outgoing radiation,
+/// removed from a present-day atmosphere, W/m²: 1.5 at 1921 ppb (Hogan &
+/// Matricardi 2020, Table 4, LBLRTM on 50 profiles) and 1.87 at 1.8 ppm
+/// (Höpfner et al. 2012, Table 1, KOPRA, the cloud-free columns of one
+/// day), each widened by the error study 36 allows a k-distribution
+/// against the line-by-line codes, RRTMGP's 8.2 % on RFMIP's methane
+/// step (`docs/science/longwave-absorbers.md`, "Decisions";
+/// [`super::rfmip_tests`]).
+const METHANE_LINE_BY_LINE_W_M2: (f64, f64) = (1.5 * (1.0 - 0.082), 1.87 * (1.0 + 0.082));
 
 /// Source: what N₂'s and O₂'s collision-induced pairs take from Earth's
 /// clear-sky outgoing radiation, W/m², each gas's absorption removed from
@@ -267,8 +291,9 @@ const PAIRS_ALONE_SHARE: f64 = 1.0 - 6.0 / 8.1;
 /// *J. Geophys. Res.* 115, D20106, doi:10.1029/2010JD014287, Table 1,
 /// removed alone), to 10 W/m² under a clear sky with its overlaps (Kiehl
 /// & Trenberth 1997, *BAMS* 78, 197, Table 3). No global-mean
-/// line-by-line clear-sky value was found (study 32); the column holds no
-/// ozone.
+/// line-by-line clear-sky value was found (study 32, study 34):
+/// [`earths_ozone_takes_what_the_sources_find`] holds the column's
+/// [`EARTH_OZONE_COLUMN`] in this window.
 const OZONE_W_M2: (f64, f64) = (0.027 * 155.0, 10.0);
 
 /// Source: the mean global CO₂ of CERES's years, July 2005 to June 2015,
@@ -362,7 +387,16 @@ fn olr(
     profile: Profile,
     cache: &mut ColumnCache,
 ) -> f64 {
-    outgoing_longwave(gases, Kelvin(surface_k), skin, gravity, profile, cache).0
+    outgoing_longwave(
+        gases,
+        NO_OZONE,
+        Kelvin(surface_k),
+        skin,
+        gravity,
+        profile,
+        cache,
+    )
+    .0
 }
 
 /// Outgoing radiation of `air` over a moist surface at `t`, under the
@@ -849,6 +883,85 @@ fn earth_at(co2_ppm: f64, surface_k: f64) -> PartialPressures {
     }
 }
 
+/// [`earth_at`] 280 ppm and 288 K with CERES's methane ([`CERES_CH4_PPB`]
+/// of its dry air): the CERES test's air, which [`earth_clear`] gives
+/// CERES's N₂O too.
+fn ceres_air() -> PartialPressures {
+    PartialPressures {
+        ch4: CERES_CH4_PPB * 1e-9 * EARTH_PRESSURE_BAR,
+        ..earth_at(PREINDUSTRIAL_PPM, EARTH_SURFACE_K)
+    }
+}
+
+/// The clear-sky outgoing radiation, W/m², of `gases` with the ozone
+/// column `ozone` and `n2o_ppb` of N₂O in its dry air over Earth's 288 K
+/// surface, under Earth's skin, on Earth's gravity: [`outgoing_longwave`]'s
+/// column, with the N₂O no air of the model holds yet.
+fn earth_clear(gases: &PartialPressures, ozone: DobsonUnit, n2o_ppb: f64) -> f64 {
+    let mut scratch = Scratch::new();
+    with_column(
+        gases,
+        EARTH_SURFACE_K,
+        earth_skin().0,
+        EARTH.0,
+        Profile::CLEAR,
+        |c| radiate(&c.with_ozone(ozone).with_n2o(n2o_ppb * 1e-9), &mut scratch),
+    )
+    .expect("Earth's column")
+    .iter()
+    .sum()
+}
+
+#[test]
+fn earths_test_column_is_the_climates_without_n2o() {
+    // `earth_clear` stands for `outgoing_longwave` (the climate's path)
+    // but for its N₂O: without N₂O the two are the same bits.
+    let air = ceres_air();
+    let climate = outgoing_longwave(
+        &air,
+        EARTH_OZONE_COLUMN,
+        Kelvin(EARTH_SURFACE_K),
+        earth_skin(),
+        EARTH,
+        Profile::CLEAR,
+        &mut ColumnCache::default(),
+    );
+    assert_eq!(earth_clear(&air, EARTH_OZONE_COLUMN, 0.0), climate.0);
+}
+
+#[test]
+fn earths_ozone_takes_what_the_sources_find() {
+    // Issue #704: Earth's 300 DU laid out as the column lays it
+    // (calibration 5 of `docs/science/ozone.md`), removed from the CERES
+    // test's air, clear.
+    let air = ceres_air();
+    let taken = earth_clear(&air, NO_OZONE, CERES_N2O_PPB)
+        - earth_clear(&air, EARTH_OZONE_COLUMN, CERES_N2O_PPB);
+    let (low, high) = OZONE_W_M2;
+    println!("Earth's ozone takes {taken:.3} W/m², the sources {low:.3} to {high}");
+    assert!(
+        (low..=high).contains(&taken),
+        "{taken} against {low} to {high}"
+    );
+}
+
+#[test]
+fn earths_methane_takes_what_line_by_line_codes_find() {
+    // Issue #704: CERES's methane removed from the CERES test's air, with
+    // Earth's ozone and CERES's N₂O (whose band overlaps methane's, as in
+    // the line-by-line codes' air), clear.
+    let air = ceres_air();
+    let without = PartialPressures { ch4: 0.0, ..air };
+    let taken = earth_clear(&without, EARTH_OZONE_COLUMN, CERES_N2O_PPB)
+        - earth_clear(&air, EARTH_OZONE_COLUMN, CERES_N2O_PPB);
+    let (low, high) = METHANE_LINE_BY_LINE_W_M2;
+    println!("Earth's methane takes {taken:.3} W/m², line by line {low:.3} to {high:.3}");
+    assert!(
+        (low..=high).contains(&taken),
+        "{taken} against {low} to {high}"
+    );
+}
+
 /// The skin of Earth: [`skin_temperature`] (`2^-¼` of it) of the
 /// effective temperature of CERES's all-sky outgoing radiation,
 /// `(240.1 / σ)^¼` = 255.09 K: 214.51 K, the skin the test columns use.
@@ -859,7 +972,8 @@ fn earth_skin() -> Kelvin {
 #[test]
 fn earths_clear_sky_column_is_ceres_like_for_like() {
     // The climate's own clear column on Earth's measured air at 288 K and
-    // 280 ppm, against CERES's clear sky made like for like (study 32):
+    // 280 ppm, with CERES's methane and N₂O and Earth's ozone column, against
+    // CERES's clear sky made like for like (study 32):
     // the clear sky of the same air without its clouds, plus what the
     // gases the column lacks take, plus the radiation 280 ppm of CO₂
     // gives back over CERES's 389, plus at most a black ground; within
@@ -868,16 +982,9 @@ fn earths_clear_sky_column_is_ceres_like_for_like() {
     let base = CERES_CLEAR_SKY_W_M2 + TOTAL_REGION_W_M2 + MINOR_GASES_W_M2 + co2;
     let (calibration, scene) = CERES_UNCERTAINTY;
     let uncertainty = (calibration * CERES_CLEAR_SKY_W_M2).hypot(scene);
-    let low = base + OZONE_W_M2.0 - uncertainty;
-    let high = base + OZONE_W_M2.1 + BLACK_GROUND_W_M2 + uncertainty;
-    let olr = olr(
-        &earth_at(PREINDUSTRIAL_PPM, EARTH_SURFACE_K),
-        EARTH_SURFACE_K,
-        earth_skin(),
-        EARTH,
-        Profile::CLEAR,
-        &mut ColumnCache::default(),
-    );
+    let low = base - uncertainty;
+    let high = base + BLACK_GROUND_W_M2 + uncertainty;
+    let olr = earth_clear(&ceres_air(), EARTH_OZONE_COLUMN, CERES_N2O_PPB);
     println!("Earth's clear sky {olr:.2} W/m², like for like {low:.2} to {high:.2}");
     assert!((low..=high).contains(&olr), "{olr} against {low} to {high}");
 }

@@ -177,6 +177,7 @@ impl<'a> ClimateBody<'a> {
             let water = self.water_column();
             let own = moist_plateau(
                 &dry,
+                i.longwave_ozone(),
                 water,
                 i.gravity,
                 Profile::SATURATED,

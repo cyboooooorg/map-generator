@@ -56,11 +56,13 @@ use super::gases::{
     AR_HEAT_CAPACITY, CH4_HEAT_CAPACITY, CO2_HEAT_CAPACITY, N2_HEAT_CAPACITY, NH3_HEAT_CAPACITY,
     O2_HEAT_CAPACITY, PartialPressures, SO2_HEAT_CAPACITY,
 };
+use super::ozone::OzoneProfile;
 use super::spectrum::{
-    self, BANDS, BINS, DIFFUSIVITY, FastLevel, G, POINTS, TAIL, planck_spectrum,
+    self, BANDS, BINS, DIFFUSIVITY, FastLevel, G, LINE_GASES, LineGas, POINTS, TAIL,
+    planck_spectrum,
 };
 use crate::constants::{MOLAR_GAS_CONSTANT, STEFAN_BOLTZMANN};
-use crate::units::{Kelvin, MetrePerSecondSquared, WattPerSquareMetre};
+use crate::units::{DobsonUnit, Kelvin, MetrePerSecondSquared, WattPerSquareMetre};
 use crate::volatiles::{
     CO2_TRIPLE_TEMPERATURE, co2_condensate, co2_latent_j_mol_over, co2_saturation_bar,
     co2_saturation_bar_over, methane_saturation_bar,
@@ -73,6 +75,10 @@ use crate::water::{
 #[cfg(test)]
 #[path = "column_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "column_rfmip_tests.rs"]
+mod rfmip_tests;
 
 /// Argon's molar heat capacity as the column reads it,
 /// [`AR_HEAT_CAPACITY`]. Outside `cfg(test)` this is the constant and
@@ -675,7 +681,8 @@ impl Profile {
 }
 
 /// Outgoing longwave radiation of a column with surface partial pressures
-/// `gases` (`gases.h2o` the vapour at the surface) over a surface at
+/// `gases` (`gases.h2o` the vapour at the surface) and the ozone column
+/// `ozone` (laid out by [`OzoneProfile`]: none in an air without it) over a surface at
 /// `surface`, whose temperature never falls below `skin` (its
 /// stratosphere, [`skin_temperature`]; 0 K for none), on a body of
 /// surface gravity `gravity`, built as `profile` says. See the module
@@ -698,6 +705,7 @@ impl Profile {
 /// a hit returns the bits a fresh column gives.
 pub fn outgoing_longwave(
     gases: &PartialPressures,
+    ozone: DobsonUnit,
     surface: Kelvin,
     skin: Kelvin,
     gravity: MetrePerSecondSquared,
@@ -714,6 +722,7 @@ pub fn outgoing_longwave(
         gases.so2,
         gases.o2,
         gases.ar,
+        ozone.0,
         surface_k,
         skin_k,
         gravity.0,
@@ -729,7 +738,7 @@ pub fn outgoing_longwave(
     }
     let scratch = cache.scratch.get_or_insert_with(Scratch::new);
     let column = with_column(gases, surface_k, skin_k, gravity.0, profile, |c| {
-        radiate(c, scratch)
+        radiate(&c.with_ozone(ozone), scratch)
     });
     let olr = match column {
         Some(bands) => bands.iter().sum(),
@@ -744,9 +753,9 @@ pub fn outgoing_longwave(
 const REMEMBERED: usize = 1024;
 
 /// The inputs of a column, as bits: the eight partial pressures, the
-/// surface and skin temperatures, the gravity, and the profile's levels
-/// per decade, top and sky.
-type ColumnKey = [u64; 15];
+/// ozone column, the surface and skin temperatures, the gravity, and the
+/// profile's levels per decade, top and sky.
+type ColumnKey = [u64; 16];
 
 /// What [`outgoing_longwave`] keeps between calls, owned by the caller:
 /// the last [`REMEMBERED`] columns and their outgoing radiation, the
@@ -780,7 +789,7 @@ struct Memory {
 impl Memory {
     fn new() -> Box<Self> {
         Box::new(Self {
-            keys: [[0; 15]; REMEMBERED],
+            keys: [[0; 16]; REMEMBERED],
             olr: [0.0; REMEMBERED],
             len: 0,
             next: 0,
@@ -1051,8 +1060,15 @@ fn with_column<R>(
         step,
         last,
         gravity_m_s2,
-        has_co2: gases.co2 > 0.0,
-        has_water: vapour > 0.0,
+        has_lines: [
+            gases.co2 > 0.0,
+            vapour > 0.0,
+            air.radiating_ch4 > 0.0,
+            false,
+            false,
+        ],
+        ozone: OzoneProfile::NONE,
+        n2o: 0.0,
         cloud,
     };
     Some(use_column(&column))
@@ -1076,6 +1092,7 @@ struct Cloud {
 
 /// The levels of a column, from the surface up, as its radiation reads
 /// them.
+#[derive(Clone, Copy)]
 struct Column<'a> {
     /// Temperature of each level, K.
     temperature: &'a [f64],
@@ -1086,9 +1103,15 @@ struct Column<'a> {
     last: f64,
     /// Surface gravity, m/s².
     gravity_m_s2: f64,
-    /// Whether the column holds CO₂ and water vapour.
-    has_co2: bool,
-    has_water: bool,
+    /// Whether the column holds each gas with lines ([`LineGas::ALL`]).
+    has_lines: [bool; LINE_GASES],
+    /// Its ozone ([`OzoneProfile::NONE`] unless [`Column::with_ozone`]).
+    ozone: OzoneProfile,
+    /// Its N₂O, a mole fraction of the dry air at every level: none in
+    /// any air of the model until N₂O's law (issue #737); the tests set
+    /// it ([`Column::with_n2o`]) to compare with line-by-line codes whose
+    /// air holds it.
+    n2o: f64,
     /// Its water clouds, if any.
     cloud: Option<Cloud>,
 }
@@ -1108,20 +1131,65 @@ impl Column<'_> {
         spectrum::Level {
             temperature_k: self.temperature[i],
             gases: self.levels[i],
+            ozone_bar: self.ozone.bar_at(self.levels[i].total()),
+            n2o_bar: self.n2o * (self.levels[i].total() - self.levels[i].h2o.max(0.0)),
             gravity_m_s2: self.gravity_m_s2,
+        }
+    }
+
+    /// This column with `column` of ozone laid out in it
+    /// ([`OzoneProfile::of`], from its surface pressure and its dry air's
+    /// molar mass).
+    fn with_ozone(&self, column: DobsonUnit) -> Column<'_> {
+        let surface = self.levels[0];
+        let dry = spectrum::Level {
+            temperature_k: self.temperature[0],
+            gases: PartialPressures {
+                h2o: 0.0,
+                ..surface
+            },
+            ozone_bar: 0.0,
+            n2o_bar: 0.0,
+            gravity_m_s2: self.gravity_m_s2,
+        };
+        let ozone = OzoneProfile::of(
+            column,
+            surface.total(),
+            dry.molar_mass_kg(),
+            self.gravity_m_s2,
+        );
+        let mut has_lines = self.has_lines;
+        has_lines[LineGas::O3 as usize] = ozone.holds();
+        Column {
+            has_lines,
+            ozone,
+            ..*self
+        }
+    }
+
+    /// This column with `fraction` of N₂O in its dry air at every level
+    /// (a well-mixed gas), for the tests that compare with line-by-line
+    /// codes.
+    #[cfg(test)]
+    fn with_n2o(&self, fraction: f64) -> Column<'_> {
+        let mut has_lines = self.has_lines;
+        has_lines[LineGas::N2o as usize] = fraction > 0.0;
+        Column {
+            has_lines,
+            n2o: fraction.max(0.0),
+            ..*self
         }
     }
 }
 
 /// Workspace of [`radiate`]: the absorption at a layer's two levels, the
-/// slant optical depth to space of each g-point of CO₂ and water and of
-/// the smooth part, and their transmissions. Kept in the caller's
-/// [`ColumnCache`]: it is some 100 kB.
+/// slant optical depth to space of each g-point of each gas with lines
+/// and of the smooth part, and their transmissions. Kept in the caller's
+/// [`ColumnCache`]: it is some 200 kB.
 struct Scratch {
     top: FastLevel,
     bottom: FastLevel,
-    co2: Depths,
-    water: Depths,
+    lines: [Depths; LINE_GASES],
     smooth: [f32; BINS],
 }
 
@@ -1130,8 +1198,7 @@ impl Scratch {
         Box::new(Self {
             top: FastLevel::default(),
             bottom: FastLevel::default(),
-            co2: Depths::new(),
-            water: Depths::new(),
+            lines: std::array::from_fn(|_| Depths::new()),
             smooth: [0.0; BINS],
         })
     }
@@ -1216,8 +1283,8 @@ fn summed_bins(temperature: &[f64]) -> usize {
 
 /// Two-stream radiation to space in each band of `column`, summed from the
 /// top down: the layer-mean Planck flux of the band times what the layer
-/// takes of the transmission to space. Within a bin each g-point of CO₂
-/// and of water keeps its own transmission; the bin's is the product of
+/// takes of the transmission to space. Within a bin each g-point of each
+/// gas with lines keeps its own transmission; the bin's is the product of
 /// the gases' weighted sums and the smooth part's (random overlap, see
 /// [`super::spectrum`]). The tail band takes the last bin's absorption, so
 /// its transmission is that bin's. A layer's depth is the logarithmic
@@ -1245,13 +1312,12 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
     let Scratch {
         top,
         bottom,
-        co2,
-        water,
+        lines,
         smooth,
     } = scratch;
     let n = column.top();
     let weights = spectrum::weights().map(|w| w as f32);
-    let (has_co2, has_water) = (column.has_co2, column.has_water);
+    let has = column.has_lines;
     let bins = summed_bins(column.temperature);
     let m = bins * G;
     let mut seen = [0.0; BINS];
@@ -1265,29 +1331,27 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
     let top_level = column.level(n);
     spectrum::fast_level(&top_level, bins, top);
     spectrum::planck_spectrum_upto(column.temperature[n], bins, &mut planck);
-    if has_co2 {
-        co2.above(&top.co2, m);
-    }
-    if has_water {
-        water.above(&top.water, m);
+    for (k, gas) in lines.iter_mut().enumerate() {
+        if has[k] {
+            gas.above(&top.lines[k], m);
+        }
     }
     for (depth, rate) in smooth.iter_mut().zip(&top.smooth).take(bins) {
         *depth = (DIFFUSIVITY * spectrum::smooth_above(f64::from(*rate))) as f32;
     }
-    let through = |b: usize, smooth: &[f32; BINS], co2: &Depths, water: &Depths| {
+    let through = |b: usize, smooth: &[f32; BINS], lines: &[Depths; LINE_GASES]| {
         let mut through = fast_math::exp(-smooth[b]);
-        if has_co2 {
-            through *= co2.bin(&weights, b);
-        }
-        if has_water {
-            through *= water.bin(&weights, b);
+        for (gas, has) in lines.iter().zip(has) {
+            if has {
+                through *= gas.bin(&weights, b);
+            }
         }
         f64::from(through)
     };
     // The tail is summed with the last bin, when every bin is.
     let tail = bins == BINS;
     for b in 0..bins {
-        seen[b] = through(b, smooth, co2, water);
+        seen[b] = through(b, smooth, lines);
         out[b] = planck[b] * (1.0 - seen[b]);
     }
     if tail {
@@ -1313,26 +1377,20 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
             (&bottom.smooth[..bins], &bottom.smooth_ln[..bins]),
             slant,
         );
-        if has_co2 {
-            co2.deepen(
-                (&top.co2, &top.co2_ln),
-                (&bottom.co2, &bottom.co2_ln),
-                slant,
-                m,
-            );
-        }
-        if has_water {
-            water.deepen(
-                (&top.water, &top.water_ln),
-                (&bottom.water, &bottom.water_ln),
-                slant,
-                m,
-            );
+        for (k, gas) in lines.iter_mut().enumerate() {
+            if has[k] {
+                gas.deepen(
+                    (&top.lines[k], &top.lines_ln[k]),
+                    (&bottom.lines[k], &bottom.lines_ln[k]),
+                    slant,
+                    m,
+                );
+            }
         }
         let mut open = false;
         let last_seen = seen[BINS - 1];
         for b in 0..bins {
-            let below = through(b, smooth, co2, water);
+            let below = through(b, smooth, lines);
             out[b] += 0.5 * (planck[b] + planck_below[b]) * (seen[b] - below);
             seen[b] = below;
             open |= below > OPAQUE;
@@ -1446,12 +1504,12 @@ fn log_mean_f32(a: f32, ln_a: f32, b: f32, ln_b: f32) -> f32 {
 fn radiate_reference(column: &Column) -> [f64; BANDS] {
     use spectrum::reference::{Spectrum, absorption_spectrum, depth_above, log_mean};
     let n = column.top();
-    let (has_co2, has_water) = (column.has_co2, column.has_water);
+    let has = column.has_lines;
     let w = spectrum::weights();
     let mut rate = Spectrum::default();
     let mut rate_below = Spectrum::default();
     let mut through_g = Spectrum::default();
-    let Spectrum { co2, water, smooth } = &mut through_g;
+    let Spectrum { lines, smooth } = &mut through_g;
     let (mut planck, mut planck_below) = ([0.0; BANDS], [0.0; BANDS]);
     let mut seen = [0.0; BANDS];
     absorption_spectrum(&column.level(n), &mut rate);
@@ -1461,13 +1519,11 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
     for k in 0..BANDS {
         let mut through = (-DIFFUSIVITY * rate_below.smooth[k]).exp();
         smooth[k] = through;
-        if has_co2 {
-            co2[k] = rate_below.co2[k].map(|d| (-DIFFUSIVITY * d).exp());
-            through *= dot(w, &co2[k]);
-        }
-        if has_water {
-            water[k] = rate_below.water[k].map(|d| (-DIFFUSIVITY * d).exp());
-            through *= dot(w, &water[k]);
+        for (g, gas) in lines.iter_mut().enumerate() {
+            if has[g] {
+                gas[k] = rate_below.lines[g][k].map(|d| (-DIFFUSIVITY * d).exp());
+                through *= dot(w, &gas[k]);
+            }
         }
         seen[k] = through;
         out[k] = planck[k] * (1.0 - through);
@@ -1481,11 +1537,11 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
         for k in 0..BANDS {
             smooth[k] *= (-DIFFUSIVITY * log_mean(rate.smooth[k], rate_below.smooth[k]) * h).exp();
             let mut below = smooth[k];
-            if has_co2 {
-                below *= layer(w, &mut co2[k], &rate.co2[k], &rate_below.co2[k], h);
-            }
-            if has_water {
-                below *= layer(w, &mut water[k], &rate.water[k], &rate_below.water[k], h);
+            for (g, gas) in lines.iter_mut().enumerate() {
+                if has[g] {
+                    let (top, bottom) = (&rate.lines[g][k], &rate_below.lines[g][k]);
+                    below *= layer(w, &mut gas[k], top, bottom, h);
+                }
             }
             out[k] += 0.5 * (planck[k] + planck_below[k]) * (seen[k] - below);
             seen[k] = below;

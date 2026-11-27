@@ -127,3 +127,8 @@ pub(crate) const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
     o2: EARTH_PRESSURE_BAR * EARTH_N2_O2_SHARES.1,
     ar: 0.0,
 };
+
+/// Definition: no ozone column, for a test air that leaves ozone out of
+/// its infrared (`column::outgoing_longwave`) as the tests before issue
+/// #704 had it.
+pub(crate) const NO_OZONE: crate::units::DobsonUnit = crate::units::DobsonUnit(0.0);

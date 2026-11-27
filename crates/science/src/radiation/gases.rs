@@ -63,6 +63,12 @@ pub const SO2_MOLAR_MASS: f64 = 64.058e-3;
 /// Source: molar mass of O2, 2 x 15.999 g/mol, in kg/mol (IUPAC 2021
 /// standard atomic weights, abridged, doi:10.1515/pac-2019-0603).
 pub const O2_MOLAR_MASS: f64 = 31.998e-3;
+/// Source: molar mass of O3, 3 x 15.999 g/mol, in kg/mol (IUPAC 2021
+/// standard atomic weights, abridged, doi:10.1515/pac-2019-0603).
+pub const O3_MOLAR_MASS: f64 = 47.997e-3;
+/// Source: molar mass of N2O, 2 x 14.007 + 15.999 g/mol, in kg/mol (IUPAC
+/// 2021 standard atomic weights, abridged, doi:10.1515/pac-2019-0603).
+pub const N2O_MOLAR_MASS: f64 = 44.013e-3;
 /// Source: molar mass of Ar, 39.95 g/mol, in kg/mol (CIAAW abridged
 /// standard atomic weights 2024, after the IUPAC Atomic Weights 2021,
 /// ciaaw.org/abridged-atomic-weights.htm, read 2026-11-23). The air's

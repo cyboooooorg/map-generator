@@ -70,6 +70,7 @@ pub(crate) fn thermostat(
     };
     let skin = skin(starlight);
     let e = emissivity.get().clamp(LEAST_EMISSIVITY, 1.0);
+    let ozone = i.longwave_ozone();
     let columns = &mut body.columns;
     // What a surface at `THERMOSTAT_K` under `co2` absorbs less what it
     // sends out, both on that air: its methane's stratosphere takes a
@@ -80,6 +81,7 @@ pub(crate) fn thermostat(
         absorbed(starlight, &gases, i.heat_flux).0
             - e * outgoing_longwave(
                 &gases,
+                ozone,
                 THERMOSTAT_K,
                 skin,
                 i.gravity,
@@ -134,6 +136,7 @@ pub(crate) fn thermostat(
     let t = surface_temperature(
         starlight,
         &regulated,
+        ozone,
         i.heat_flux,
         emissivity,
         i.gravity,
@@ -166,6 +169,7 @@ pub(crate) fn maximum_greenhouse(body: &mut ClimateBody, air: &PartialPressures)
     }
     let numerics = body.numerics;
     let water = body.water_column();
+    let ozone = i.longwave_ozone();
     let at_target = PartialPressures {
         h2o: surface_vapour(THERMOSTAT_K, water).0,
         ..*air
@@ -180,6 +184,7 @@ pub(crate) fn maximum_greenhouse(body: &mut ClimateBody, air: &PartialPressures)
         absorbed(light, &gases, WattPerSquareMetre(0.0)).0
             - outgoing_longwave(
                 &gases,
+                ozone,
                 THERMOSTAT_K,
                 skin(light),
                 i.gravity,

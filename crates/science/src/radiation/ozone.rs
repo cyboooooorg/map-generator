@@ -1,7 +1,9 @@
-//! Ozone in the shortwave: the column an oxygen air holds under its star
-//! ([`ozone_column`], calibration 1 of `docs/science/ozone.md`) and the
+//! Ozone: the column an oxygen air holds under its star
+//! ([`ozone_column`], calibration 1 of `docs/science/ozone.md`), the
 //! cross-sections with which it takes the star's ultraviolet and visible
-//! light ([`CROSS_SECTIONS`]).
+//! light ([`CROSS_SECTIONS`]), and how the column is laid out in the
+//! infrared column, whose table holds its lines ([`OzoneProfile`],
+//! calibration 5 of `docs/science/ozone.md`; issue #704).
 //!
 //! The cross-sections are Serdyuchenko et al.'s (2014, *Atmos. Meas.
 //! Tech.* 7, 625, doi:10.5194/amt-7-625-2014), measured from 213 to
@@ -17,7 +19,7 @@ use std::sync::LazyLock;
 
 use super::ktable::G;
 use super::starlight::{BANDS, check_layout};
-use crate::constants::{LOSCHMIDT, SOLAR_EFFECTIVE_TEMPERATURE};
+use crate::constants::{AVOGADRO, LOSCHMIDT, PASCALS_PER_BAR, SOLAR_EFFECTIVE_TEMPERATURE};
 use crate::units::{Bar, DobsonUnit, Kelvin};
 
 #[cfg(test)]
@@ -238,3 +240,170 @@ impl CrossSections {
 /// The table, parsed once.
 pub(crate) static CROSS_SECTIONS: LazyLock<CrossSections> =
     LazyLock::new(|| CrossSections::parse(TABLE));
+
+/// Source: the ozone mixing ratio of the U.S. Standard Atmosphere 1976 in
+/// the AFGL atmospheric constituent profiles (Anderson, G. P., Clough,
+/// S. A., Kneizys, F. X., Chetwynd, J. H., Shettle, E. P. 1986, "AFGL
+/// atmospheric constituent profiles (0-120 km)", AFGL-TR-86-0110), read in
+/// libRadtran's `afglus.dat` (SHA-256
+/// `dab26290ed81c762ed0c607e5dc2d53393c1462a0c3a528bc5e3f5935191cfb5`,
+/// study 32's download): pressure, bar, and ozone over air number
+/// density, from the surface (0 km) to 80 km, every kilometre to 25 km,
+/// then every 2.5 and 5 km (derived here, the file's `o3` over its `air`
+/// column, four digits). Its column is 344 DU (derived here: the
+/// mixing ratio integrated over the pressure, linear in `ln p` between
+/// rows; study 34 gives 346 DU).
+const AFGL_US_OZONE: [(f64, f64); 42] = [
+    (1.013, 2.6623e-8),
+    (0.8988, 2.9336e-8),
+    (0.795, 3.2396e-8),
+    (0.7012, 3.3196e-8),
+    (0.6166, 3.3885e-8),
+    (0.5405, 3.7704e-8),
+    (0.4722, 4.1137e-8),
+    (0.4111, 5.0137e-8),
+    (0.3565, 5.9705e-8),
+    (0.308, 9.1748e-8),
+    (0.265, 1.3140e-7),
+    (0.227, 2.1505e-7),
+    (0.194, 3.0973e-7),
+    (0.1658, 3.8490e-7),
+    (0.1417, 5.0331e-7),
+    (0.1211, 6.5089e-7),
+    (0.1035, 8.7077e-7),
+    (0.0885, 1.1878e-6),
+    (0.07565, 1.5879e-6),
+    (0.06467, 2.0314e-6),
+    (0.05529, 2.5804e-6),
+    (0.04729, 3.0298e-6),
+    (0.04047, 3.6500e-6),
+    (0.03467, 4.1699e-6),
+    (0.02972, 4.6304e-6),
+    (0.02549, 5.1215e-6),
+    (0.01743, 5.8072e-6),
+    (0.01197, 6.5569e-6),
+    (8.2573e-3, 7.1437e-6),
+    (5.746e-3, 7.8427e-6),
+    (4.0412e-3, 8.0310e-6),
+    (2.871e-3, 7.3049e-6),
+    (2.06e-3, 6.2045e-6),
+    (1.491e-3, 5.2532e-6),
+    (1.09e-3, 4.1035e-6),
+    (7.978e-4, 3.1020e-6),
+    (4.25e-4, 1.8011e-6),
+    (2.19e-4, 1.1007e-6),
+    (1.09e-4, 7.0042e-7),
+    (5.22e-5, 3.0023e-7),
+    (2.4e-5, 2.5018e-7),
+    (1.05e-5, 3.0021e-7),
+];
+
+/// The mixing ratio of [`AFGL_US_OZONE`] at `p_bar`: linear in `ln p`
+/// between its rows, held at its first row below the surface's 1.013 bar
+/// and at its last above 80 km.
+fn afgl_mixing_ratio(p_bar: f64) -> f64 {
+    let rows = &AFGL_US_OZONE;
+    let (first, last) = (rows[0], rows[rows.len() - 1]);
+    if p_bar >= first.0 {
+        return first.1;
+    }
+    if p_bar <= last.0 {
+        return last.1;
+    }
+    let i = rows
+        .partition_point(|r| r.0 > p_bar)
+        .clamp(1, rows.len() - 1);
+    let (a, b) = (rows[i - 1], rows[i]);
+    let f = (p_bar / a.0).ln() / (b.0 / a.0).ln();
+    a.1 + f * (b.1 - a.1)
+}
+
+/// `∫₀^p x(p') dp'` of [`afgl_mixing_ratio`], bar: exact on each piece
+/// where `x` is linear in `ln p` (`∫ (A + B ln p) dp = A p + B (p ln p −
+/// p)`), the mixing ratio held above 80 km and below the surface.
+fn afgl_integral(p_bar: f64) -> f64 {
+    let rows = &AFGL_US_OZONE;
+    let last = rows[rows.len() - 1];
+    let mut sum = last.1 * p_bar.min(last.0);
+    // `∫` of `x = a.1 + (b.1 − a.1) ln(p/a.0)/ln(b.0/a.0)` from `lo` to
+    // `hi` on the piece between rows `a` and `b`.
+    let piece = |a: (f64, f64), b: (f64, f64), lo: f64, hi: f64| {
+        let slope = (b.1 - a.1) / (b.0 / a.0).ln();
+        let primitive = |p: f64| (a.1 - slope * a.0.ln()) * p + slope * (p * p.ln() - p);
+        primitive(hi) - primitive(lo)
+    };
+    for w in rows.windows(2).rev() {
+        let (a, b) = (w[0], w[1]);
+        if p_bar <= b.0 {
+            break;
+        }
+        sum += piece(a, b, b.0, p_bar.min(a.0));
+    }
+    let first = rows[0];
+    if p_bar > first.0 {
+        sum += first.1 * (p_bar - first.0);
+    }
+    sum
+}
+
+/// How the infrared column lays out an air's ozone column: the mixing
+/// ratio of [`AFGL_US_OZONE`] against the pressure, scaled so that the
+/// air from its surface to space holds the column.
+///
+/// Calibration: the vertical shape, calibration 5 of
+/// `docs/science/ozone.md` (study 34's third proposal, decided for PR 2
+/// of the plan with the user on 2026-11-25): Earth's shape in absolute
+/// pressure for every air and host, so that the layer stays above the
+/// tropopause's 0.1 bar of a thick air. Kozakis et al. 2022 (§4.1,
+/// Fig. 4) show the layer moving with the O₂ and the host; no law for its
+/// height was found. The layer takes the column's own temperatures, its
+/// stratosphere at the skin temperature (214 K for Earth, colder than the
+/// 225 to 232 K of the real layer: a departure, "No ozone heating").
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct OzoneProfile {
+    /// Factor on [`AFGL_US_OZONE`]'s mixing ratio.
+    scale: f64,
+}
+
+impl OzoneProfile {
+    /// Definition: no ozone.
+    pub(crate) const NONE: OzoneProfile = OzoneProfile { scale: 0.0 };
+
+    /// The layout of `column` in an air of `surface_bar` at its surface,
+    /// of mean molar mass `molar_kg` (kg/mol, the dry air's, ozone lying
+    /// above the vapour), on a body of surface gravity `gravity_m_s2`:
+    /// the air above a level of `p` holds `x(p) p N_A / (M̄ g)` molecules
+    /// of ozone per unit `ln p`, which integrate to the column from the
+    /// surface up. None without a column, air or gravity.
+    pub(crate) fn of(
+        column: DobsonUnit,
+        surface_bar: f64,
+        molar_kg: f64,
+        gravity_m_s2: f64,
+    ) -> OzoneProfile {
+        let per_m2 = molecules_per_cm2(column) * CM2_PER_M2;
+        let shape =
+            afgl_integral(surface_bar) * PASCALS_PER_BAR * AVOGADRO / (molar_kg * gravity_m_s2);
+        let scale = per_m2 / shape;
+        if scale.is_finite() && scale > 0.0 {
+            OzoneProfile { scale }
+        } else {
+            OzoneProfile::NONE
+        }
+    }
+
+    /// Whether the air holds ozone.
+    pub(crate) fn holds(self) -> bool {
+        self.scale > 0.0
+    }
+
+    /// The ozone at a level of `p_bar`, bar: its mixing ratio times the
+    /// pressure.
+    pub(crate) fn bar_at(self, p_bar: f64) -> f64 {
+        if self.scale > 0.0 {
+            self.scale * afgl_mixing_ratio(p_bar) * p_bar
+        } else {
+            0.0
+        }
+    }
+}

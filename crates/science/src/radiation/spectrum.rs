@@ -16,17 +16,21 @@
 //!
 //! The absorbers, each with its source:
 //!
-//! - **CO₂ and water lines:** a correlated-k table built offline from the
+//! - **CO₂, water, methane and ozone lines:** a correlated-k table built offline from the
 //!   HITRAN2024 line lists (Gordon et al. 2026, *JQSRT* 109807; the
 //!   design named HITRAN2020, which HITRAN no longer serves) by
 //!   `tools/opacity-table` (provenance in `crates/science/data/OPACITY.md`).
 //!   Within a bin the lines' coefficients are sorted into [`G`] g-points,
 //!   each with a weight ([`weights`]), on a grid of pressure and
-//!   temperature; each gas has a set broadened by air and one broadened by
-//!   itself (HITRAN's `γ_self`), mixed by its share of the pressure. The
+//!   temperature; CO₂, water and methane have a set broadened by air and
+//!   one broadened by itself (HITRAN's `γ_self`), mixed by its share of
+//!   the pressure, and ozone, always a trace, one broadened by air
+//!   ([`LineGas`]; studies 36 and 34, `docs/science/longwave-absorbers.md`
+//!   and `docs/science/ozone.md`). The
 //!   table holds the lines' temperature dependence (strengths, hot bands,
 //!   widths) and their Voigt shape out to 25 cm⁻¹, less the pedestal
-//!   MT_CKD's continua assume ([`Table`]).
+//!   MT_CKD's continua assume (LBLRTM's flat one for methane and ozone,
+//!   which have no continuum; [`Table`]).
 //! - **CO₂ continuum:** MT_CKD 4.3's, the far wings of CO₂'s lines beyond
 //!   25 cm⁻¹ with their sub-Lorentzian shape, binned into the table
 //!   ([`co2_continuum_depth`]); it grows as the CO₂ times the pressure.
@@ -39,14 +43,14 @@
 //!   [`CO2_CIA`]), and the N₂–N₂, O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄ pairs
 //!   ([`PAIRS_CIA`], study 36, `docs/science/longwave-absorbers.md`),
 //!   each growing as the product of its two gases' densities, not
-//!   broadened. Titan's greenhouse is these pairs; methane has no other
-//!   infrared absorption here (no lines yet).
+//!   broadened. Titan's greenhouse is mostly these pairs; methane's own
+//!   lines add to them, each counting the same methane once.
 //!
 //! The continua and the pairs are smooth across a bin: each is
 //! one optical depth per bin, added to every g-point ([`FastLevel`]). The
 //! double-precision sums the tests hold the fast ones to are in
 //! `reference`.
-//! CO₂ and water overlap at random within a bin (Lacis & Oinas 1991,
+//! The gases with lines overlap at random within a bin (Lacis & Oinas 1991,
 //! *JGR* 96, 9027, doi:10.1029/90JD01945, the correlated-k method and its
 //! random overlap; the table's eight g-intervals are its builder's
 //! calibration, see `OPACITY.md`): the transmission of a path is the product of each
@@ -57,11 +61,14 @@
 use std::sync::LazyLock;
 
 use super::gases::{
-    AR_MOLAR_MASS, CH4_MOLAR_MASS, CO2_MOLAR_MASS, H2O_MOLAR_MASS, N2_MOLAR_MASS, NH3_MOLAR_MASS,
-    O2_MOLAR_MASS, PartialPressures, SO2_MOLAR_MASS,
+    AR_MOLAR_MASS, CH4_MOLAR_MASS, CO2_MOLAR_MASS, H2O_MOLAR_MASS, N2_MOLAR_MASS, N2O_MOLAR_MASS,
+    NH3_MOLAR_MASS, O2_MOLAR_MASS, O3_MOLAR_MASS, PartialPressures, SO2_MOLAR_MASS,
 };
 pub(crate) use super::ktable::G;
-use super::ktable::{CO2_SELF_SET, CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
+use super::ktable::{
+    CH4_SELF_SET, CH4_SET, CO2_SELF_SET, CO2_SET, LONGWAVE_SETS, N2O_SET, O3_SET, Table,
+    WATER_FOREIGN_SET, WATER_SELF_SET,
+};
 use crate::constants::{
     AVOGADRO, BOLTZMANN, PASCALS_PER_BAR, SECOND_RADIATION_CONSTANT_CM_K, STEFAN_BOLTZMANN,
 };
@@ -110,6 +117,16 @@ pub(crate) struct Level {
     pub temperature_k: f64,
     /// Partial pressures at the level, bar; their sum is its pressure.
     pub gases: PartialPressures,
+    /// Ozone at the level, bar, a share of its moles as the other gases
+    /// are read ([`Level::mass_per_ln_p`]); a trace, left out of the
+    /// pressure. The column lays it out from the air's ozone column
+    /// (`super::ozone::ozone_profile`).
+    pub ozone_bar: f64,
+    /// N₂O at the level, bar, a share of its moles, a trace left out of
+    /// the pressure like ozone. No air of the model holds N₂O yet (its
+    /// law is issue #737): only tests set it, through the column's
+    /// `with_n2o`.
+    pub n2o_bar: f64,
     /// Surface gravity of the body, m/s²: a column of `p` bar weighs
     /// `p / g` per unit area.
     pub gravity_m_s2: f64,
@@ -163,6 +180,64 @@ impl Level {
     /// `k_B T N_A / (M̄ g)`.
     fn thickness_per_ln_p_m(&self) -> f64 {
         BOLTZMANN * self.temperature_k * AVOGADRO / (self.molar_mass_kg() * self.gravity_m_s2)
+    }
+}
+
+/// Definition: the number of gases with lines ([`LineGas`]).
+pub(crate) const LINE_GASES: usize = 5;
+
+/// A gas whose lines the longwave table holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LineGas {
+    Co2,
+    Water,
+    Ch4,
+    O3,
+    N2o,
+}
+
+impl LineGas {
+    /// Definition: every gas with lines, in the order of [`FastLevel::lines`].
+    pub(crate) const ALL: [LineGas; LINE_GASES] = [
+        LineGas::Co2,
+        LineGas::Water,
+        LineGas::Ch4,
+        LineGas::O3,
+        LineGas::N2o,
+    ];
+
+    /// Its sets in the table, broadened by air and by itself (ozone and
+    /// N₂O, always traces, have their air set only).
+    pub(crate) fn sets(self) -> (usize, usize) {
+        match self {
+            LineGas::Co2 => (CO2_SET, CO2_SELF_SET),
+            LineGas::Water => (WATER_FOREIGN_SET, WATER_SELF_SET),
+            LineGas::Ch4 => (CH4_SET, CH4_SELF_SET),
+            LineGas::O3 => (O3_SET, O3_SET),
+            LineGas::N2o => (N2O_SET, N2O_SET),
+        }
+    }
+
+    /// Its molar mass, kg/mol.
+    pub(crate) fn molar_kg(self) -> f64 {
+        match self {
+            LineGas::Co2 => CO2_MOLAR_MASS,
+            LineGas::Water => H2O_MOLAR_MASS,
+            LineGas::Ch4 => CH4_MOLAR_MASS,
+            LineGas::O3 => O3_MOLAR_MASS,
+            LineGas::N2o => N2O_MOLAR_MASS,
+        }
+    }
+
+    /// Its partial pressure at `level`, bar.
+    pub(crate) fn bar(self, level: &Level) -> f64 {
+        match self {
+            LineGas::Co2 => level.gases.co2,
+            LineGas::Water => level.gases.h2o,
+            LineGas::Ch4 => level.gases.ch4,
+            LineGas::O3 => level.ozone_bar,
+            LineGas::N2o => level.n2o_bar,
+        }
     }
 }
 
@@ -249,15 +324,18 @@ fn planck_tail(x: f64) -> f64 {
     sum
 }
 
-/// The longwave table of CO₂'s and water's lines
+/// The longwave table of the lines of CO₂, water, methane and ozone
 /// (`crates/science/data/opacity.bin`, see [`super::ktable`]), on the
 /// model's bins.
 pub(crate) static OPACITY: LazyLock<Table> = LazyLock::new(|| {
     let table = Table::parse(include_bytes!("../../data/opacity.bin"))
         .expect("crates/science/data/opacity.bin is a table of 8 g-points");
     assert!(
-        table.edges_cm.is_empty() && table.bins == BINS && table.bin_width_cm == BIN_WIDTH_CM,
-        "the opacity table's bins are not the model's"
+        table.edges_cm.is_empty()
+            && table.bins == BINS
+            && table.bin_width_cm == BIN_WIDTH_CM
+            && table.sets == LONGWAVE_SETS,
+        "the opacity table's bins or sets are not the model's"
     );
     table
 });
@@ -935,17 +1013,15 @@ impl SmoothRates {
 pub(crate) const POINTS: usize = BINS * G;
 
 /// The absorption of one level in the column's fast layout (see
-/// [`fast_level`]): CO₂'s and water's lines at each bin and g-point
-/// (index `bin · G + g`) and the smooth part of each bin, per unit `ln p`,
-/// and their logarithms, in single precision.
+/// [`fast_level`]): each gas's lines ([`LineGas::ALL`]) at each bin and
+/// g-point (index `bin · G + g`) and the smooth part of each bin, per
+/// unit `ln p`, and their logarithms, in single precision.
 #[derive(Clone)]
 pub(crate) struct FastLevel {
-    /// CO₂'s lines and their logarithms.
-    pub(crate) co2: [f32; POINTS],
-    pub(crate) co2_ln: [f32; POINTS],
-    /// Water's lines and their logarithms.
-    pub(crate) water: [f32; POINTS],
-    pub(crate) water_ln: [f32; POINTS],
+    /// Each gas's lines, in the order of [`LineGas::ALL`], and their
+    /// logarithms.
+    pub(crate) lines: [[f32; POINTS]; LINE_GASES],
+    pub(crate) lines_ln: [[f32; POINTS]; LINE_GASES],
     /// The continua of water and CO₂ and the collision-induced pairs, per bin, and their
     /// logarithms.
     pub(crate) smooth: [f32; BINS],
@@ -955,10 +1031,8 @@ pub(crate) struct FastLevel {
 impl Default for FastLevel {
     fn default() -> Self {
         Self {
-            co2: [0.0; POINTS],
-            co2_ln: [0.0; POINTS],
-            water: [0.0; POINTS],
-            water_ln: [0.0; POINTS],
+            lines: [[0.0; POINTS]; LINE_GASES],
+            lines_ln: [[0.0; POINTS]; LINE_GASES],
             smooth: [0.0; BINS],
             smooth_ln: [0.0; BINS],
         }
@@ -977,43 +1051,27 @@ pub(crate) fn fast_level(level: &Level, bins: usize, out: &mut FastLevel) {
     let m = bins * G;
     let p = level.pressure_bar();
     let t = level.temperature_k;
-    let g = &level.gases;
     let valid = p > 0.0 && t > 0.0 && level.gravity_m_s2 > 0.0;
     // Each gas's lines ([`Table::lines`]), then their logarithms.
     let mut own_ln = [0.0; POINTS];
-    if valid && g.co2 > 0.0 {
-        let sets = (CO2_SET, CO2_SELF_SET);
-        let (by_air, sum) = (&mut out.co2_ln[..m], &mut out.co2[..m]);
-        table.lines(
-            level,
-            g.co2,
-            CO2_MOLAR_MASS,
-            sets,
-            m,
-            by_air,
-            &mut own_ln[..m],
-            sum,
-        );
-        ln_all(&out.co2[..m], &mut out.co2_ln[..m]);
-    } else {
-        out.co2[..m].fill(0.0);
-    }
-    if valid && g.h2o > 0.0 {
-        let sets = (WATER_FOREIGN_SET, WATER_SELF_SET);
-        let (by_air, sum) = (&mut out.water_ln[..m], &mut out.water[..m]);
-        table.lines(
-            level,
-            g.h2o,
-            H2O_MOLAR_MASS,
-            sets,
-            m,
-            by_air,
-            &mut own_ln[..m],
-            sum,
-        );
-        ln_all(&out.water[..m], &mut out.water_ln[..m]);
-    } else {
-        out.water[..m].fill(0.0);
+    for (k, gas) in LineGas::ALL.into_iter().enumerate() {
+        let bar = gas.bar(level);
+        let (sum, by_air) = (&mut out.lines[k][..m], &mut out.lines_ln[k][..m]);
+        if valid && bar > 0.0 {
+            table.lines(
+                level,
+                bar,
+                gas.molar_kg(),
+                gas.sets(),
+                m,
+                by_air,
+                &mut own_ln[..m],
+                sum,
+            );
+            ln_all(&out.lines[k][..m], &mut out.lines_ln[k][..m]);
+        } else {
+            sum.fill(0.0);
+        }
     }
     if valid {
         SmoothRates::of(level).fast(&mut out.smooth[..bins]);

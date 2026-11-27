@@ -421,8 +421,8 @@ bands:
   the column takes HITRAN's N₂–N₂, O₂–O₂, O₂–N₂, N₂–CH₄ and CH₄–CH₄
   files with the CO₂ pairs (`spectrum::PAIRS`, `pairs-cia.tsv`; sources
   in `crates/science/data/OPACITY.md` and
-  [longwave-absorbers.md](longwave-absorbers.md)). Methane has no lines
-  in the column yet: it absorbs through its pairs only.
+  [longwave-absorbers.md](longwave-absorbers.md)). Methane absorbs
+  through its HITRAN lines too since #704 (below).
 - **Gases that only broaden.** Argon absorbs nothing the column counts,
   and N₂ and O₂ nothing but their pairs, but their collisions widen the
   lines of CO₂ and water. HITRAN's
@@ -894,18 +894,16 @@ CH₄/CO₂ ratio of 0.2.
   global-mean line-by-line split of the absorption by gas was found
   (Ramanathan & Vogelmann 1997, *Ambio* 26, 38, could not be opened).
   The share of the reflected light that ozone removes was not found.
-- **Ozone, N₂O, the halocarbons and methane's lines are not modelled
-  in the infrared.** Methane absorbs only through its collision-induced
-  pairs (N₂–CH₄, CH₄–CH₄, HITRAN), which make Titan's greenhouse since
-  study 36; Earth's test air holds no methane. Ozone's share of Earth's
-  clear-sky outgoing radiation is 4 to 10 W/m² across the sources read
-  (Schmidt et al. 2010, all sky; Kiehl & Trenberth 1997, clear sky, on
-  one profile); no global-mean line-by-line value with ozone removed was
-  found. Methane, N₂O and the halocarbons take 3.4 W/m² (Hogan &
-  Matricardi 2020, line by line). Study 36 (issue #703) weighs each one;
-  N₂'s and O₂'s pairs are in the column since its first pull request:
-  see [Which gases does the infrared column still
-  miss?](longwave-absorbers.md).
+- **N₂O and the halocarbons are not modelled in the infrared.** Methane
+  absorbs through its lines and its collision-induced pairs (N₂–CH₄,
+  CH₄–CH₄, HITRAN), and ozone through its lines, since #704 (study 36's
+  second pull request); Earth's test airs hold no methane but the CERES
+  test's, and the climate's airs hold ozone only when they hold O₂.
+  N₂O's lines are in the table since #704, but no air holds N₂O until it
+  is a gas (#737): only the tests give a column RFMIP's or AR6's N₂O.
+  The halocarbons take 0.39 W/m² of Earth's clear sky today, N₂O 1.5
+  (Hogan & Matricardi 2020, line by line). See [Which gases does the
+  infrared column still miss?](longwave-absorbers.md).
 - **Which saturation Manabe & Wetherald's humidity refers to** below
   0 °C: the 1967 paper, read in study 33, names none ("the saturation
   vapor pressure of water vapor"), and its implementations differ
@@ -941,7 +939,9 @@ reads the forcings, never the central object's kind).
 2. **The infrared.** 250 bins of 20 cm⁻¹ from 0 to 5000 cm⁻¹ (a black
    body at 640 K emits 99.6 % of its light below 5000 cm⁻¹) and a tail
    past 5000 cm⁻¹ that takes the absorption of the last bin. In each bin,
-   CO₂ and water lines (eight $g$-points each, overlapped at random), the
+   the lines of CO₂, water, methane, ozone and N₂O (eight $g$-points
+   each, overlapped at random; ozone laid out on Earth's AFGL shape, see
+   [ozone.md](ozone.md); N₂O in the tests' airs only, #737), the
    water and CO₂ continua, and the collision-induced pairs of CO₂, N₂, O₂
    and methane (HITRAN's CIA files, one optical depth per bin growing as
    the product of the two gases' densities) set the transmission; the
@@ -984,7 +984,7 @@ and never by the generator:
 
 | Table | What it holds | Size |
 | --- | --- | --- |
-| `opacity.bin` | The infrared: CO₂ and water lines as 8 $g$-points in each 20 cm⁻¹ bin, on 15 pressures (1e-5 to 100 bar) and 16 temperatures (100 to 900 K), plus MT_CKD's CO₂ continuum | 3.8 MB |
+| `opacity.bin` | The infrared: CO₂, water, methane (each broadened by air and by itself), ozone and N₂O (by air) lines as 8 $g$-points in each 20 cm⁻¹ bin, on 15 pressures (1e-5 to 100 bar) and 16 temperatures (100 to 900 K), plus MT_CKD's CO₂ continuum | 7.7 MB |
 | `shortwave.bin` (2b-2) | The same lines and sets on the 147 albedo bands from 0.7 to 5 µm (2000 to 14 364 cm⁻¹), plus MT_CKD's water and CO₂ continua | 1.8 MB |
 | `ozone.tsv` (#653) | Ozone's cross-sections (Serdyuchenko et al. 2014) at 223 and 233 K as 8 $g$-points on each of the 240 albedo bands, 0.2 to 1.1 µm | 27 kB |
 | `co2-cia.tsv` | HITRAN's CO₂–CO₂ pairs on 20 cm⁻¹ cells at 200, 300, 450 and 800 K | 7 kB |
@@ -1491,25 +1491,43 @@ under that range, not above it: it falls inside only the window widened
 by CERES's uncertainty, below.
 
 The test `earths_clear_sky_column_is_ceres_like_for_like` (tier 1)
-holds it there. It builds the window from the table: 268.1 − 2.2 +
-3.39 (`MINOR_GASES_W_M2`, Hogan & Matricardi's CH₄, N₂O and
+holds it there. Before #704 it built the window from the table: 268.1 −
+2.2 + 3.39 (`MINOR_GASES_W_M2`, Hogan & Matricardi's CH₄, N₂O and
 halocarbons; 3.64 with N₂ and O₂ before #703) + 1.76 (Myhre et al. 1998's
 $5.35 \ln(389/280)$ for the CO₂ of CERES's years, NOAA), plus ozone from
 4.2 to 10 and a black ground from 0 to 1.6, widened by CERES's
 uncertainty (0.75 % of 268.1 and 2.75 W/m², the two terms of the data
 quality summary, combined here in quadrature: 3.4 W/m²):
-271.83 to 286.08 W/m² (272.1 to 286.3 before #703). It runs the
+271.83 to 286.08 W/m² (272.1 to 286.3 before #703). Since #704 the
+test's air carries CERES's methane (1803 ppb), N₂O (324.2 ppb) and
+ozone (300 DU), which the column absorbs, so the window keeps only the
+halocarbons (0.39 W/m²): 264.64 to 273.08 W/m². The column gives
+261.24 W/m², 3.40 under it (see below). It runs the
 climate's own clear column (`Profile::CLEAR`) on Earth's measured air
 (78.08 % N₂ and 20.95 % O₂ of 1.014 bar, NASA's fact sheet), 280 ppm,
 77 % surface humidity at 288 K, under the skin of CERES's all-sky 240.1 W/m²: the
 column's `skin_temperature`, `2^-¼` of the effective temperature
-$(240.1/\sigma)^{1/4} = 255.09$ K, 214.51 K. It gives 274.22 W/m² (274.63
-before the N₂ and O₂ pairs, 274.72 before the split), inside the window
-but under its nominal part. It
+$(240.1/\sigma)^{1/4} = 255.09$ K, 214.51 K. Before #704 it gave
+274.22 W/m² (274.63 before the N₂ and O₂ pairs, 274.72 before the
+split), inside the window but under its nominal part. It
 replaces `earth_clear_sky_olr`, which ran a fixed 6.5 K/km profile with a
 uniform 77 % humidity, 11 W/m² darker than the climate's, against
-267.9 ± 10 W/m² (a calibrated tolerance). The window narrows when the
-column gains ozone and methane.
+267.9 ± 10 W/m² (a calibrated tolerance).
+
+**Since #704 it fails** (study 36's second pull request, before #741).
+Ozone, methane and N₂O take 12.98 W/m² from the column (274.22 to
+261.24), inside the sum of the sources' removals (ozone 4.2 to 10,
+methane 1.5 to 1.87, N₂O 1.5 to 1.88: 7.2 to 13.75) but near its top,
+and the column without them was already 1 W/m² under the nominal range.
+Two parts of it are measured: in the column's stratosphere, held at the
+skin temperature (214.51 K, no ozone heating), ozone takes 8.37 W/m²
+where it takes 7.46 on RFMIP's own temperatures, and N₂O takes 2.18
+where the sources give at most 1.88. On RFMIP's 100 profiles with all
+its gases but the halocarbons, the column gives 263.90 W/m² against
+LBLRTM's 263.20 with them (0.39 W/m² for the halocarbons): there it is
+right. The single column, not the radiation code, is dark. The cloud
+refits of #705 do not touch a clear sky; what to do is the user's call
+(issue #705's comments).
 
 Two direct checks agree:
 
