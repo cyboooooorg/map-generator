@@ -97,8 +97,9 @@ pub fn stage(water: bool, age: Gyr, draw: f64) -> Stage {
 /// The air of a planet at `stage`, lit by `stars` (each star's effective
 /// temperature and the flux it sends the planet) on a surface `gravity`:
 /// unchanged without life and before [`OXYGEN_AFTER_GYR`]; without
-/// methane from it (OH destroys it within about nine years in an
-/// oxygenated air, and the Proterozoic's flux is not modelled: a
+/// methane from it (OH destroys it in an oxygenated air: 9.5 ± 1.3 years
+/// in the 1750 air the law uses, 9.1 ± 0.9 today, Prather et al. 2012;
+/// and the Proterozoic's flux is not modelled: a
 /// `Definition:` of the model's scope, #717); from
 /// [`MODERN_OXYGEN_AFTER_GYR`], `O2_PER_N2 × N₂` of O₂ and the methane a
 /// modern biosphere keeps under those stars on that gravity

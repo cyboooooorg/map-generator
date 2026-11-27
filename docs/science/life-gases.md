@@ -336,10 +336,6 @@ ratios carry over.
   methane. On an oxygen Earth the OH that destroys methane is made in
   the troposphere from ozone's photolysis to O(¹D) and its reaction with
   water (Segura et al. 2005).
-- The doc of `science::life::oxygenate` says OH destroys methane
-  "within about nine years in an oxygenated air": today's lifetime, 9.1
-  ± 0.9 years; the 1750 air's is 9.5 ± 1.3 years (Prather et al. 2012),
-  the one the law uses.
 
 ### What a law can read
 
