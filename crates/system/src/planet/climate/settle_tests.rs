@@ -5,16 +5,20 @@
 
 use super::body::ClimateBody;
 use super::fixture::{earth, mars, moved, titan};
-use super::settle::{Bracket, End, Next, Settle, albedo_for, attracting, settle, warm_start};
+use super::settle::{
+    AlbedoMap, Bracket, End, Next, Settle, albedo_fixed_point, albedo_for, attracting, climate_of,
+    settle, warm_start,
+};
 use super::{
     ALBEDO_BRACKET, ALBEDO_ITERATIONS, ALBEDO_TOLERANCE_K, CONDENSE_ITERATIONS, ClimateInputs,
     Light, Numerics,
 };
 use science::balance::{BRACKET_TOLERANCE, Point, TOLERANCE};
+use science::constants::STEFAN_BOLTZMANN;
 use science::radiation::gases::{PartialPressures, Weights};
 use science::radiation::ozone::ozone_column;
 use science::surface::Liquid;
-use science::units::{Bar, Dex, EarthFlux, Kelvin, Kilogram, WattPerSquareMetre};
+use science::units::{Bar, Dex, EarthFlux, Fraction, Kelvin, Kilogram, WattPerSquareMetre};
 
 /// Source: Mars's air, 6.36 mbar of 95.1 % CO₂, 2.59 % N₂ and 0.16 % O₂
 /// (NASA Mars fact sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/
@@ -568,4 +572,189 @@ fn the_probe_albedo_puts_the_radiative_equilibrium_where_asked() {
         let ratio = ((1.0 - moved) / (1.0 - albedo)).powf(0.25);
         assert!((used * ratio - target).abs() < 1e-12, "{moved}");
     }
+}
+
+/// Definition: the light of a constructed climate, the radiative
+/// equilibrium of a black, unit-emissivity body, 300 K: its radiative
+/// equilibrium under albedo `A` and emissivity `ε` is `300 (1 − A)^¼
+/// ε^-¼`, as `settle` reads a body's.
+const CONSTRUCTED_LIGHT: f64 = 300.0;
+
+/// Definition: where a constructed climate jumps, K of radiative
+/// equilibrium: 274.4, between the radiative equilibria of the two
+/// albedos its branches derive (273.42 under 0.31, 275.38 under 0.29).
+const JUMP_AT: f64 = 274.4;
+
+/// Definition: the albedo the warm branch of a constructed climate
+/// derives, 0.31, brighter than [`COLD_DERIVES`] by a swing of 0.02, as
+/// on a methane Earth past its edge (#729: a warm climate at its maximum
+/// greenhouse derives a Rayleigh albedo that collapses its CO₂).
+const WARM_DERIVES: f64 = 0.31;
+
+/// Definition: the albedo the collapsed branch of a constructed climate
+/// derives, 0.29, darker than [`WARM_DERIVES`] by the swing of 0.02.
+const COLD_DERIVES: f64 = 0.29;
+
+/// Definition: the most albedo steps a climate with no fixed point takes
+/// to stop, 40: from the swing of 0.02 to [`ALBEDO_BRACKET`] is about 15
+/// halvings, and the Illinois rule may take two steps for one; a test
+/// bound, the one the methane Earth's cycling test held before #749.
+const CYCLING_STEPS: usize = 40;
+
+/// A constructed climate: its radiative equilibrium `x` under the albedo
+/// and emissivity it was solved under, and its surface temperature.
+#[derive(Clone, Copy, Debug)]
+struct Constructed {
+    x: f64,
+    temperature: f64,
+}
+
+/// A climate that jumps at [`JUMP_AT`]: above it warm (30 K of
+/// greenhouse) and deriving [`WARM_DERIVES`], under it collapsed (60 K
+/// colder than its radiative equilibrium) and deriving [`COLD_DERIVES`].
+/// Each derives an albedo that puts it on the other side: it has no fixed
+/// point.
+struct Jump;
+
+/// A smooth climate (30 K of greenhouse) whose derived albedo rises with
+/// its temperature, 0.004 per K of radiative equilibrium about 0.30 at
+/// [`JUMP_AT`]: a stable root.
+struct Smooth;
+
+fn radiative(albedo: f64, emissivity: f64) -> f64 {
+    CONSTRUCTED_LIGHT * (1.0 - albedo).powf(0.25) / emissivity.powf(0.25)
+}
+
+impl AlbedoMap for Jump {
+    type Climate = Constructed;
+    fn solve(&mut self, albedo: f64, emissivity: f64) -> Constructed {
+        let x = radiative(albedo, emissivity);
+        let temperature = if x >= JUMP_AT { x + 30.0 } else { x - 60.0 };
+        Constructed { x, temperature }
+    }
+    fn temperature(climate: &Constructed) -> f64 {
+        climate.temperature
+    }
+    fn regulated(_: &Constructed) -> bool {
+        false
+    }
+    fn derived(&mut self, climate: &Constructed) -> (f64, f64) {
+        let albedo = if climate.x >= JUMP_AT {
+            WARM_DERIVES
+        } else {
+            COLD_DERIVES
+        };
+        (albedo, 1.0)
+    }
+    fn radiative(&mut self, albedo: f64, emissivity: f64) -> f64 {
+        radiative(albedo, emissivity)
+    }
+}
+
+impl AlbedoMap for Smooth {
+    type Climate = Constructed;
+    fn solve(&mut self, albedo: f64, emissivity: f64) -> Constructed {
+        let x = radiative(albedo, emissivity);
+        Constructed {
+            x,
+            temperature: x + 30.0,
+        }
+    }
+    fn temperature(climate: &Constructed) -> f64 {
+        climate.temperature
+    }
+    fn regulated(_: &Constructed) -> bool {
+        false
+    }
+    fn derived(&mut self, climate: &Constructed) -> (f64, f64) {
+        (0.30 + 0.004 * (climate.x - JUMP_AT), 1.0)
+    }
+    fn radiative(&mut self, albedo: f64, emissivity: f64) -> f64 {
+        radiative(albedo, emissivity)
+    }
+}
+
+#[test]
+fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
+    // #729, rebuilt on a constructed climate (#767): started warm, the
+    // climate derives a brighter albedo that collapses it, and the
+    // collapsed one a darker albedo that warms it back. The plain step
+    // swings across the jump, the bracket narrows on it, and the fixed
+    // point stops there with the colder end, not converged.
+    let fixed = albedo_fixed_point(&mut Jump, (COLD_DERIVES, 1.0), &Numerics::DEFAULT);
+    println!(
+        "albedo {:.8}, {:.3} K, {} steps",
+        fixed.albedo, fixed.climate.temperature, fixed.steps
+    );
+    assert!(fixed.cycles && !fixed.settled, "{fixed:?}");
+    assert!(fixed.climate.x < JUMP_AT, "the colder side: {fixed:?}");
+    assert!(
+        JUMP_AT - fixed.climate.x < 1e-3,
+        "on the jump within the bracket: {fixed:?}"
+    );
+    assert!(fixed.steps <= CYCLING_STEPS, "{} steps", fixed.steps);
+}
+
+#[test]
+fn a_climate_with_a_stable_root_settles_on_it() {
+    // The same loop on a smooth climate: it settles, and its albedo is
+    // the one it derives within the tolerance.
+    let fixed = albedo_fixed_point(&mut Smooth, (COLD_DERIVES, 1.0), &Numerics::DEFAULT);
+    assert!(fixed.settled && !fixed.cycles, "{fixed:?}");
+    let derived = Smooth.derived(&fixed.climate).0;
+    let off = radiative(derived, 1.0) - fixed.climate.x;
+    assert!(off.abs() < ALBEDO_TOLERANCE_K.0, "{off} K: {fixed:?}");
+}
+
+/// Definition: a runaway's air for the second law's wiring test, 10 bar
+/// of steam and 10 of CO₂ in weights, a thin test input whose one
+/// balance costs a fraction of a second.
+const STEAM_AIR: Weights = Weights {
+    n2: 0.0,
+    co2: 10.0,
+    h2o: 10.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: 0.0,
+    ar: 0.0,
+};
+
+/// Definition: the equilibrium temperature, K, of the light
+/// [`STEAM_AIR`] absorbs in the wiring test: its column balances above
+/// [`COOL_STAR`] under a Sun-like star (at 3834 K) while its grey body
+/// stays under it (a test input).
+const SCORCHING_LIGHT_K: f64 = 2300.0;
+
+/// Definition: a cool star's effective temperature, K, a test input.
+const COOL_STAR: Kelvin = Kelvin(3000.0);
+
+// The grey body of the light lies under the ceiling: the cap, not a
+// lower bound, sets the surface of the wiring test.
+const _: () = assert!(SCORCHING_LIGHT_K < COOL_STAR.0);
+
+#[test]
+fn a_runaway_is_never_hotter_than_its_star() {
+    // The wiring of the second law (`science::balance::second_law_ceiling`,
+    // study 41): the star's effective temperature reaches the balance of
+    // a dry runaway through `ClimateInputs::ceiling`. One balance under a
+    // fixed light, no fixed point of the albedo: from a 3000 K star the
+    // surface stops exactly at 3000 K, which no root found by the search
+    // lands on (under a Sun-like star the same balance settles at
+    // 3834 K, measured when the test was written; it is not solved here
+    // to keep the test cheap).
+    let mut inputs = ClimateInputs {
+        air: STEAM_AIR,
+        runaway: true,
+        water: Kilogram(0.0),
+        ..earth()
+    };
+    for light in &mut inputs.sources {
+        light.effective_temperature = COOL_STAR;
+    }
+    let light = WattPerSquareMetre(STEFAN_BOLTZMANN * SCORCHING_LIGHT_K.powi(4));
+    let black = Fraction::new(1.0).expect("one is a fraction");
+    let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
+    let (_, capped, _) = climate_of(&mut body, light, &STEAM_AIR, black);
+    assert_eq!(capped, COOL_STAR);
 }

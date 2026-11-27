@@ -88,12 +88,14 @@ mod tests;
 /// `halving_bins_keeps_the_forcing`, which allows 0.1).
 pub(crate) const BIN_WIDTH_CM: f64 = 20.0;
 
-/// Definition: upper end of the spectrum, cm⁻¹, the top of
-/// `opacity.bin`: a black body at 640 K, the hottest steam column the
-/// legacy climate solved, emits 99.6 % of its flux below it (0.38 % past
-/// it, audit, Wiki study 19); the rest goes to the tail band ([`TAIL`]),
-/// which the test `the_planck_spectrum_is_the_bins_and_their_rest` sums
-/// with the bins to `σT⁴`.
+/// Definition: upper end of the spectrum of the longwave table, cm⁻¹,
+/// the top of `opacity.bin`: a black body at 640 K, the hottest steam
+/// column the legacy climate solved, emits 99.6 % of its flux below it
+/// (0.38 % past it, audit, Wiki study 19); the rest goes to the tail band
+/// ([`TAIL`]), which the test
+/// `the_planck_spectrum_is_the_bins_and_their_rest` sums with the bins to
+/// `σT⁴`, and which the column sums on the shortwave table's bins
+/// (`column::beyond`, study 41).
 pub(crate) const SPECTRUM_TOP_CM: f64 = 5000.0;
 
 /// Definition: number of bins over 0-[`SPECTRUM_TOP_CM`].
@@ -843,12 +845,14 @@ pub(crate) fn co2_continuum_depth(
 /// [`SPECTRUM_TOP_CM`] as one more band ([`TAIL`]).
 pub(crate) const BANDS: usize = BINS + 1;
 
-/// Definition: index of the tail band, from [`SPECTRUM_TOP_CM`] to infinity. It takes
-/// the absorption of the last bin, so that a hot column that the bins
-/// leave short of `σT⁴` (0.4 % at 640 K, 43 % at 1800 K) still sends out
-/// the rest of its black body through the air there, and a column of
-/// transparent air sends out exactly the surface's `σT⁴`, as an airless
-/// one does.
+/// Definition: index of the tail band, from [`SPECTRUM_TOP_CM`] to
+/// infinity: 0.4 % of a black body at 640 K, 40 % at 1800 K, 74 % at
+/// 3000 K. The longwave table holds no absorption there; the column sums
+/// it on its own (`column::beyond`, study 41): the near infrared on the
+/// shortwave table's bins up to 14 364 cm⁻¹ (0.7 µm), and past them the
+/// ground's light through Rayleigh scattering alone, so that a column of
+/// transparent air still sends out exactly the surface's `σT⁴`, as an
+/// airless one does. Its absorption in [`reference::Spectrum`] is none.
 pub(crate) const TAIL: usize = BINS;
 
 /// What the smooth absorption of every bin needs that does not depend on
@@ -1063,7 +1067,7 @@ pub(crate) fn fast_level(level: &Level, bins: usize, out: &mut FastLevel) {
                 bar,
                 gas.molar_kg(),
                 gas.sets(),
-                m,
+                0..m,
                 by_air,
                 &mut own_ln[..m],
                 sum,
@@ -1103,6 +1107,66 @@ pub(crate) fn smooth_above(smooth: f64) -> f64 {
 /// [`SPECTRUM_TOP_CM`], each Planck integral taken once per edge.
 pub(crate) fn planck_spectrum(t_k: f64, out: &mut [f64; BANDS]) {
     planck_spectrum_upto(t_k, BINS, out);
+}
+
+/// Logarithmic mean of two opacities per `ln p`: the exact mean over a
+/// layer where the opacity grows exponentially in `ln p` (a power of the
+/// pressure, as through a uniform air), and the arithmetic mean's limit
+/// when they are equal.
+pub(crate) fn log_mean(a: f64, b: f64) -> f64 {
+    if a <= 0.0 || b <= 0.0 {
+        return 0.5 * (a + b);
+    }
+    let r = b / a;
+    if (r - 1.0).abs() < 1e-6 {
+        0.5 * (a + b)
+    } else {
+        (b - a) / r.ln()
+    }
+}
+
+/// Black-body flux, W/m², at `t_k` between each two of the ascending
+/// `edges_cm` (cm⁻¹) into `out[j]`, `j` from 0, and past the last edge
+/// into `out[edges_cm.len() − 1]`: the exact integrals of
+/// [`planck_spectrum`] on edges of the caller's (`out` as long as
+/// `edges_cm`), each Planck integral taken once per edge.
+pub(crate) fn planck_over(t_k: f64, edges_cm: &[f64], out: &mut [f64]) {
+    out.fill(0.0);
+    if t_k <= 0.0 || edges_cm.is_empty() {
+        return;
+    }
+    let black = STEFAN_BOLTZMANN * t_k.powi(4) / PLANCK_TOTAL;
+    let x = |cm: f64| SECOND_RADIATION_CONSTANT_CM_K * cm / t_k;
+    // The head integral from 0 under the switch, the tail integral to
+    // infinity over it, as `planck_spectrum_upto` takes them.
+    let edge = |x: f64| {
+        if x >= SERIES_SWITCH {
+            planck_tail(x)
+        } else {
+            planck_head(x)
+        }
+    };
+    let mut x_lo = x(edges_cm[0]);
+    let mut lo = edge(x_lo);
+    for (j, &cm) in edges_cm.iter().enumerate().skip(1) {
+        let x_hi = x(cm);
+        let hi = edge(x_hi);
+        let integral = if x_lo >= SERIES_SWITCH {
+            lo - hi
+        } else if x_hi < SERIES_SWITCH {
+            hi - lo
+        } else {
+            (PLANCK_TOTAL - hi) - lo
+        };
+        out[j - 1] = black * integral.max(0.0);
+        (x_lo, lo) = (x_hi, hi);
+    }
+    let rest = if x_lo >= SERIES_SWITCH {
+        lo
+    } else {
+        PLANCK_TOTAL - lo
+    };
+    out[edges_cm.len() - 1] = black * rest.max(0.0);
 }
 
 /// [`planck_spectrum`] of the first `bins` bins, and of the tail when they

@@ -164,6 +164,7 @@ pub(crate) fn wet_climate(
         emissivity,
         i.gravity,
         body.numerics.solver,
+        i.ceiling(),
         &mut body.columns,
     );
     (steam, t)

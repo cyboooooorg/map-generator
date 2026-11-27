@@ -78,6 +78,9 @@ use crate::water::{
     vapour_saturation_bar, vapour_saturation_bar_over,
 };
 
+#[path = "column_beyond.rs"]
+mod beyond;
+
 #[cfg(test)]
 #[path = "column_tests.rs"]
 mod tests;
@@ -1446,6 +1449,8 @@ struct Scratch {
     bottom: FastLevel,
     lines: [Depths; LINE_GASES],
     smooth: [f32; BINS],
+    /// The sum past the longwave table's ([`beyond::beyond`]).
+    beyond: beyond::Workspace,
 }
 
 impl Scratch {
@@ -1455,6 +1460,7 @@ impl Scratch {
             bottom: FastLevel::default(),
             lines: std::array::from_fn(|_| Depths::new()),
             smooth: [0.0; BINS],
+            beyond: beyond::Workspace::new(),
         })
     }
 }
@@ -1541,8 +1547,8 @@ fn summed_bins(temperature: &[f64]) -> usize {
 /// takes of the transmission to space. Within a bin each g-point of each
 /// gas with lines keeps its own transmission; the bin's is the product of
 /// the gases' weighted sums and the smooth part's (random overlap, see
-/// [`super::spectrum`]). The tail band takes the last bin's absorption, so
-/// its transmission is that bin's. A layer's depth is the logarithmic
+/// [`super::spectrum`]). The tail band, past the longwave table, is
+/// summed on its own ([`beyond::beyond`]). A layer's depth is the logarithmic
 /// mean of the opacities at its two levels times its span. Above the top
 /// the air is uniform ([`spectrum::smooth_above`]). The sum stops where
 /// every bin is opaque ([`OPAQUE`]); the bins a cold column cannot send
@@ -1569,6 +1575,7 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
         bottom,
         lines,
         smooth,
+        beyond,
     } = scratch;
     let n = column.top();
     let weights = spectrum::weights().map(|w| w as f32);
@@ -1605,14 +1612,11 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
         }
         f64::from(through)
     };
-    // The tail is summed with the last bin, when every bin is.
+    // The tail is summed on its own when every bin is (`beyond`).
     let tail = bins == BINS;
     for b in 0..bins {
         seen[b] = through(b, smooth, lines);
         out[b] = planck[b] * (1.0 - seen[b]);
-    }
-    if tail {
-        out[TAIL] = planck[TAIL] * (1.0 - seen[BINS - 1]);
     }
     // What a cloud top sends out per band, `above_c + seen_c B_c`, once
     // the sum has passed it.
@@ -1645,15 +1649,11 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
             }
         }
         let mut open = false;
-        let last_seen = seen[BINS - 1];
         for b in 0..bins {
             let below = through(b, smooth, lines);
             out[b] += 0.5 * (planck[b] + planck_below[b]) * (seen[b] - below);
             seen[b] = below;
             open |= below > OPAQUE;
-        }
-        if tail {
-            out[TAIL] += 0.5 * (planck[TAIL] + planck_below[TAIL]) * (last_seen - seen[BINS - 1]);
         }
         if let Some(cloud) = at_cloud {
             let x = cloud.up;
@@ -1663,17 +1663,17 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
                 let seen_c = mid(seen[b], seen_above[b]);
                 sent[b] = mid(out[b], above[b]) + seen_c * mid(planck_below[b], planck[b]);
             }
-            if tail {
-                let seen_c = mid(seen[BINS - 1], seen_above[BINS - 1]);
-                sent[TAIL] =
-                    mid(out[TAIL], above[TAIL]) + seen_c * mid(planck_below[TAIL], planck[TAIL]);
-            }
             cloud_top = Some(sent);
         }
         std::mem::swap(top, bottom);
         std::mem::swap(&mut planck, &mut planck_below);
         if !open {
-            return under_clouds(out, column.cloud, cloud_top, bins, tail);
+            return with_tail(
+                under_clouds(out, column.cloud, cloud_top, bins),
+                column,
+                tail,
+                beyond,
+            );
         }
     }
     // `planck` is now the lowest level's, at `temperature[0]`: the
@@ -1684,30 +1684,43 @@ fn radiate(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
     for b in 0..bins {
         out[b] += column.ground_sent(planck[b], seen[b]);
     }
+    with_tail(
+        under_clouds(out, column.cloud, cloud_top, bins),
+        column,
+        tail,
+        beyond,
+    )
+}
+
+/// `out` with its tail band summed past the longwave table
+/// ([`beyond::beyond`], in the workspace `ws`) when `tail` (every bin
+/// summed); otherwise its tail stays the clear ground's that [`radiate`]
+/// set.
+fn with_tail(
+    mut out: [f64; BANDS],
+    column: &Column,
+    tail: bool,
+    ws: &mut beyond::Workspace,
+) -> [f64; BANDS] {
     if tail {
-        out[TAIL] += column.ground_sent(planck[TAIL], seen[BINS - 1]);
+        out[TAIL] = beyond::beyond(column, ws);
     }
-    under_clouds(out, column.cloud, cloud_top, bins, tail)
+    out
 }
 
 /// The clear column's radiation `out` per band, with `cloud`'s share of
 /// the sky sending out what its top does (`sent`, once the sum has
-/// passed it; see [`radiate`]) over the first `bins` bins, and the tail
-/// with them when `tail`.
+/// passed it; see [`radiate`]) over the first `bins` bins.
 fn under_clouds(
     mut out: [f64; BANDS],
     cloud: Option<Cloud>,
     sent: Option<[f64; BANDS]>,
     bins: usize,
-    tail: bool,
 ) -> [f64; BANDS] {
     if let (Some(cloud), Some(sent)) = (cloud, sent) {
         let blend = |clear: f64, sent: f64| clear - cloud.weight * (clear - sent);
         for b in 0..bins {
             out[b] = blend(out[b], sent[b]);
-        }
-        if tail {
-            out[TAIL] = blend(out[TAIL], sent[TAIL]);
         }
     }
     out
@@ -1759,8 +1772,9 @@ fn log_mean_f32(a: f32, ln_a: f32, b: f32, ln_b: f32) -> f32 {
 }
 
 /// The double-precision sum that [`radiate`] stands for, band by band
-/// with `spectrum::reference::absorption_spectrum`, over every band and
-/// level.
+/// with `spectrum::reference::absorption_spectrum`, over every bin and
+/// level; the tail is [`radiate`]'s own ([`beyond::beyond`], in double
+/// precision already).
 #[cfg(test)]
 fn radiate_reference(column: &Column) -> [f64; BANDS] {
     use spectrum::reference::{Spectrum, absorption_spectrum, depth_above, log_mean};
@@ -1822,10 +1836,15 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
     if column.ground.is_some() {
         column.ground_planck(BINS, &mut planck);
     }
-    for k in 0..BANDS {
+    for k in 0..BINS {
         out[k] += column.ground_sent(planck[k], seen[k]);
     }
-    under_clouds(out, column.cloud, cloud_top, BINS, true)
+    with_tail(
+        under_clouds(out, column.cloud, cloud_top, BINS),
+        column,
+        true,
+        &mut beyond::Workspace::new(),
+    )
 }
 
 /// One gas through one layer of `span` in `ln p`: each g-point's

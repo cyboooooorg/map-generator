@@ -139,7 +139,9 @@ is their Eq. 7. `science::envelope`: `envelope_thickness` is Lopez & Fortney
 the 100 GPa metallic boundary of a giant. `science::steam`: a runaway's
 steam envelope, Turbet et al. 2020's Eqs. 2 and 3 (`envelope`,
 `base_pressure`, `steam_temperature`; the thickness cap is calibrated),
-and the steam world line (`hides_surface`). Data: [GIANTS.md](data/GIANTS.md);
+the steam world line (`hides_surface`), and the hottest surface of the
+published steam profiles (`PUBLISHED_SURFACE_TOP`, 4300 K, and
+`past_published_profiles`). Data: [GIANTS.md](data/GIANTS.md);
 laws, tests and calibrations: [Mini-Neptunes](../../docs/science/planet-interiors.md#mini-neptunes-and-their-envelopes),
 [Giants](../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary),
 [Steam](../../docs/science/planet-atmospheres.md#boiling-and-the-steam-envelope-of-the-rewrite-study-26).
@@ -169,16 +171,19 @@ others; `cold_trapped` caps an air's CO₂ and NH₃ at their frost pressures
 ## Radiative balance
 
 `science::balance`: the radiative balance of one column (`surface_temperature`
-and its root finders), the moist plateau of Earth's air and the runaway
-albedo. `science::snowball`: `SNOWBALL_WARM_BAR` and the snowball chance. The
-solver that uses them is `system::planet::climate`.
+and its root finders, up to the ceiling of `second_law_ceiling`, the
+hottest lighting star's effective temperature), the moist plateau of
+Earth's air and the runaway albedo. `science::snowball`:
+`SNOWBALL_WARM_BAR` and the snowball chance. The solver that uses them is
+`system::planet::climate`.
 
 ## Radiation
 
 `science::radiation::column`: `outgoing_longwave` (a column's infrared: the
 lines of CO₂, water, methane, ozone and N₂O from `data/opacity.bin`, the ozone
-column laid out on Earth's AFGL shape, continua, pairs, clouds; the caller
-owns the `ColumnCache`) and
+column laid out on Earth's AFGL shape, continua, pairs, clouds; past
+5000 cm⁻¹ CO₂'s and water's lines and continua from `data/shortwave.bin` to
+0.7 µm and Rayleigh scattering past it; the caller owns the `ColumnCache`) and
 `skin_temperature`; `radiation::clouds::cloud_cover`; `science::volatiles`: CO₂,
 methane, nitrogen and argon saturation. Shortwave: `albedo::shortwave_budget`
 (Bond albedo and absorbed light, for a star's temperature and metallicity; the

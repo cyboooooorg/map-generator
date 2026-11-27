@@ -11,7 +11,7 @@ use crate::planet::codes;
 use crate::planet::interior::InteriorError;
 use science::habitable::OCEAN_MASS;
 use science::radiation::gases::Weights;
-use science::steam::hides_surface;
+use science::steam::{hides_surface, past_published_profiles};
 use science::surface::{Liquid, ocean_fraction};
 use science::units::{Bar, Fraction, Kelvin};
 use std::collections::BTreeMap;
@@ -32,6 +32,9 @@ pub(crate) struct Climate {
     pub converged: Traced<bool>,
     /// Whether the albedo's fixed point has none and the climate cycles.
     pub cycles: Traced<bool>,
+    /// Whether the surface temperature lies past every published steam
+    /// profile (`science::steam::past_published_profiles`).
+    pub past_published: Traced<bool>,
     /// The air the climate leaves.
     pub atmosphere: Atmosphere,
     /// The N2 and CH4 on the ground, recorded when positive.
@@ -233,6 +236,11 @@ pub(crate) fn record(
         settle.temperature,
         &from,
     )?;
+    let past_published = trace.record(
+        Code::of(codes::CLIMATE_PAST_PUBLISHED_PROFILES),
+        past_published_profiles(settle.temperature),
+        &[temperature.node()],
+    )?;
     let mut from = inputs.clone();
     from.push(temperature.node());
     let bond_albedo = trace.record(
@@ -349,6 +357,7 @@ pub(crate) fn record(
         regulated,
         converged,
         cycles,
+        past_published,
         atmosphere: Atmosphere {
             surface_pressure,
             partial: partials,

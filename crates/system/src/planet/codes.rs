@@ -338,6 +338,11 @@ pub(crate) const AIR_GASES: [(timeline::Gas, &str, &str); 8] = [
 /// star, the air, the water, the heat, the body, the rotation and the
 /// state.
 pub(crate) const CLIMATE_SURFACE_TEMPERATURE: &str = "planet.climate.surface-temperature";
+/// Whether the surface temperature lies past the hottest published steam
+/// profile (`science::steam::past_published_profiles`, Turbet et al.
+/// 2020's 4300 K): an extrapolation of the column, from the temperature
+/// (study 41, issue #775).
+pub(crate) const CLIMATE_PAST_PUBLISHED_PROFILES: &str = "planet.climate.past-published-profiles";
 /// Equilibrium temperature of the light the surface took: from the Bond
 /// albedo and the flux of every star.
 pub(crate) const CLIMATE_EQUILIBRIUM: &str = "planet.climate.equilibrium";
