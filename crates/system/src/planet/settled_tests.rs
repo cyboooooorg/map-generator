@@ -291,6 +291,18 @@ fn settled_draws_then_settles_from_its_snowball_seed() {
 // The model's own 577 K for Venus (#594) is not a source: it is a pin of
 // the code's output, so it belongs to the tier-2 net, added in 2d-4
 // because `settled` is not reachable from crates/regression before then.
+// `venus_prints_its_temperature` (tier 3) prints it for the documentation.
+#[test]
+#[ignore = "heavy: prints Venus's surface temperature, a settled Venus, under 1 s in release"]
+fn venus_prints_its_temperature() {
+    // Printed, not asserted (D4): the code's output is no source.
+    let (venus, ..) = settled_of(&VENUS, NO_ICE_OBLIQUITY);
+    println!(
+        "Venus: surface temperature {:?}",
+        climate(&venus).global.surface_temperature.value()
+    );
+}
+
 #[test]
 fn venus_is_bright_and_has_no_liquid() {
     let (venus, ..) = settled_of(&VENUS, NO_ICE_OBLIQUITY);

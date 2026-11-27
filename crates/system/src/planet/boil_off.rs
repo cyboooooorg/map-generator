@@ -96,15 +96,20 @@ pub(crate) fn boiled_off(
         c,
         &[f.node(), ceiling.node()],
     )?;
-    let mass = trace.record(
-        Code::of(codes::MASS_AFTER_BOIL_OFF),
-        EarthMass(core.value().0 / (1.0 - c.get())),
-        &[core.node(), left.node()],
-    )?;
+    // The mass left and the envelope it lost are one value: the mass is
+    // computed once, the boiled node derives from it and the trial's mass,
+    // and the mass node lists the boiled node among its causes, so that
+    // the boiled envelope is reachable from the planet's outputs.
+    let left_mass = EarthMass(core.value().0 / (1.0 - c.get()));
     let boiled = trace.record(
         Code::of(codes::ENVELOPE_BOILED_OFF),
-        Kilogram::from(*trial.mass.value()) - Kilogram::from(*mass.value()),
-        &[trial.mass.node(), mass.node()],
+        Kilogram::from(*trial.mass.value()) - Kilogram::from(left_mass),
+        &[trial.mass.node(), core.node(), left.node()],
+    )?;
+    let mass = trace.record(
+        Code::of(codes::MASS_AFTER_BOIL_OFF),
+        left_mass,
+        &[core.node(), left.node(), boiled.node()],
     )?;
     let trial = Trial {
         mass,

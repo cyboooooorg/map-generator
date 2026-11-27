@@ -33,8 +33,8 @@ use super::{
     ALBEDO_DAMPING, ALBEDO_TOLERANCE_K, COLLAPSE_TOLERANCE, ClimateInputs, Numerics, SCAN_RATIO,
     THAW_STEPS,
 };
-use crate::Trial;
 use crate::planet::bare::{Ground, bare_air, bare_with, formed, surface_pass};
+use crate::planet::chain::{Spun, chain_with, state_of};
 use crate::planet::classify::classify;
 use crate::planet::codes;
 use crate::planet::draws::{Drawn, LABELS};
@@ -47,6 +47,7 @@ use crate::planet::tests::{
 };
 use crate::planet::tests::{derived_from, trial, water_world_trial};
 use crate::planet::water::boiled;
+use crate::{Placement, Trial};
 use science::balance::{
     EARTH_DRY_AIR, EARTH_PLATEAU_OZONE, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, TOLERANCE,
     absorbed, earth_moist_plateau, moist_plateau, skin,
@@ -62,12 +63,13 @@ use science::surface::{
     ICE_COVERED_TEMPERATURE, Liquid, N2_ICE_EMISSIVITY, PHASE_BAND, methane_freezes, surface_vapour,
 };
 use science::units::{
-    Bar, EarthFlux, EarthMass, EarthRadius, Fraction, Kelvin, Kilogram, Metre, Pascal,
+    Bar, Day, Degree, EarthFlux, EarthMass, EarthRadius, Fraction, Kelvin, Kilogram, Metre, Pascal,
 };
 use science::volatiles::{NITROGEN_TRIPLE_TEMPERATURE, co2_saturation_pressure};
 use science::water::{CRITICAL_POINT_TEMPERATURE, melting_temperature};
 use timeline::{
-    ClimateState, Code, Gas, LiquidKind, Material, NodeValue, PlanetClass, Provenance, Seed, Trace,
+    ClimateState, Code, Designation, Gas, LiquidKind, Material, NodeValue, PlanetClass, Provenance,
+    Seed, SystemNumber, Trace,
 };
 
 /// Source: the Sun's nominal effective temperature, 5772 K (IAU 2015
@@ -1932,6 +1934,12 @@ fn the_492_super_earth_is_a_steam_world() {
     assert!(h2o > DEEP_STEAM, "{h2o:?}");
     assert!(temperature > STEAM_WORLD_SURFACE, "{temperature:?}");
     assert!(under_steam(&s));
+    // Printed, not asserted (D4): what the code gives today, for the
+    // documentation to quote.
+    println!(
+        "#492: radius {:?}, surface temperature {temperature:?}",
+        s.bare.body.bulk().radius.value()
+    );
     // Over the dry core under the steam (Turbet et al. 2020 § 3.1); the
     // condensed twin is not a bound outside their grid (#684).
     let layers = s.bare.body.layers();
@@ -2268,4 +2276,105 @@ fn a_runaway_weighs_the_water_its_own_pass_kept() {
         }
     }
     assert!(hidden, "no steam world hides its surface");
+}
+
+/// Definition: a survey number for the placements of the tests below,
+/// 10 000 (the first, as `chain_tests.rs`).
+const SURVEY: u32 = 10_000;
+
+/// Definition: the rotation period of the tests below, one Earth day.
+const DAY: Day = Day(1.0);
+
+/// The planet `t` of composition `d` through the chain and into its
+/// state, with the state frozen: the state and its graph.
+fn frozen_state(
+    trace: &mut Trace,
+    t: Trial,
+    d: &Drawn,
+) -> (
+    crate::planet::chain::Chained,
+    timeline::PlanetState,
+    timeline::CauseGraph,
+) {
+    let spin = timeline::Spin {
+        rotation_period: trace
+            .leaf(Code::of("test.rotation"), DAY, Provenance::Input)
+            .unwrap(),
+        obliquity: trace
+            .leaf(Code::of("test.obliquity"), Degree(0.0), Provenance::Input)
+            .unwrap(),
+    };
+    let chained = chain_with(&t, d, Spun::Placed(&spin), HALF, HALF, trace).unwrap();
+    let placement = Placement {
+        designation: Designation::planet(SystemNumber::new(SURVEY).unwrap(), 1).unwrap(),
+        seed: t.seed,
+        spin,
+        trial: t,
+    };
+    let mut state = state_of(&placement, chained.clone(), trace).unwrap();
+    let graph = trace.freeze(&mut state).unwrap();
+    (chained, state, graph)
+}
+
+#[test]
+#[ignore = "heavy: a full boil loop and the water sizing, then the state frozen, about 5 s in release"]
+fn a_recondensed_boil_shows_in_the_tree() {
+    let mut trace = Trace::new();
+    let (t, d) = f0v_earth(&mut trace, recondensing_water(), Some(HUNDREDTH_OF_N2));
+    let t = with_fluence(&mut trace, &t, RECONDENSED_FLUENCE);
+    let (chained, state, graph) = frozen_state(&mut trace, t, &d);
+    let water = &chained.living.settled.bare.surface.as_ref().unwrap().water;
+    assert!(
+        *water.boiled.value() && !*water.runaway.value(),
+        "{water:?}"
+    );
+    let surface = state.surface.as_ref().expect("an Earth has a surface");
+    println!(
+        "recondensed boil: inventory {:?}, surface temperature {:?}",
+        water.inventory.value(),
+        surface.climate.surface_temperature.value()
+    );
+    let code = |id: timeline::NodeId| graph.node(id).unwrap().code.as_str().to_owned();
+    let parents = |id: timeline::NodeId| match &graph.node(id).unwrap().origin {
+        timeline::Origin::Derived { from } => from.clone(),
+        origin => panic!("{origin:?} is not derived"),
+    };
+    // The state keeps the settled water: its `boiled` node is the one of
+    // the graph, derived from the true `planet.climate.boils` verdict.
+    let boiled = surface.water.boiled.node();
+    assert_eq!(code(boiled), codes::WATER_BOILED);
+    let boils: Vec<_> = parents(boiled)
+        .into_iter()
+        .filter(|&id| code(id) == codes::CLIMATE_BOILS)
+        .collect();
+    assert_eq!(boils.len(), 1, "boiled derives from one verdict");
+    assert_eq!(
+        graph.node(boils[0]).unwrap().value,
+        NodeValue::Flag(true),
+        "the verdict under `boiled`"
+    );
+    // The runaway is the steam run's: its parents are that run's
+    // inventory and runaway nodes, not the first run's.
+    let runaway = surface.water.runaway.node();
+    assert_eq!(code(runaway), codes::WATER_RUNAWAY);
+    assert!(!*surface.water.runaway.value());
+    let from: Vec<String> = parents(runaway).into_iter().map(code).collect();
+    assert!(from.iter().any(|c| c == codes::WATER_INVENTORY), "{from:?}");
+    assert!(from.iter().any(|c| c == codes::WATER_RUNAWAY), "{from:?}");
+}
+
+#[test]
+#[ignore = "heavy: a steam world through the chain, then the state frozen, about 1 s in release"]
+fn the_steam_pass_boiled_node_is_not_kept() {
+    let mut trace = Trace::new();
+    let (t, d) = water_world_trial(&mut trace, MASS_492, CORE_492, WATER_492, AU_492);
+    let t = with_star(&mut trace, &t, M9V);
+    let (_, state, graph) = frozen_state(&mut trace, t, &d);
+    assert!(state.surface.is_some());
+    let kept = graph
+        .nodes
+        .iter()
+        .filter(|n| n.code.as_str() == codes::WATER_BOILED)
+        .count();
+    assert_eq!(kept, 1, "one planet.water.boiled node in the frozen graph");
 }

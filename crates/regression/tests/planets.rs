@@ -489,10 +489,8 @@ fn boiled_off_placements_end_bare() {
     // Study 30 (#697): Tang, Fortney & Murray-Clay 2024's ceiling leaves
     // no envelope (kept fraction under `MIN_ENVELOPE`) to references 6 c
     // and d and 8 d and e. An expected value from the study, not a pin.
-    // The boil-off's ceiling is in the cause tree of its outputs. The
-    // boiled mass (`planet.envelope.boiled-off`, `Bare::envelope_boiled`)
-    // is not: no output of the state holds it yet; Task 10 carries
-    // `envelope_boiled` to the `PlanetState` (#697).
+    // The boil-off's ceiling and the boiled mass
+    // (`planet.envelope.boiled-off`) are in the cause tree of its outputs.
     let mut problems = Vec::new();
     for (reference, letters) in [(5_usize, ["c", "d"]), (7, ["d", "e"])] {
         let r = &references()[reference];
@@ -518,10 +516,15 @@ fn boiled_off_placements_end_bare() {
             for node in outputs {
                 boil.extend(ancestors_coded(&r.trace, node, "boil"));
             }
-            if !boil.contains("planet.envelope.boil-off-ceiling") {
-                problems.push(format!(
-                    "{who}: kept {kept}; no boil-off ceiling in its causes, boil nodes found: {boil:?}"
-                ));
+            for code in [
+                "planet.envelope.boil-off-ceiling",
+                "planet.envelope.boiled-off",
+            ] {
+                if !boil.contains(code) {
+                    problems.push(format!(
+                        "{who}: kept {kept}; no {code} in its causes, boil nodes found: {boil:?}"
+                    ));
+                }
             }
         }
     }
