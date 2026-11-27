@@ -210,19 +210,32 @@ const TOP_BAR: f64 = 1e-4;
 /// surface pressure, not the sea level's.
 pub(crate) const CLOUD_TOP_SHARE: f64 = 580.0 / 985.5;
 
-/// Source: infrared optical depth of the water clouds: ISCCP's global mean
-/// visible optical thickness, 3.8 (Rossow & Schiffer 1999, §6a and Table
-/// 4), over 2, the empirical ratio of the visible to the infrared optical
-/// thickness ISCCP takes (same paper, §5: `τ_ir = τ / 2.0`); confirmed by
-/// the audit, Wiki study 19.
-const CLOUD_IR_DEPTH: f64 = 3.8 / 2.0;
+/// Calibration: the water clouds' infrared emissivity, fitted so that
+/// Earth's clouds take CERES's longwave cloud effect, 25.7 W/m² (the
+/// clear sky of the same air without its clouds less the all-sky
+/// outgoing radiation, Loeb et al. 2020, *J. Climate* 33, 61,
+/// doi:10.1175/JCLI-D-19-0381.1, Table 3), from the column of CERES's
+/// years: Earth's measured air at 288 K, 389 ppm of CO₂, 1803 ppb of
+/// methane, 324.2 ppb of N₂O and 300 DU of ozone, under CERES's skin
+/// (issue #705, decided by the user on 2026-11-27, after the gases of
+/// #703 and #704). The effect is linear in the emissivity, so the fit
+/// is one ratio: 29.028 W/m² at ISCCP's 0.957 gives 0.8475, rounded up
+/// to 0.848 (25.71 W/m²). ISCCP's mean visible optical thickness, 3.8,
+/// over its `τ_ir = τ / 2` (Rossow & Schiffer 1999, §5, §6a and Table
+/// 4) gave `1 − exp(−1.66 × 1.9)` = 0.957, the emissivity of the mean
+/// optical depth; 0.848 is that of an infrared depth of 1.13. What was
+/// searched and not found: a global mean cloud emissivity for a single
+/// layer, and why ISCCP's clouds in a mean column take more than CERES
+/// measures (Wiki study 32; its candidate, the mean emissivity over a
+/// spread of thin cirrus being under the emissivity of their mean depth,
+/// goes the way of this fit). `docs/science/radiative-transfer.md`,
+/// "Clouds in the infrared".
+const CLOUD_EMISSIVITY: f64 = 0.848;
 
-/// The clouds' infrared emissivity for the column's fluxes:
-/// `1 − exp(−D τ_ir)`, with the diffusivity `D` the column's gases take
-/// ([`DIFFUSIVITY`]): 0.957. A cloud is grey in the infrared, and black
-/// past a few optical depths.
+/// The clouds' infrared emissivity for the column's fluxes,
+/// [`CLOUD_EMISSIVITY`]. A cloud is grey in the infrared.
 fn cloud_emissivity() -> f64 {
-    1.0 - (-DIFFUSIVITY * CLOUD_IR_DEPTH).exp()
+    CLOUD_EMISSIVITY
 }
 
 /// Source: pressure, bar, of the tropopause of a thick atmosphere, where

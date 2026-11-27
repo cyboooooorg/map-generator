@@ -481,9 +481,13 @@ $$
 The clouds' top sits at 580 hPa, the global annual mean of the ISCCP
 cloud-top pressure (Rossow & Schiffer 1999, §6a and Table 4), that is
 0.589 of Earth's mean surface pressure, 985.50 hPa (Trenberth & Smith
-2005). The emissivity $\varepsilon = 1 - e^{-1.66\,\tau_{ir}}$ comes from
-the visible optical thickness 3.8 and the empirical $\tau_{ir} = \tau/2$
-of the same paper (§5): $\varepsilon$ = 0.957.
+2005). ISCCP's mean visible optical thickness 3.8 and its empirical
+$\tau_{ir} = \tau/2$ (same paper, §5) give the emissivity of the mean
+depth, $\varepsilon = 1 - e^{-1.66\,\tau_{ir}}$ = 0.957. The column
+takes 0.848 instead (`CLOUD_EMISSIVITY`), a calibration on CERES's
+longwave cloud effect (issue #705, "Where it departs", *Cloud
+emissivity*): with 0.957 its clouds took 29.03 W/m² from the air of
+CERES's years against CERES's 25.7.
 
 The same Table 4 splits the 68.6 % of cloud of 1986 by type, each by
 the topmost cloud a pixel shows, so the shares add up: cirrus and
@@ -1116,6 +1120,28 @@ the Bond albedo are there too (change 2b-2).
   O₂'s near-infrared bands.
 - **The cloud's water, the deck and the haze.** These are calibrations,
   not laws. What was searched and not found:
+  - *Cloud emissivity* (`CLOUD_EMISSIVITY`, 0.848, #705's longwave
+    part, decided by the user on 2026-11-27 for study 36's second pull
+    request). Fitted so that the clouds' longwave effect (the clear sky
+    less the all-sky) of the column of CERES's years is CERES's 25.7 W/m²
+    (Loeb et al. 2020's clear sky of the same air without its clouds,
+    which is what a column computes; 28.0 against the cloud-free scenes):
+    Earth's measured air at 288 K, 389 ppm of CO₂, 1803 ppb of methane,
+    324.2 ppb of N₂O (AR6 WG1, Table 2.2, 2011) and 300 DU, under the
+    214.51 K skin of CERES's all-sky 240.1 W/m², the cover law's 0.682.
+    The effect is linear in the emissivity: 29.028 W/m² under ISCCP's
+    0.957 gives 0.8475, rounded up to 0.848, which gives 25.71 W/m²
+    (the tier-1 test `earths_clouds_take_what_ceres_measures` holds it in
+    25.7 to 28.0). That is the emissivity of an infrared depth of 1.13,
+    a visible 2.27 by ISCCP's ratio, against ISCCP's mean 3.8. Why
+    ISCCP's clouds in a mean column take more than CERES measures was
+    not found (study 32); its candidate, that the mean emissivity of
+    clouds spread over optical depths, thin cirrus among them, is under
+    the emissivity of their mean depth, goes the way of the fit; so
+    would a lower top, which the shortwave shares (`CLOUD_TOP_SHARE`),
+    so the fit takes the emissivity, a longwave-only constant, and
+    `CLOUD_ALBEDO`'s fit does not move. Searched and not found: a global
+    mean emissivity of a single cloud layer for a one-column model.
   - *Cloud cover.* The cover is $RH^{0.25}\,(1 - e^{-p_{H_2O}/p_c})$ with
     $p_c$ = 0.01 bar. The $RH^{0.25}$ factor is Xu & Randall's (1996)
     cloudiness, as coded in NCEP's physics; their second factor, a
@@ -1586,11 +1612,16 @@ under a 214.4 K skin (the test's 214.51 K moves each by about
   284.3 ppm on the RFMIP profiles is 1.45 W/m² in the column and
   1.35 W/m² in RRTMGP's reference fluxes for RFMIP (+7 %, as in #643's
   +7.5 %).
-- **The clouds' longwave effect** is 33.38 W/m² in the column at 288 K
+- **The clouds' longwave effect** was 33.38 W/m² in the column at 288 K
   and 280 ppm (emissivity 0.957, top at 0.589 of the surface pressure;
   32.91 before the phase step was split, at the low side of its
   sawtooth; 32.48 at 285.82 K), against 25.7 (CERES, the same air
   without its clouds) or 28.0 (cloud-free scenes): +5.4 to +7.7 W/m².
+  With ozone, methane and N₂O in the column (#704) it was 29.03 W/m² on
+  the air of CERES's years (389 ppm, 1803 ppb, 324.2 ppb, 300 DU) and
+  30.72 at 280 ppm without methane or N₂O; since #705's longwave refit
+  (`CLOUD_EMISSIVITY` 0.848, *Cloud emissivity* above) it is 25.71 on
+  the first.
   Splitting the clouds into ISCCP's four types
   (Rossow & Schiffer 1999, Table 4) does not help: placed at their top pressures
   they give 42.9 W/m², at their top temperatures 36.3 W/m². Why ISCCP's

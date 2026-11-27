@@ -1236,3 +1236,50 @@ fn a_co2_step_across_its_triple_point_takes_each_phase_on_its_part() {
         );
     }
 }
+
+/// Source: Earth's longwave cloud effect against the clear sky of the
+/// same air without its clouds, the one a column computes: 25.7 W/m²
+/// (Loeb et al. 2020, *J. Climate* 33, 61, doi:10.1175/JCLI-D-19-0381.1,
+/// Table 3, as `docs/science/radiative-transfer.md` reads it). Against
+/// the cloud-free scenes it is [`CERES_CLEAR_SKY_W_M2`] less
+/// [`CERES_ALL_SKY_W_M2`], 28.0 W/m².
+const TOTAL_REGION_CLOUD_EFFECT_W_M2: f64 = 25.7;
+
+#[test]
+fn earths_clouds_take_what_ceres_measures() {
+    // Issue #705: the clouds' longwave effect of the column of CERES's
+    // years (Earth's measured air at 288 K, 389 ppm, CERES's methane and
+    // N₂O, 300 DU, under CERES's skin), the clear sky less the all-sky,
+    // between CERES's two clear skies. `CLOUD_EMISSIVITY` is fitted on
+    // the lower one, so this holds the fit.
+    let air = PartialPressures {
+        ch4: CERES_CH4_PPB * 1e-9 * EARTH_PRESSURE_BAR,
+        ..earth_at(CERES_CO2_PPM, EARTH_SURFACE_K)
+    };
+    let sky = |profile: Profile| -> f64 {
+        let mut scratch = Scratch::new();
+        with_column(
+            &air,
+            EARTH_SURFACE_K,
+            earth_skin().0,
+            EARTH.0,
+            profile,
+            |c| {
+                let column = c.with_ozone(EARTH_OZONE_COLUMN);
+                radiate(&column.with_n2o(CERES_N2O_PPB * 1e-9), &mut scratch)
+            },
+        )
+        .expect("Earth's column")
+        .iter()
+        .sum()
+    };
+    let effect = sky(Profile::CLEAR) - sky(Profile::CLIMATE);
+    let high = CERES_CLEAR_SKY_W_M2 - CERES_ALL_SKY_W_M2;
+    println!(
+        "Earth's clouds take {effect:.3} W/m², CERES {TOTAL_REGION_CLOUD_EFFECT_W_M2} to {high:.1}"
+    );
+    assert!(
+        (TOTAL_REGION_CLOUD_EFFECT_W_M2..=high).contains(&effect),
+        "{effect}"
+    );
+}
