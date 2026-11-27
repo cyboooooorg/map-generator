@@ -73,30 +73,69 @@ pub(crate) static SHORTWAVE: LazyLock<Table> = LazyLock::new(|| {
 const THIN: f64 = 0.1;
 
 /// The absorption of one level of the column, per unit `ln p` (vertical
-/// optical depths): each gas's lines at each bin and g-point, and the
-/// continua at each bin.
-struct LevelAbsorption {
-    co2: Vec<f32>,
-    water: Vec<f32>,
-    smooth: Vec<f32>,
+/// optical depths), in the bins `bins` of the table: each gas's lines at
+/// each bin and g-point (`(b − bins.start) * G + g`), and the continua at
+/// each bin. The column's sum past the longwave table
+/// (`column::beyond`) reads it on its near-infrared bins.
+pub(crate) struct LevelAbsorption {
+    pub(crate) bins: std::ops::Range<usize>,
+    pub(crate) co2: Vec<f32>,
+    pub(crate) water: Vec<f32>,
+    pub(crate) smooth: Vec<f32>,
+    by_air: Vec<f32>,
+    by_self: Vec<f32>,
 }
 
 impl LevelAbsorption {
     /// The absorption of `level` in every bin of `table`.
     fn of(table: &Table, level: &Level) -> Self {
-        let m = table.bins * G;
-        let mut out = Self {
+        let mut out = Self::new(0..table.bins);
+        out.fill(table, level);
+        out
+    }
+
+    /// No absorption in the bins `bins`, a buffer for [`Self::fill`].
+    pub(crate) fn new(bins: std::ops::Range<usize>) -> Self {
+        let m = bins.len() * G;
+        Self {
             co2: vec![0.0; m],
             water: vec![0.0; m],
-            smooth: vec![0.0; table.bins],
-        };
+            smooth: vec![0.0; bins.len()],
+            by_air: vec![0.0; m],
+            by_self: vec![0.0; m],
+            bins,
+        }
+    }
+
+    /// This buffer for the bins `bins`, its vectors resized (they keep
+    /// their capacity, so a buffer reused on fewer bins allocates
+    /// nothing).
+    pub(crate) fn resize(&mut self, bins: std::ops::Range<usize>) {
+        let m = bins.len() * G;
+        for v in [
+            &mut self.co2,
+            &mut self.water,
+            &mut self.by_air,
+            &mut self.by_self,
+        ] {
+            v.resize(m, 0.0);
+        }
+        self.smooth.resize(bins.len(), 0.0);
+        self.bins = bins;
+    }
+
+    /// The absorption of `level` in its bins of `table`.
+    pub(crate) fn fill(&mut self, table: &Table, level: &Level) {
+        self.co2.fill(0.0);
+        self.water.fill(0.0);
+        self.smooth.fill(0.0);
         let p = level.pressure_bar();
         let t = level.temperature_k;
         if p <= 0.0 || t <= 0.0 || level.gravity_m_s2 <= 0.0 {
-            return out;
+            return;
         }
-        let mut by_air = vec![0.0f32; m];
-        let mut by_self = vec![0.0f32; m];
+        let points = self.bins.start * G..self.bins.end * G;
+        let (by_air, by_self) = (&mut self.by_air, &mut self.by_self);
         // Each gas's lines ([`Table::lines`]).
         let mut gas = |partial: f64, molar: f64, sets: (usize, usize), out: &mut [f32]| {
             if partial > 0.0 {
@@ -105,27 +144,31 @@ impl LevelAbsorption {
                     partial,
                     molar,
                     sets,
-                    m,
-                    &mut by_air,
-                    &mut by_self,
+                    points.clone(),
+                    by_air,
+                    by_self,
                     out,
                 );
             }
         };
         let g = level.gases;
-        gas(g.co2, CO2_MOLAR_MASS, (CO2_SET, CO2_SELF_SET), &mut out.co2);
+        gas(
+            g.co2,
+            CO2_MOLAR_MASS,
+            (CO2_SET, CO2_SELF_SET),
+            &mut self.co2,
+        );
         gas(
             g.h2o,
             H2O_MOLAR_MASS,
             (WATER_FOREIGN_SET, WATER_SELF_SET),
-            &mut out.water,
+            &mut self.water,
         );
-        for (b, smooth) in out.smooth.iter_mut().enumerate() {
+        for (smooth, b) in self.smooth.iter_mut().zip(self.bins.clone()) {
             *smooth = (water_continuum(table, b, level)
                 + co2_continuum(table, b, level)
                 + co2_pairs(table, b, level)) as f32;
         }
-        out
     }
 }
 

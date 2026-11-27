@@ -131,6 +131,7 @@ pub(crate) fn thermostat(
         emissivity,
         i.gravity,
         numerics.solver,
+        i.ceiling(),
         &mut body.columns,
     );
     (regulated, t, true)

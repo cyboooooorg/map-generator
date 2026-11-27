@@ -242,3 +242,20 @@ fn the_steam_world_line_is_the_critical_point() {
     ));
     assert!(!hides_surface(false, DEEP_STEAM, HOT_SURFACE));
 }
+
+/// Source: Turbet et al. 2020's hottest steam profile, K (§ 2.1, "from
+/// 300 to 4300 K"), read again here so that the test does not read the
+/// constant it checks.
+const TURBET_HOTTEST_SURFACE_K: f64 = 4300.0;
+
+/// Definition: a kelvin, a step on either side of the top.
+const STEP: Kelvin = Kelvin(1.0);
+
+#[test]
+fn surfaces_past_turbets_hottest_profile_are_marked() {
+    let top = Kelvin(TURBET_HOTTEST_SURFACE_K);
+    assert_eq!(PUBLISHED_SURFACE_TOP, top);
+    assert!(!past_published_profiles(top));
+    assert!(!past_published_profiles(Kelvin(top.0 - STEP.0)));
+    assert!(past_published_profiles(Kelvin(top.0 + STEP.0)));
+}

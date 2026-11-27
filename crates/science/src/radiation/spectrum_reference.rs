@@ -127,7 +127,7 @@ fn co2_continuum(i: usize, level: &Level) -> f64 {
 }
 
 /// The absorption of every band at one level, per unit `ln p` (see
-/// [`BinAbsorption`]; the tail's is the last bin's, see [`TAIL`]).
+/// [`BinAbsorption`]; the tail holds none, see [`TAIL`]).
 #[derive(Clone, Debug)]
 pub(crate) struct Spectrum {
     /// Each gas's lines, per band and g-point, in the order of
@@ -148,8 +148,8 @@ impl Default for Spectrum {
 }
 
 /// [`absorption_per_ln_p`] of every band at `level` into `out` (the
-/// tail's is the last bin's, see [`TAIL`]): the same sums, with what does
-/// not depend on the bin taken once per level.
+/// tail holds none: the column sums it on its own, see [`TAIL`]): the
+/// same sums, with what does not depend on the bin taken once per level.
 pub(crate) fn absorption_spectrum(level: &Level, out: &mut Spectrum) {
     for gas in &mut out.lines {
         gas[..BINS].fill([0.0; G]);
@@ -162,9 +162,9 @@ pub(crate) fn absorption_spectrum(level: &Level, out: &mut Spectrum) {
         smooth_spectrum(level, &mut out.smooth);
     }
     for gas in &mut out.lines {
-        gas[TAIL] = gas[BINS - 1];
+        gas[TAIL] = [0.0; G];
     }
-    out.smooth[TAIL] = out.smooth[BINS - 1];
+    out.smooth[TAIL] = 0.0;
 }
 
 /// Each gas's lines in every bin at `level`, from [`OPACITY`] as
@@ -304,18 +304,6 @@ impl super::SmoothRates {
     }
 }
 
-/// Logarithmic mean of two opacities per `ln p`: the exact mean over a
-/// layer where the opacity grows exponentially in `ln p` (a power of the
-/// pressure, as through a uniform air), and the arithmetic mean's limit
-/// when they are equal.
-pub(crate) fn log_mean(a: f64, b: f64) -> f64 {
-    if a <= 0.0 || b <= 0.0 {
-        return 0.5 * (a + b);
-    }
-    let r = b / a;
-    if (r - 1.0).abs() < 1e-6 {
-        0.5 * (a + b)
-    } else {
-        (b - a) / r.ln()
-    }
-}
+/// The logarithmic mean of two opacities, [`super::log_mean`], which the
+/// column's sum past the longwave table reads too.
+pub(crate) use super::log_mean;

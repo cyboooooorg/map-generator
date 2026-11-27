@@ -151,6 +151,7 @@ fn earth_surface(gases: &PartialPressures, heat: WattPerSquareMetre) -> f64 {
         black(),
         STANDARD_GRAVITY,
         SOLVER,
+        HOTTEST,
         &mut ColumnCache::default(),
     )
     .0
@@ -203,6 +204,7 @@ fn a_dark_body_is_warmed_by_its_heat_alone() {
             black(),
             STANDARD_GRAVITY,
             SOLVER,
+            HOTTEST,
             &mut ColumnCache::default(),
         )
         .0;
@@ -238,6 +240,7 @@ fn regula_falsi_finds_a_crossing() {
             x: start,
             f: excess(start),
         },
+        HOTTEST,
     );
     println!("{low:?} {high:?} around {crossing} K");
     assert!(low.f < 0.0 && high.f >= 0.0, "{low:?} {high:?}");
@@ -277,6 +280,7 @@ fn iterations_is_converged() {
             black(),
             gravity,
             SOLVER,
+            HOTTEST,
             &mut ColumnCache::default(),
         );
         println!("{name}: {:.3} K in {} steps", root.x, root.iterations);
@@ -304,6 +308,7 @@ fn titans_pairs_hold_its_column_just_under_its_measured_surface() {
         black(),
         TITAN_GRAVITY,
         SOLVER,
+        HOTTEST,
         &mut ColumnCache::default(),
     )
     .0;
@@ -462,7 +467,7 @@ fn wet_earth(dry: &PartialPressures) -> f64 {
         x: bare,
         f: excess(bare),
     };
-    let (low, high) = bracket_up(&mut excess, absorbed, start);
+    let (low, high) = bracket_up(&mut excess, absorbed, start, HOTTEST);
     regula_falsi(
         excess,
         low,
@@ -525,4 +530,73 @@ fn argon_warms_as_air_broadens_and_its_slope_steepens() {
     );
     assert!(as_n2 > 0.0 && as_n2 <= with_n2, "{as_n2} against {with_n2}");
     assert!(own > as_n2, "{own} against {as_n2}");
+}
+
+#[test]
+fn the_ceiling_is_the_hottest_star() {
+    let sun = SOLAR_EFFECTIVE_TEMPERATURE;
+    let cool = Kelvin(RED_DWARF_K);
+    assert_eq!(second_law_ceiling([cool, sun]), sun);
+    assert_eq!(second_law_ceiling([sun, cool]), sun);
+    assert_eq!(second_law_ceiling([]), HOTTEST);
+}
+
+/// Definition: a red dwarf's effective temperature, K, a star cooler than
+/// the Sun for [`the_ceiling_is_the_hottest_star`].
+const RED_DWARF_K: f64 = 3000.0;
+
+/// Definition: a runaway's steam and CO₂, bar, thick enough that its
+/// column, under [`RUNAWAY_LIGHT_K`]'s light, balances above the Sun's
+/// photosphere (study 41's seed 25 b, rounded: 404.5 bar of steam and
+/// 229.1 of CO₂ on 8.30 m/s², at an equilibrium of 3107 K).
+const RUNAWAY_AIR: PartialPressures = PartialPressures {
+    n2: 0.0,
+    co2: 230.0,
+    h2o: 400.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: 0.0,
+    ar: 0.0,
+};
+
+/// Definition: the rounding of `(σT⁴/σ)^¼` back to `T`, a share, 1e-12.
+const ROUNDING: f64 = 1e-12;
+
+/// Definition: the equilibrium temperature, K, of [`RUNAWAY_AIR`]'s light.
+const RUNAWAY_LIGHT_K: f64 = 3100.0;
+
+#[test]
+fn no_surface_is_hotter_than_its_star() {
+    // The second law (`second_law_ceiling`): under the Sun the surface
+    // stops at 5772 K whatever its column, and the search does not go
+    // past it.
+    let solve = |ceiling: Kelvin| {
+        surface_root(
+            starlight_of(Kelvin(RUNAWAY_LIGHT_K)),
+            &RUNAWAY_AIR,
+            NO_OZONE,
+            WattPerSquareMetre(0.0),
+            black(),
+            STANDARD_GRAVITY,
+            SOLVER,
+            ceiling,
+            &mut ColumnCache::default(),
+        )
+    };
+    let free = solve(HOTTEST);
+    let capped = solve(SOLAR_EFFECTIVE_TEMPERATURE);
+    println!("free {:.1} K, under the Sun {:.1} K", free.x, capped.x);
+    assert!(free.x > SOLAR_EFFECTIVE_TEMPERATURE.0, "{free:?}");
+    assert_eq!(capped.x, SOLAR_EFFECTIVE_TEMPERATURE.0);
+    // Under a ceiling below the light's own equilibrium temperature the
+    // lower bound is kept: the grey body still radiates what the surface
+    // absorbs, and the search does not go past it.
+    let grey = solve(Kelvin(RED_DWARF_K));
+    let bound = Kelvin(RED_DWARF_K).0.max(RUNAWAY_LIGHT_K);
+    assert!(grey.x >= RUNAWAY_LIGHT_K * (1.0 - ROUNDING), "{grey:?}");
+    assert!(
+        grey.x <= bound * (1.0 + ROUNDING),
+        "{grey:?} over {bound} K"
+    );
 }

@@ -44,6 +44,15 @@ const REFERENCE_M: f64 = 0.55e-6;
 /// star's metal abundance relative to the Sun's.
 pub(crate) const SOLAR_METALLICITY: f64 = 0.0;
 
+/// The Rayleigh scale of band `band` (bluest first): `(550 nm / λ)⁴` at
+/// its centre in `ln λ`, the ratio of its Rayleigh depth to the depth at
+/// 550 nm that the shortwave and the column past the longwave table
+/// (`column::beyond`) both take.
+pub(crate) fn rayleigh_scale(band: usize) -> f64 {
+    let lambda = (band_edge_m(band) * band_edge_m(band + 1)).sqrt();
+    (REFERENCE_M / lambda).powi(4)
+}
+
 /// The table of spectra (see the module's documentation).
 const TABLE: &str = include_str!("../../data/stellar-spectra.tsv");
 
@@ -172,10 +181,7 @@ pub(crate) fn measured_sun() -> Vec<(f64, f64)> {
     shares
         .iter()
         .enumerate()
-        .map(|(i, share)| {
-            let lambda = (band_edge_m(i) * band_edge_m(i + 1)).sqrt();
-            ((REFERENCE_M / lambda).powi(4), share / total)
-        })
+        .map(|(i, share)| (rayleigh_scale(i), share / total))
         .collect()
 }
 
@@ -245,10 +251,7 @@ pub(crate) fn star_bands(star_k: f64, metallicity: f64) -> StarBands {
     let bands = shares
         .iter()
         .enumerate()
-        .map(|(i, share)| {
-            let lambda = (band_edge_m(i) * band_edge_m(i + 1)).sqrt();
-            ((REFERENCE_M / lambda).powi(4), share / total)
-        })
+        .map(|(i, share)| (rayleigh_scale(i), share / total))
         .collect();
     StarBands {
         star_k,
