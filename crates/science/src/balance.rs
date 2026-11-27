@@ -424,12 +424,14 @@ pub fn moist_plateau(
     plateau
 }
 
-/// Definition: the ozone column of Earth's moist plateau
-/// ([`earth_moist_plateau`]), none: the plateau is the anchor the
-/// Simpson–Nakajima limit and the runaway's albedo were checked on, and
-/// a saturated column over its hot surfaces closes the 9.6 µm window
-/// with water's continuum (measured: the 300 DU of Earth's O₂ move it by
-/// PLATEAU_OZONE_EFFECT W/m², `docs/science/ozone.md`).
+/// Calibration: the ozone column of Earth's moist plateau
+/// ([`earth_moist_plateau`]), none, where Earth holds 300 DU: the
+/// plateau is the anchor the Simpson–Nakajima limit and the runaway's
+/// albedo were checked on (study 25), without ozone, and kept so.
+/// Measured: Earth's 300 DU lower it by 0.354 W/m² (289.710 to
+/// 289.356), the saturated column's by 0.353; a runaway whose own
+/// ozone lowers its plateau under this one takes this one
+/// (`docs/science/ozone.md`, calibration 6).
 pub const EARTH_PLATEAU_OZONE: DobsonUnit = DobsonUnit(0.0);
 
 /// The column's own moist plateau on Earth's dry air

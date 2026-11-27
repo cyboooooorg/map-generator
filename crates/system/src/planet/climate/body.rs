@@ -166,6 +166,9 @@ impl<'a> ClimateBody<'a> {
     /// dry air with its water, on its gravity and the saturated column,
     /// started from Earth's) where it exceeds Earth's air's
     /// ([`earth_moist_plateau`]); Earth's air's otherwise. Found once.
+    /// Earth's is ozone-free (`EARTH_PLATEAU_OZONE`), so a body whose own
+    /// ozone lowers its plateau under it takes Earth's: 0.35 W/m² bright
+    /// at 300 DU (`docs/science/ozone.md`, calibration 6).
     pub(crate) fn plateau(&mut self) -> WattPerSquareMetre {
         if let Some(p) = self.plateau {
             return p;

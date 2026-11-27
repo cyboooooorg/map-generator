@@ -47,7 +47,7 @@ libRadtran's files, give:
 
 | Profile | Column | Above 100 hPa | Densest at | Ozone-weighted temperature |
 | --- | --- | --- | --- | --- |
-| U.S. Standard 1976 (`afglus.dat`) | 346 DU | 79 % | 22 km, 40 hPa | 225 K |
+| U.S. Standard 1976 (`afglus.dat`) | 346 DU (342.9 in the code's 42 rows to 80 km) | 79 % | 22 km, 40 hPa | 225 K |
 | Mid-latitude summer (`afglms.dat`) | 336 DU | 78 % | 25 km, 28 hPa | 232 K |
 | Tropical (`afglt.dat`) | 284 DU | 88 % | 25 km, 26 hPa | 230 K |
 
@@ -271,7 +271,9 @@ surface albedo raised to reproduce Earth.
 **Ozone's longwave** (issue #704, study 36's second pull request):
 
 - **The lines.** HITRAN2024's lines of ozone's five isotopologues (ids
-  16-20), broadened by air, are `opacity.bin`'s seventh set: eight
+  16-20), broadened by air, are `opacity.bin`'s set 6 (`O3_SET`,
+  counted from 0, after CO₂, water's two, CO₂'s self and methane's two):
+  eight
   g-points per 20 cm⁻¹ bin, overlapped at random with the other gases
   (`crates/science/data/OPACITY.md`).
 - **The layer.** `outgoing_longwave` takes the air's ozone column and
@@ -285,25 +287,29 @@ surface albedo raised to reproduce Earth.
   `ClimateInputs::longwave_ozone`: each star's column
   (`Light::ozone`) weighted by its share of the planet's light, none
   without light. The O₂-free bodies (all of them until planet PR 2d-4)
-  hold none, so their climates do not move. Earth's moist plateau keeps
-  none (`EARTH_PLATEAU_OZONE`, a definition): it anchors the runaway's
-  albedo, checked without ozone.
+  hold none, so their climates do not move. Around several stars the
+  weighting is calibration 7 below. Earth's moist plateau keeps none
+  (`EARTH_PLATEAU_OZONE`): calibration 6 below.
 - **Measured** (the CERES test's clear column, 288 K, 280 ppm, 1803 ppb
-  of methane): Earth's 300 DU take 8.371 W/m² of the outgoing
-  radiation, inside 4.185 to 10 W/m²
-  (`earths_ozone_takes_what_the_sources_find`). On RFMIP's 100 sites,
-  each with its own column (294.6 DU on average) on the AFGL shape and
-  the sites' own temperatures, ozone takes 7.46 W/m²: the column's cold
+  of methane, 324.2 ppb of N₂O): Earth's 300 DU take 8.366 W/m² of the
+  outgoing radiation (8.371 before N₂O's lines), inside 4.185 to
+  10 W/m² (`earths_ozone_takes_what_the_sources_find`). On RFMIP's 100
+  sites, each with its own column (294.6 DU on average, 293.9 since the
+  columns are integrated linear in `ln p`) on the AFGL
+  shape and the sites' own temperatures, ozone takes 7.46 W/m² (over
+  black grounds, before #704's grey ones): the column's cold
   stratosphere adds about 0.9 W/m² (the "No ozone heating" departure).
 
 O₂ enters the infrared only through its pairs and as a broadener (its
-bands are the third pull request of the plan below). `CLOUD_ALBEDO` (0.322) is fitted on Earth's
-Bond albedo with ozone in, over the climate's own ground (calibration 2
-below). See
+bands are the third pull request of the plan below). `CLOUD_ALBEDO`
+(0.322) is fitted on Earth's Bond albedo with ozone in, over the
+climate's own ground (calibration 2 below). See
 [radiative-transfer.md](radiative-transfer.md#where-it-departs-from-the-science).
 
-**Measured** (Earth's air at 77 % over 288 K, 340.25 W/m²; table Sun the
-app's table of spectra at 5772 K, TSIS-1 the measured Sun of the tests):
+**Measured by study 34, before #705's refit** (Earth's air at 77 % over
+288 K, 340.25 W/m²; table Sun the app's table of spectra at 5772 K,
+TSIS-1 the measured Sun of the tests; the all-sky column under the old
+`CLOUD_ALBEDO`, 0.296):
 
 | Sun | Ozone | Clear-sky albedo (ground 0.122) | Clear-sky air absorbs | All-sky Bond albedo, climate's ground 0.1445, `CLOUD_ALBEDO` 0.296 |
 | --- | --- | --- | --- | --- |
@@ -363,8 +369,9 @@ Coddington et al. 2021). Measured, 340.25 W/m²:
 
 ### Where it departs
 
-The departures of ozone's shortwave are in the code; those of its
-longwave, of O₂'s bands and the aerosols' are the plan's (below).
+The departures of ozone's shortwave and longwave are in the code (the
+longwave's since #704); those of O₂'s bands and the aerosols' are the
+plan's (below).
 
 **Decided with the user (2026-11-25).** The measured Sun (#655) lands
 before ozone's shortwave; #705 refits `CLOUD_ALBEDO` over the climate's
@@ -393,7 +400,7 @@ O₂'s bands. The order of the radiation studies' pull requests is 33, 35,
   reality, made by the stars' ultraviolet together. No source treats a
   planet of two hosts. The infrared, which has one column of air, takes
   the stars' columns weighted by their shares of the light
-  (`ClimateInputs::longwave_ozone`): a choice, not a source.
+  (`ClimateInputs::longwave_ozone`): calibration 7 below.
 - **No ozone heating.** Ozone's absorption warms the stratosphere; the
   column's stratosphere is isothermal at its skin temperature, 214 K for
   Earth, colder than the 225 to 232 K of the ozone layer. Its 9.6 µm
@@ -492,7 +499,41 @@ Fig. 4) show the layer moving down when O₂ falls and with the host; no
 law of its height against the O₂, the host and the surface pressure was
 found. Tests: `earths_ozone_takes_what_the_sources_find` (Earth's
 300 DU within the sources' 4.185 to 10 W/m²); `OzoneProfile`'s own
-tests hold the column it lays out to its Dobson units.
+tests hold the column it lays out to its Dobson units, and
+`the_afgl_shape_holds_the_us_standard_column` holds the rows' own
+column, 342.9 DU on the standard gravity (343.2 on 9.798 m/s², the
+rows' mixing ratio linear in `ln p`, integrated exactly), within 1 %
+of study 34's 346 DU (−0.89 %): a chosen bound (`Calibration:`), wide
+enough for the rows' end at 80 km where the file runs to 120 km, their
+four digits, and study 34's integration of the file's own number
+densities.
+
+### Calibration 6: Earth's moist plateau without ozone (`EARTH_PLATEAU_OZONE`)
+
+What: Earth's moist plateau (`balance::earth_moist_plateau`, the
+anchor of every runaway's albedo) holds no ozone, where Earth holds
+300 DU. The plateau and the runaway albedo were checked against the
+Simpson–Nakajima limit without ozone (study 25), and the anchor is kept
+as checked. Measured (a scratch probe, nothing kept): Earth's 300 DU
+lower the plateau by 0.354 W/m², 289.710 to 289.356 W/m², and the
+saturated column's by 0.353 (289.718 to 289.365). A body in a water
+runaway takes its own steam column's plateau where it exceeds Earth's
+(`ClimateBody::plateau`): one whose own ozone lowers its plateau under
+Earth's ozone-free one takes Earth's, up to 0.35 W/m² brighter at
+300 DU, its runaway albedo a little lower. No body holds ozone until
+planet PR 2d-4, and a runaway's steam air rarely holds O₂. Searched
+and not found: a Simpson–Nakajima limit computed with ozone.
+
+### Calibration 7: several stars' ozone in the infrared
+
+The infrared's one column takes each star's ozone column weighted by
+its share of the planet's light (`ClimateInputs::longwave_ozone`;
+stars whose flux is not positive count for nothing, none without
+light), as methane's loss over several stars weights each star by its
+light ([life-gases.md](life-gases.md), calibration 2). The shortwave
+lets each star's light cross its own column ("One column per star",
+above). No source treats the ozone of a planet of two hosts; the sum
+of the stars' ultraviolet is not modelled.
 
 ## Sources
 

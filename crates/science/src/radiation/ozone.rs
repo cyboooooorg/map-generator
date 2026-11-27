@@ -250,9 +250,10 @@ pub(crate) static CROSS_SECTIONS: LazyLock<CrossSections> =
 /// study 32's download): pressure, bar, and ozone over air number
 /// density, from the surface (0 km) to 80 km, every kilometre to 25 km,
 /// then every 2.5 and 5 km (derived here, the file's `o3` over its `air`
-/// column, four digits). Its column is 344 DU (derived here: the
-/// mixing ratio integrated over the pressure, linear in `ln p` between
-/// rows; study 34 gives 346 DU).
+/// column, four digits). Its column is 342.9 DU on the standard gravity
+/// (343.2 on 9.798 m/s²; derived here: the mixing ratio linear in `ln p`
+/// between rows, integrated exactly over the pressure); study 34 gives
+/// 346 DU for the whole file.
 const AFGL_US_OZONE: [(f64, f64); 42] = [
     (1.013, 2.6623e-8),
     (0.8988, 2.9336e-8),

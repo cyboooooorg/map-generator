@@ -7,8 +7,9 @@
 //!
 //! - for each set (CO₂ broadened by air, water broadened by air, water
 //!   broadened by itself, CO₂ broadened by itself; in the longwave table
-//!   also methane broadened by air and by itself, and ozone broadened by
-//!   air), each pressure and
+//!   also methane broadened by air and by itself, ozone broadened by air
+//!   and N₂O broadened by air: [`N2O_SET`], the eighth, index 7), each
+//!   pressure and
 //!   temperature of the grid, each bin and each g-point, the mass
 //!   absorption coefficient of the gas, m²/kg, as a 16-bit code of `ln k`;
 //! - MT_CKD 4.3's CO₂ continuum binned on the table's bins, and, in the

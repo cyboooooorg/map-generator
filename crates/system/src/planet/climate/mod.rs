@@ -256,8 +256,10 @@ impl ClimateInputs {
     /// (`science::radiation::column::outgoing_longwave`): each star's
     /// ([`Light::ozone`]) weighted by its share of the planet's light,
     /// none without light. The air holds one layer of ozone made by its
-    /// stars together; no source treats a planet of two hosts (a
-    /// departure, `docs/science/ozone.md`, "One column per star").
+    /// stars together; no source treats a planet of two hosts: a
+    /// calibration, as methane's loss over several stars
+    /// (`docs/science/ozone.md`, calibration 7;
+    /// `docs/science/life-gases.md`, calibration 2).
     pub(crate) fn longwave_ozone(&self) -> DobsonUnit {
         let total: f64 = self.sources.iter().map(|s| s.flux.0.max(0.0)).sum();
         if total <= 0.0 {

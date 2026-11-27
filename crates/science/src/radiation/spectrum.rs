@@ -16,7 +16,7 @@
 //!
 //! The absorbers, each with its source:
 //!
-//! - **CO₂, water, methane and ozone lines:** a correlated-k table built offline from the
+//! - **CO₂, water, methane, ozone and N₂O lines:** a correlated-k table built offline from the
 //!   HITRAN2024 line lists (Gordon et al. 2026, *JQSRT* 109807; the
 //!   design named HITRAN2020, which HITRAN no longer serves) by
 //!   `tools/opacity-table` (provenance in `crates/science/data/OPACITY.md`).
@@ -24,13 +24,13 @@
 //!   each with a weight ([`weights`]), on a grid of pressure and
 //!   temperature; CO₂, water and methane have a set broadened by air and
 //!   one broadened by itself (HITRAN's `γ_self`), mixed by its share of
-//!   the pressure, and ozone, always a trace, one broadened by air
-//!   ([`LineGas`]; studies 36 and 34, `docs/science/longwave-absorbers.md`
-//!   and `docs/science/ozone.md`). The
+//!   the pressure, and ozone and N₂O, always traces, one broadened by air
+//!   each ([`LineGas`]; studies 36 and 34,
+//!   `docs/science/longwave-absorbers.md` and `docs/science/ozone.md`). The
 //!   table holds the lines' temperature dependence (strengths, hot bands,
 //!   widths) and their Voigt shape out to 25 cm⁻¹, less the pedestal
-//!   MT_CKD's continua assume (LBLRTM's flat one for methane and ozone,
-//!   which have no continuum; [`Table`]).
+//!   MT_CKD's continua assume (LBLRTM's flat one for methane, ozone and
+//!   N₂O, which have no continuum; [`Table`]).
 //! - **CO₂ continuum:** MT_CKD 4.3's, the far wings of CO₂'s lines beyond
 //!   25 cm⁻¹ with their sub-Lorentzian shape, binned into the table
 //!   ([`co2_continuum_depth`]); it grows as the CO₂ times the pressure.
@@ -120,7 +120,7 @@ pub(crate) struct Level {
     /// Ozone at the level, bar, a share of its moles as the other gases
     /// are read ([`Level::mass_per_ln_p`]); a trace, left out of the
     /// pressure. The column lays it out from the air's ozone column
-    /// (`super::ozone::ozone_profile`).
+    /// ([`super::ozone::OzoneProfile`]).
     pub ozone_bar: f64,
     /// N₂O at the level, bar, a share of its moles, a trace left out of
     /// the pressure like ozone. No air of the model holds N₂O yet (its
@@ -324,7 +324,7 @@ fn planck_tail(x: f64) -> f64 {
     sum
 }
 
-/// The longwave table of the lines of CO₂, water, methane and ozone
+/// The longwave table of the lines of CO₂, water, methane, ozone and N₂O
 /// (`crates/science/data/opacity.bin`, see [`super::ktable`]), on the
 /// model's bins.
 pub(crate) static OPACITY: LazyLock<Table> = LazyLock::new(|| {

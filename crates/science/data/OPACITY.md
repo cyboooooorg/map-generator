@@ -1,7 +1,7 @@
 # Opacity table
 
 `opacity.bin` holds the absorption of the spectral lines of CO₂, water,
-methane and ozone that the climate column integrates (`crates/science/src/radiation/spectrum.rs`,
+methane, ozone and N₂O that the climate column integrates (`crates/science/src/radiation/spectrum.rs`,
 issue #523; read by `crates/science/src/radiation/ktable.rs`), and MT_CKD's
 CO₂ continuum on the same bins. The lines form a correlated-k table: within
 each 20 cm⁻¹ bin from 0 to 5000 cm⁻¹
@@ -236,10 +236,11 @@ and `cat raw/lines/co2_*.par`
   25 cm⁻¹ (the "plinth"). For CO₂, `(2 − d²/B²)` times the Lorentz value
   at the cutoff `B` = 25 cm⁻¹, at the distance `d` from the centre (the
   `fcnt_fn` of LBLRTM's fourth function, `oprop.f90`, which MT_CKD's CO₂
-  continuum assumes since mt_ckd_2.0). For methane and ozone, the flat
-  Lorentz value at the cutoff, as for water: `CONVF4` removes it from
-  "all molecules other than co2" (`oprop.f90`, commit `f66bb596`), and
-  neither gas has a continuum. The line coupling LBLRTM applies
+  continuum assumes since mt_ckd_2.0). For methane, ozone and N₂O
+  (`Pedestal::Flat`), the flat Lorentz value at the cutoff, as for
+  water: `CONVF4` removes it from "all molecules other than co2"
+  (`oprop.f90`, commit `f66bb596`), and none of the three has a
+  continuum. The line coupling LBLRTM applies
   to CO₂'s lines is not in the `.par` records and is left out.
 - **CO₂ continuum.** MT_CKD's CO₂ continuum, `C(ν)` every 2 cm⁻¹ in
   `contnm.f90` (`BLOCK DATA BFCO2`, times `XFACCO2` over 2000-2998
@@ -261,8 +262,8 @@ and `cat raw/lines/co2_*.par`
   transmission within 0.02 for paths from 1e-4 to 1e2 kg/m² (the builder's
   test).
 - **Units.** m²/kg of the gas at natural isotopic abundance (molar masses
-  18.015, 44.009, 16.043 and 47.997 g/mol for water, CO₂, methane and
-  ozone).
+  18.015, 44.009, 16.043, 47.997 and 44.013 g/mol for water, CO₂,
+  methane, ozone and N₂O).
 
 ## Grid
 
