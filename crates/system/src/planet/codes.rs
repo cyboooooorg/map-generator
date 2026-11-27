@@ -360,11 +360,13 @@ pub(crate) const CLIMATE_STATE: &str = "planet.climate.state";
 /// CO2 the temperate branch of a bistable body holds, with which it also
 /// freezes.
 pub(crate) const CLIMATE_FROZE_CO2: &str = "planet.climate.froze-co2";
-/// Whether some CO2 the bistable body can hold thaws its frozen branch.
+/// Whether some CO2 the bistable body can hold thaws its frozen branch
+/// (or leaves its icy start cycling, with no frozen balance: #731).
 /// A flag, because a thaw out of reach has no finite CO2 to record.
 pub(crate) const CLIMATE_THAWS: &str = "planet.climate.thaws";
-/// The least CO2 known to thaw the frozen branch; recorded only when
-/// [`CLIMATE_THAWS`] is true.
+/// The least CO2 known to thaw the frozen branch, or at which its icy
+/// start first cycles (#731); recorded only when [`CLIMATE_THAWS`] is
+/// true.
 pub(crate) const CLIMATE_THAW_CO2: &str = "planet.climate.thaw-co2";
 /// The share of its history a bistable body spends frozen: from the
 /// thaw (when it has one), the CO2 it froze with and the volcanism.
