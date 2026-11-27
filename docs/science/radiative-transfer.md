@@ -1091,20 +1091,27 @@ the Bond albedo are there too (change 2b-2).
   not read at its source and not adopted.
 - **Titan's greenhouse is its pairs only.** Since study 36 (issue #703)
   methane's infrared is HITRAN's N₂–CH₄ and CH₄–CH₄ pairs, with N₂–N₂,
-  which settle the sourced Titan (1.467 bar, 5.65 % of methane at the
+  which settled the sourced Titan (1.467 bar, 5.65 % of methane at the
   surface, Niemann et al. 2010) at 92.30 K against the measured
-  93.65 ± 0.25 K (Fulchignoni et al. 2005), without a fitted constant.
+  93.65 ± 0.25 K (Fulchignoni et al. 2005), without a fitted constant;
+  since N₂ condenses in its column (issue #741, below) it settles at
+  91.81 K.
   The column misses N₂–H₂ pairs (Titan's H₂ is not a gas of the model,
   issue #720), methane's own lines and the haze's infrared, and it holds
   too little methane low down: it applies the cold trap's mixing ratio
   (`radiating_methane_bar`) at every level, so its lower troposphere
   holds about 40 % of the sourced surface CH₄ (a review's estimate,
   derived, issue #744), likely a large share of the gap since N₂–CH₄ is
-  linear in CH₄. The tier-1 test allows the column 1.4 K under the
-  measurement for them (a calibration on the measured gap): its floor is
-  93.65 − 0.25 − 1.4 = 92.00 K, 0.3 K under the column's 92.30 K (and
-  0.19 K over its 91.81 K since N₂ condenses in its upper troposphere,
-  below). The
+  linear in CH₄. The tier-1 test allows the column 1.9 K under the
+  measurement (`TITAN_MISSING_WARMING_K`, a calibration on the measured
+  gap): its floor is 93.65 − 0.25 − 1.9 = 91.50 K, 0.31 K under the
+  column's 91.81 K since N₂ condenses in its upper troposphere (below;
+  1.4 K and 92.00 K before, refitted by the user on 2026-11-27). The
+  column's troposphere, 4 to 8 K colder than Huygens's between 0.3 and
+  0.9 bar (issue #750), hides 1.2 to 2.3 K more of the missing warming
+  and would cool the column once fixed (study 39,
+  [Nitrogen phases](nitrogen-phases.md#titans-column-against-huygens)),
+  so the bound is one-sided only for the missing absorbers. The
   grey stand-in it replaced (`CH4_OPACITY` 15.1, `CH4_SATURATION_BAR`
   0.01 bar, two calibrations on Titan, see `planet-atmospheres.md`,
   "Calibration of `CH4_OPACITY`") put it at 93.60 K. The cold-trap
@@ -1421,11 +1428,25 @@ the Bond albedo are there too (change 2b-2).
   warmer than the dry adiabat at 0.52 bar (measured on the column). The
   warmer air aloft sends out more: the tier-1 column settles at
   91.81 K, 0.49 K under its 92.30 K (below), and the settled Titan on
-  its measured air at 92.33 K against 92.64 K. Study 38 expected the law
+  its measured air at 92.33 K against 92.64 K. All of it is the
+  longwave. The shortwave column (`Profile::SHORTWAVE`, which the Bond
+  albedo reads) condenses N₂ too, up to its top with no skin, but it
+  absorbs only with CO₂ and water: Titan's Bond albedo is 0.2680 over a
+  93.65 K ground on `main` and on the branch, and 0.28294 against
+  0.28293 settled (a 1e-5 change, about 3e-4 K of the ground). Where an
+  air holds CO₂ or water, condensing its N₂ in that column is right as
+  in the climate's: an air cannot stay far over its saturation
+  (Charnay et al. 2014, §3); the missing skin is the shortwave's own
+  simplification. Study 38 expected the law
   to touch only bodies whose N₂ condenses at the ground; it did not
   probe Titan's column, where the dry adiabat, not the ground, brings
-  the air to saturation. Whether the real Titan's upper troposphere
-  comes near N₂'s saturation was not checked.
+  the air to saturation. The real Titan does not saturate: along
+  Huygens's profile its N₂ reaches at most 0.52 of its saturation, near
+  0.3 bar, because its troposphere is 4 to 8 K warmer than the column's
+  between 0.3 and 0.9 bar (study 39, [Nitrogen
+  phases](nitrogen-phases.md#titans-column-against-huygens); the
+  column's troposphere is issue #750). The user kept the condensation
+  and refitted the Titan test's bound to 1.9 K on 2026-11-27 (above).
 - **Argon (study 29).** The column counts argon as air in the lines'
   widths and in the water's foreign continuum, where
   it broadens CO₂'s lines 0.78 times as much as N₂ and water's about 0.37
@@ -1970,6 +1991,34 @@ publisher's page (Tables 1 to 5).
      "The natural greenhouse effect of atmospheric oxygen (O₂) and nitrogen
      (N₂)", *Geophys. Res. Lett.* 39, L10706, doi:10.1029/2012GL051409
      (author copy read, Table 1).
+113. Charnay, B., Forget, F., Tobie, G., Sotin, C., Wordsworth, R. 2014,
+     "Titan's past and future: 3D modeling of a pure nitrogen atmosphere
+     and geological implications", *Icarus* 241, 269,
+     doi:10.1016/j.icarus.2014.07.009 (arXiv:1407.1791, read: §2, §3,
+     §4.2, §4.3, conclusions, Table 2; N₂ condensing at saturation).
+114. Fray, N., Schmitt, B. 2009, *Planet. Space Sci.* 57, 2053,
+     doi:10.1016/j.pss.2009.09.011 (N₂'s frost fit, through Lisse et al.
+     2021, *Icarus* 356, 114072, arXiv:2009.02277, Table 2).
+115. Span, R., Lemmon, E. W., Jacobsen, R. T., Wagner, W., Yokozeki, A.
+     2000, "A reference equation of state for the thermodynamic
+     properties of nitrogen for temperatures from 63.151 to 1000 K and
+     pressures to 2200 MPa", *J. Phys. Chem. Ref. Data* 29, 1361,
+     doi:10.1063/1.1349047 (N₂'s liquid vapour-pressure curve; read in
+     the NIST reprint, <https://srd.nist.gov/JPCRD/jpcrd593.pdf>,
+     pp. 1402-1405).
+116. Aboudan, A. (producer), HASI team, CISAS 2006, Huygens HASI mission
+     raw and calibrated data V1.1, data set
+     `HP-SSA-HASI-2-3-4-MISSION-V1.1`, product
+     `HASI_L4_ATMO_PROFILE_DESCEN.TAB`, NASA PDS Atmospheres Node,
+     <https://pds-atmospheres.nmsu.edu/PDS/data/hphasi_0001/DATA/PROFILES/>
+     (Titan's measured profile, through study 39,
+     [Nitrogen phases](nitrogen-phases.md#titans-column-against-huygens)).
+117. Rossini, F. D., Wagman, D. D., Evans, W. H., Levine, S., Jaffe, I.
+     1952, *Selected Values of Chemical Thermodynamic Properties*, NBS
+     Circular 500, Series II, Table 18-1, p. 561 (N₂'s enthalpy of
+     fusion, 0.172 kcal/mole at 63.15 K; read in the NIST scan,
+     <https://nvlpubs.nist.gov/nistpubs/Legacy/circ/nbscircular500.pdf>,
+     PDF page 569).
 
 ## See also
 

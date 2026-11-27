@@ -166,7 +166,7 @@ above), so the model's greenhouse there is, if anything, short.
 
 **The profile is not.** On a body whose ground holds nitrogen frost or
 liquid, the air at the ground is saturated. A parcel that rises cools
-along the dry adiabat, `d T / d ln p = (R / c_p) T`, about 17.6 K per
+along the dry adiabat, `d T / d ln p = (R / c_p) T`, about 17.7 K per
 e-fold of pressure at 62 K; nitrogen then condenses out of it, and its
 latent heat holds the parcel on the saturation curve,
 `d T / d ln p = R T² / L`, about 4.6 K per e-fold with the sublimation
@@ -296,7 +296,11 @@ where the unstable branch meets the liquid one (not probed on `main`).
    temperature, as it follows CO₂'s. It cuts the pairs' greenhouse at
    these pressures to a third to a half and raises the light of the
    hysteresis by about 9 % (above), without removing it. It touches only
-   bodies whose nitrogen condenses at the ground.
+   bodies whose nitrogen condenses at the ground. *Superseded by the
+   [decision of 2026-11-27](#decisions-user-2026-11-27):* the column
+   condenses N₂ wherever its air saturates, which reaches Titan's upper
+   troposphere too ([Titan's column against
+   Huygens](#titans-column-against-huygens)).
 4. **Extend the pairs below 70 K** (issue #742) with Borysow &
    Frommhold 1986 when it is read; until then the 70 K block stands, a
    little weak.
@@ -365,14 +369,27 @@ Item 3 landed with issue #741, in its own pull request:
   so it holds at 60 K within 0.06 %.
 - **The triple point.** The heat jumps there from the liquid's 6.10 to
   the frost's 6.64 kJ/mol, so the step that crosses 63.14 K is split
-  there from the start (`column::n2_step`, through the `split_step`
-  that water's and CO₂'s steps share): the cold N₂ body sits on that
-  point. The jump, 0.54 kJ/mol, is the fusion the two fits imply; a
-  measured enthalpy of fusion was not read (Giauque & Clayton 1933, the
-  usual source, is closed). The frost's curve sits 0.27 % over the
-  liquid's there (*The nitrogen vapour curves* in
-  [Planet atmospheres](planet-atmospheres.md)), so a column that starts
-  over the liquid runs 0.013 K over the frost's curve above it.
+  there from the start (`column::n2_step`, through the `split_step` that
+  water's and CO₂'s steps share): the cold N₂ body sits on that point.
+  The jump, 0.54 kJ/mol, is the fusion the two fits imply, 25 % short of
+  the measured 0.7196 kJ/mol (0.172 kcal/mole at 63.15 K, NBS Circular
+  500, Series II, Table 18-1, p. 561; its references include Giauque &
+  Clayton 1933). The liquid's heat is Span et al.'s (above), so the
+  shortfall is the frost's: its ideal-vapour heat, 6.64 kJ/mol, is 1.75
+  % under the sublimation enthalpy vaporisation and fusion add up to,
+  6.76 kJ/mol (6037.3 + 719.6 J/mol), and 2.8 % under once the ideal
+  vapour's 1.0 % excess is taken off; Fray & Schmitt's fit holds a slope
+  that much shallower near 63 K than the calorimetry. Each heat is kept
+  as its own curve's slope, a declared simplification: a heat taken from
+  the calorimetry would hold the column off the curve it condenses on.
+  It makes the frost's pseudo-adiabat about 2.8 % steeper, 0.13 K per
+  e-fold of pressure at 62 K. A tier-1 test checks the frost's heat
+  against that sublimation enthalpy within 2 %
+  (`NITROGEN_SUBLIMATION_TOLERANCE`, below), which the liquid's heat
+  read over the frost (9.7 % under) fails. The frost's curve sits 0.27 %
+  over the liquid's there (*The nitrogen vapour curves* in [Planet
+  atmospheres](planet-atmospheres.md)), so a column that starts over the
+  liquid runs 0.013 K over the frost's curve above it.
 - **Tests** (tier 1, `column_tests.rs`, `volatiles_tests.rs`). A pure N₂
   column over its frost at 59.25 and 62.75 K stays within 5.5e-4 K of
   N₂'s saturation temperature at every level, and over its liquid at
@@ -380,7 +397,8 @@ Item 3 landed with issue #741, in its own pull request:
   up it is at 55.21, 58.21 and 59.51 K, where the dry adiabat put it at
   44.53, 47.16 and 48.40 K. Its outgoing radiation is 0.9817, 0.9490 and
   0.9278 of `σ T⁴`, against the 0.9818, 0.9503 and 0.9290 of the
-  line-by-line sum above (within 0.14 %; printed, not asserted). A
+  line-by-line sum above (within 0.14 %), asserted within 1.5 % (below).
+  A
   saturated N₂ air swept from 63.5 to 66 K, its column crossing the
   triple point from its first layer to its fourth, sends out a rise that
   changes by 0.26 % from one step to the next (6.3 % with a step taken
@@ -393,38 +411,65 @@ Item 3 landed with issue #741, in its own pull request:
   fluxes, the absorbed light and `ε OLR` both ×1.5614 across it.
   Followed along the light, the frost holds up to 0.0076953 and the
   liquid down to 0.0064470, against the 0.007688 and 0.006449 estimated
-  above: within 0.1 %. The bistability stays, about 9 % higher in
+  above: about 0.1 % apart. The bistability stays, about 9 % higher in
   light.
 - **It reaches Titan too.** Study 38 expected the law to touch only
   bodies whose N₂ condenses at the ground; it did not probe Titan's
-  column. The sourced Titan's dry adiabat runs from 92.3 K to its
-  68.95 K skin, and on the way its N₂ passes saturation at about
-  0.65 bar and 73.5 K (20 % over it at 0.58 bar). The column now
-  condenses N₂ from there to the skin, up to 2.7 K warmer than the dry
-  adiabat, and sends out more: the tier-1 column settles at 91.81 K
-  against its 92.30 K, the settled Titan at 92.33 K against 92.64 K on
-  its measured air and 92.61 K against 92.97 K on the chain's own. The
-  tier-1 test's floor, 92.00 K (`TITAN_MISSING_WARMING_K`, a calibration
-  the user accepted on 2026-11-25), is 0.19 K over the new column. A
-  thin methane world swept across its sea's freezing point starts at
-  61.49 K instead of 61.77 K, and a methane Earth frozen at 9.57 AU
-  settles at 80.402 K instead of 80.520 K. Earth, Mars, the methane
-  Earth's outer edge (1.2534 AU) and its cycling orbit (1.264 AU) do not
-  move: their columns stay over N₂'s critical point, 126.192 K. The
-  Triton-like body moves by 0.009 K, inside the solver's tolerance.
-  The real Titan is nowhere saturated in N₂: see
-  [Titan's column against Huygens](#titans-column-against-huygens).
+  column. The sourced Titan's dry adiabat runs from 92.3 K to its 68.95
+  K skin, and on the way its N₂ passes saturation at about 0.65 bar and
+  73.5 K (20 % over it at 0.58 bar). The column now condenses N₂ from
+  there to the skin, up to 2.7 K warmer than the dry adiabat, and sends
+  out more: the tier-1 column settles at 91.81 K against its 92.30 K,
+  the settled Titan at 92.33 K against 92.64 K on its measured air and
+  92.61 K against 92.97 K on the chain's own. All of that is the
+  longwave: the shortwave column (`Profile::SHORTWAVE`, which the Bond
+  albedo reads) is built by the same `with_column` and condenses N₂ too,
+  up to its top with no skin, but it absorbs only with CO₂ and water,
+  which neither Titan nor the nitrogen world holds. Titan's Bond albedo
+  over a 93.65 K ground is 0.2680 on `main` and on the branch; settled
+  on its measured air it is 0.28294 at 92.644 K on `main` and 0.28293 at
+  92.325 K on the branch, a 1e-5 change that moves the ground by about
+  3e-4 K. The nitrogen world's liquid albedo, 0.6158 against 0.6137 at
+  its jump, follows its state (63.526 K at 0.006581 Earth fluxes against
+  64.503 K at 0.006269), not the shortwave column. Condensing N₂ in that
+  column is right where its air saturates, as in the climate's: an air
+  cannot stay far over its saturation (Charnay et al. 2014, §3), and
+  where it carries CO₂ or water their near infrared then crosses the air
+  at the temperature the law gives. Its lack of a skin is the
+  shortwave's own simplification (the air above the tropopause takes
+  next to none of CO₂'s and water's near infrared), not the law's. The
+  tier-1 test's floor was 92.00 K (`TITAN_MISSING_WARMING_K` 1.4 K, a
+  calibration the user accepted on 2026-11-25), 0.19 K over the new
+  column; the user refitted it by its rule to 1.9 K, a floor of 91.50 K
+  ([decision of 2026-11-27](#decisions-user-2026-11-27)). A thin methane
+  world swept across its sea's freezing point starts at 61.49 K instead
+  of 61.77 K, and a methane Earth frozen at 9.57 AU settles at 80.402 K
+  instead of 80.520 K. Earth, Mars, the methane Earth's outer edge
+  (1.2534 AU) and its cycling orbit (1.264 AU) do not move: their
+  columns stay over N₂'s critical point, 126.192 K. The Triton-like body
+  moves by 0.009 K, inside the solver's tolerance. The real Titan is
+  nowhere saturated in N₂: see [Titan's column against
+  Huygens](#titans-column-against-huygens).
 - **Calibrations** (tests only, numerics, no source gives a number):
   `NITROGEN_PROFILE_TOLERANCE_K` (0.002 K, a factor 3.6 over the
   5.5e-4 K measured, against the dry adiabat's 11 K),
+  `NITROGEN_OLR_TOLERANCE` (1.5 %, over the 0.08 to 1.1 % by which
+  study 38's sum and the model's column agreed on the dry adiabat, and
+  under the 3.9 to 9.4 % the dry adiabat lies off the saturated
+  values), `NITROGEN_CLAPEYRON_TOLERANCE` (0.1 %, a factor 4 over the
+  0.024 % measured), `NITROGEN_SUBLIMATION_TOLERANCE` (2 %, CO₂'s for
+  the same check, over the 1.75 % measured),
   `NITROGEN_SMOOTH_RISE_CHANGE` (1 %, between the 0.26 % split and the
   6.3 % unsplit) and `N2_STEP_TOLERANCE_K` (0.001 K, between 1.3e-4 K
   and 0.013 K).
 - **Limitations.** Argon and methane do not condense in the column (a
   Titan's methane is cold-trapped at its tropopause instead, and argon
-  is a trace); the frost's albedo and grain size at 60 K and the pairs
-  below 70 K (#742) are as above; a body is one temperature, with no
-  cold traps at its poles.
+  is a trace). Oxygen does not either: in a cold N₂–O₂ air O₂, whose
+  boiling point (90.2 K) is over N₂'s (77.3 K), condenses before N₂, but
+  the column counts it as a non-condensing gas
+  (`DryAir::cp_without_n2`). The frost's albedo and grain size at 60 K
+  and the pairs below 70 K (#742) are as above; a body is one
+  temperature, with no cold traps at its poles.
 
 Item 4 waits in #742.
 
@@ -519,7 +564,7 @@ start to fall ("constant ... until about 7 km", Hörst 2017 §2.2;
 5.65 % CH₄, 82 K effective, skin 68.954 K, absorbing 1.7829 W/m² of
 2.5637 after its stratosphere's methane), printed by a scratch test that
 was not committed, on `main` (`a97c1ca1`, dry adiabat, settles at
-92.296 K) and on this branch (`1c24d891`, N₂ condensing, 91.809 K):
+92.296 K) and on this branch (its law, N₂ condensing, 91.809 K):
 
 | p (bar) | HASI (K) | `main` (K) | Branch (K) | `main` − HASI | Branch − HASI | S, `main` | S, branch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -649,6 +694,22 @@ The user took every recommendation of the study:
    melted states, and steps from one to the other where a body with
    poles would pass through a partial cover.
 
+## Decisions (user, 2026-11-27)
+
+After study 39 ([Titan's column against Huygens](#titans-column-against-huygens),
+[Wiki study 39](https://github.com/cyboooooorg/map-generator/wiki/39-titan-column-against-huygens)),
+the user took option (a). **N₂ condenses wherever the column's air
+saturates**, Titan's upper troposphere included, not only over a
+saturated ground (issue #741). `TITAN_MISSING_WARMING_K` is refitted by
+its own rule, the measured gap rounded up: 93.65 − 91.809 = 1.841 K, so
+1.9 K (1.4 K before), a floor of 91.50 K, 0.31 K under the column. Its
+`Calibration:` comment says why, and that the column's too-cold
+troposphere (issue #750: no radiative upper troposphere, no methane
+latent heat in its adiabat, a skin 1.4 K under the measured tropopause)
+hides 1.2 to 2.3 K of the missing warming and would cool the column once
+fixed, so the bound stays one-sided only for the missing absorbers
+(#720, #744, the haze).
+
 ## Sources
 
 1. Bertrand, T., Lellouch, E., Holler, B. J. et al. 2022, "Volatile
@@ -664,8 +725,8 @@ The user took every recommendation of the study:
 4. Charnay, B., Forget, F., Tobie, G., Sotin, C., Wordsworth, R. 2014,
    "Titan's past and future: 3D modeling of a pure nitrogen atmosphere
    and geological implications", *Icarus* 241, 269,
-   doi:10.1016/j.icarus.2014.07.009 (arXiv:1407.1791, read: §2, §4.2,
-   §4.3, conclusions, Table 2).
+   doi:10.1016/j.icarus.2014.07.009 (arXiv:1407.1791, read: §2, §3,
+   §4.2, §4.3, conclusions, Table 2).
 5. Fray, N., Schmitt, B. 2009, *Planet. Space Sci.* 57, 2053,
    doi:10.1016/j.pss.2009.09.011, through Lisse et al. 2021 (*Icarus*
    356, 114072, arXiv:2009.02277, Table 2), as
@@ -722,8 +783,8 @@ The user took every recommendation of the study:
 18. Giauque, W. F., Clayton, J. O. 1933, "The heat capacity and entropy
     of nitrogen. Heat of vaporization. Vapor pressures of solid and
     liquid", *J. Am. Chem. Soc.* 55, 4875, doi:10.1021/ja01339a024
-    (closed, not read: the calorimetric enthalpy of fusion, which #741
-    could not compare with the 0.54 kJ/mol the two fits imply).
+    (closed, not read; its calorimetric enthalpy of fusion is read
+    through NBS Circular 500, item 29).
 19. Aboudan, A. (producer), HASI team, CISAS 2006, Huygens HASI mission
     raw and calibrated data V1.1, data set
     `HP-SSA-HASI-2-3-4-MISSION-V1.1`, product
@@ -768,6 +829,14 @@ The user took every recommendation of the study:
     structure of Titan's atmosphere from Cassini radio occultations",
     *Icarus* 215, 460, doi:10.1016/j.icarus.2011.07.030 (not read:
     closed, no abstract reached).
+29. Rossini, F. D., Wagman, D. D., Evans, W. H., Levine, S., Jaffe, I.
+    1952, *Selected Values of Chemical Thermodynamic Properties*, NBS
+    Circular 500, Series II, Table 18-1, p. 561, read in the NIST scan,
+    <https://nvlpubs.nist.gov/nistpubs/Legacy/circ/nbscircular500.pdf>,
+    PDF page 569, 2026-11-27: N₂'s fusion (c, I to liquid) at 63.15 K
+    and 94 mm Hg, 0.172 kcal/mole and 2.72 cal/(deg·mole); its
+    vaporisation at 77.34 K, 1.333 kcal/mole; its references include
+    Giauque & Clayton 1933.
 
 ## See also
 
