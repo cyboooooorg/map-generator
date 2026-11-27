@@ -2182,7 +2182,10 @@ HITRAN's `N2-CH4_2024.cia` (Finenko et al. 2022) and `CH4-CH4_2011.cia`
 (`spectrum::PAIRS`; see [Which gases does the infrared column still
 miss?](longwave-absorbers.md)). They settle the sourced Titan at 92.30 K
 against the measured 93.65 ± 0.25 K, without a fitted constant
-(N₂–N₂ alone 83.95 K, with N₂–CH₄ 92.23 K, nothing 74.88 K). They replace
+(N₂–N₂ alone 83.95 K, with N₂–CH₄ 92.23 K, nothing 74.88 K); at 91.81 K
+since its dry adiabat condenses N₂ from about 0.65 bar up to its skin
+(issue #741, [radiative transfer](radiative-transfer.md), "N₂'s
+pseudo-adiabat and its phase step"). They replace
 the legacy's grey stand-in, `τ = k (u B)^½` over 0-650 cm⁻¹ with
 `k` = 15.1 (`CH4_OPACITY`, calibrated on Titan's 93.65 K: 13.4 before
 #646, 14.3 on the grey column, 7.75 before #563, 6.0 before #530, 3.3
@@ -2196,9 +2199,14 @@ checked); the column holds the N₂ and CH₄ pairs, and the anti-greenhouse
 (below) the cooling. Missing: N₂–H₂ pairs (H₂ is not a gas of the model,
 issue #720), methane's lines, the haze's infrared, and the methane the
 cold trap's ratio leaves out of the lower troposphere (issue #744,
-below), which the tier-1 test allows 1.4 K for (`balance_tests.rs`,
-`TITAN_MISSING_WARMING_K`; its floor is 93.65 − 0.25 − 1.4 = 92.00 K,
-0.3 K under the column's 92.30 K).
+below), which the tier-1 test allows 1.9 K for (`balance_tests.rs`,
+`TITAN_MISSING_WARMING_K`; its floor is 93.65 − 0.25 − 1.9 = 91.50 K,
+0.31 K under the column's 91.81 K; 1.4 K and 92.00 K until issue #741,
+refitted by the user on 2026-11-27). The column's troposphere, 4 to
+8 K colder than Huygens's aloft (issue #750), hides 1.2 to 2.3 K more of
+the missing warming and would cool the column once fixed (study 39,
+[Nitrogen phases](nitrogen-phases.md#titans-column-against-huygens)):
+the bound is one-sided only for the missing absorbers.
 
 **Methane** (issue #443). The legacy's grey `sqrt(p_CH₄ P)` law,
 calibrated on Titan, was stretched 500-fold past it: a planet at an
@@ -2977,8 +2985,16 @@ premise of a transparent air, which the pairs end (the column sends out
 follows both branches: the frost holds up to 0.0070506 Earth fluxes and
 the liquid down to 0.0059258, within three steps of the folds study 38
 measured, every climate converged, on its derived pair, and attracting.
-The column still draws a dry adiabat where a saturated N₂ air follows
-its saturation curve (study 38).
+Since issue #741 the column follows N₂'s saturation curve wherever its
+air saturates in N₂, from the ground up over N₂ frost or liquid, instead
+of a dry adiabat (study 38; it reaches Titan's upper troposphere too,
+study 39): over the ground it sends out
+2 % to 7 % less than `σ T⁴` (0.9817 and 0.9278 of it at 59.25 and
+64.4 K), the sweep jumps once from 59.470 K at 0.006565 to 63.526 K at
+0.006581 (absorbed and `ε OLR` both ×1.5614), and the branches hold up
+to 0.0076953 and down to 0.0064470 Earth fluxes, about 0.1 % from the
+0.007688 and 0.006449 study 38 estimated
+([Nitrogen phases](nitrogen-phases.md)).
 
 **Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
 that keeps water has two climates when the ice-albedo feedback makes it
@@ -3224,7 +3240,7 @@ their measured air (see "Test air and Solar System bounds" below):
 | Earth | 288 K, water, regulated, thermostat CO₂ 4.071e-3 bar, Bond albedo 0.3071 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone, Bond albedo 0.2914 and 288.18 K at 280 ppm (before the N₂ and O₂ pairs of #703: 4.206e-3 bar and 288.02 K; on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
 | Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the 577 K pin, the model's output (#594), moves to the tier-2 net in 2d-4 | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
-| Titan | 92.64 K on the measured air, hydrocarbons; the reference Titan settles at 92.97 K on the chain's own air (93.86 K and 94.24 K under methane's grey stand-in, before #703; 104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
+| Titan | 92.33 K on the measured air, hydrocarbons; the reference Titan settles at 92.61 K on the chain's own air (92.64 K and 92.97 K before N₂ condensed in the column, #741; 93.86 K and 94.24 K under methane's grey stand-in, before #703; 104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | its equilibrium temperature, dry, temperate | within 1 K of it | airless |
 
 The reference Titan settled at 104.8 K because of its upstream nitrogen
@@ -3233,7 +3249,8 @@ climate is tested on Titan's measured air, not on the reference trial.
 Since #679 (*Titan's nitrogen*) the chain gives it 1.422 bar of N₂ and it
 settled at 94.24 K, 1.512 bar, with 0.091 bar of CH₄ over its seas under
 methane's grey stand-in; since its greenhouse is its pairs only (#703)
-it settles at 92.97 K; 2d-4 moves the test onto the chain's own air.
+it settled at 92.97 K, and since N₂ condenses in its column (#741) at
+92.61 K; 2d-4 moves the test onto the chain's own air.
 Earth's O₂ comes from life, which the chain adds later: its reference air
 has none, and the climate is solved again after oxygenation in 2d-4
 (#659), so the 280 ppm check runs on Earth's measured air (N₂ 78.08 %,
@@ -3549,8 +3566,9 @@ HITRAN's N₂–N₂, N₂–CH₄ and CH₄–CH₄ pairs replace the grey opac
 `CH4_SATURATION_BAR`, and settle the same column at 92.30 K (92.296 K
 in the tier-1 test, now
 `titans_pairs_hold_its_column_just_under_its_measured_surface`, which
-allows 1.4 K under the measurement for the N₂–H₂ pairs, methane's lines
-and the haze's infrared the column lacks). The record of the fit
+allowed 1.4 K under the measurement for the N₂–H₂ pairs, methane's lines
+and the haze's infrared the column lacks; 1.9 K since issue #741, see
+above). The record of the fit
 follows.
 
 Target: Titan's surface, 93.65 ± 0.25 K at 1467 hPa (Fulchignoni et
