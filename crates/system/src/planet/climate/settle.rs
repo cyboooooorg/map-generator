@@ -380,7 +380,7 @@ fn condensed_over(gases: &Weights, last: &Weights, t: Kelvin) -> Weights {
 /// - a wet body on its frozen branch: the [`collapsed_climate`] of its
 ///   CO₂;
 /// - any other wet body: the [`wet_climate`].
-fn climate_of(
+pub(super) fn climate_of(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
     air: &Weights,

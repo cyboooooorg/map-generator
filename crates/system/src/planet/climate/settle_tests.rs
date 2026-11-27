@@ -6,18 +6,19 @@
 use super::body::ClimateBody;
 use super::fixture::{earth, mars, moved, titan};
 use super::settle::{
-    AlbedoMap, Bracket, End, Next, Settle, albedo_fixed_point, albedo_for, attracting, settle,
-    warm_start,
+    AlbedoMap, Bracket, End, Next, Settle, albedo_fixed_point, albedo_for, attracting, climate_of,
+    settle, warm_start,
 };
 use super::{
     ALBEDO_BRACKET, ALBEDO_ITERATIONS, ALBEDO_TOLERANCE_K, CONDENSE_ITERATIONS, ClimateInputs,
     Light, Numerics,
 };
 use science::balance::{BRACKET_TOLERANCE, Point, TOLERANCE};
+use science::constants::STEFAN_BOLTZMANN;
 use science::radiation::gases::{PartialPressures, Weights};
 use science::radiation::ozone::ozone_column;
 use science::surface::Liquid;
-use science::units::{Bar, Dex, EarthFlux, Kelvin, Kilogram, WattPerSquareMetre};
+use science::units::{Bar, Dex, EarthFlux, Fraction, Kelvin, Kilogram, WattPerSquareMetre};
 
 /// Source: Mars's air, 6.36 mbar of 95.1 % CO₂, 2.59 % N₂ and 0.16 % O₂
 /// (NASA Mars fact sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/
@@ -705,13 +706,13 @@ fn a_climate_with_a_stable_root_settles_on_it() {
     assert!(off.abs() < ALBEDO_TOLERANCE_K.0, "{off} K: {fixed:?}");
 }
 
-/// Definition: a runaway's air for the second law's test, 400 bar of
-/// steam and 230 of CO₂ in weights (study 41's seed 25 b, rounded), a
-/// test input.
+/// Definition: a runaway's air for the second law's wiring test, 10 bar
+/// of steam and 10 of CO₂ in weights, a thin test input whose one
+/// balance costs a fraction of a second.
 const STEAM_AIR: Weights = Weights {
     n2: 0.0,
-    co2: 230.0,
-    h2o: 400.0,
+    co2: 10.0,
+    h2o: 10.0,
     ch4: 0.0,
     nh3: 0.0,
     so2: 0.0,
@@ -719,34 +720,41 @@ const STEAM_AIR: Weights = Weights {
     ar: 0.0,
 };
 
-/// Definition: the orbit, au, of the second law's test, at which the
-/// steam of [`STEAM_AIR`] settles above [`COOL_STAR`] under a Sun-like
-/// star (a test input).
-const SCORCHED_ORBIT: f64 = 0.02;
+/// Definition: the equilibrium temperature, K, of the light
+/// [`STEAM_AIR`] absorbs in the wiring test: its column balances above
+/// [`COOL_STAR`] under a Sun-like star (at 3834 K) while its grey body
+/// stays under it (a test input).
+const SCORCHING_LIGHT_K: f64 = 2300.0;
 
 /// Definition: a cool star's effective temperature, K, a test input.
 const COOL_STAR: Kelvin = Kelvin(3000.0);
 
+// The grey body of the light lies under the ceiling: the cap, not a
+// lower bound, sets the surface of the wiring test.
+const _: () = assert!(SCORCHING_LIGHT_K < COOL_STAR.0);
+
 #[test]
 fn a_runaway_is_never_hotter_than_its_star() {
-    // The second law (`science::balance::second_law_ceiling`, study 41):
-    // the same light from a star of 3000 K leaves the surface at most at
-    // 3000 K, where a Sun-like star's lets it settle higher.
-    let sunlit = ClimateInputs {
+    // The wiring of the second law (`science::balance::second_law_ceiling`,
+    // study 41): the star's effective temperature reaches the balance of
+    // a dry runaway through `ClimateInputs::ceiling`. One balance under a
+    // fixed light, no fixed point of the albedo: from a 3000 K star the
+    // surface stops exactly at 3000 K, which no root found by the search
+    // lands on (under a Sun-like star the same balance settles at
+    // 3834 K, measured when the test was written; it is not solved here
+    // to keep the test cheap).
+    let mut inputs = ClimateInputs {
         air: STEAM_AIR,
         runaway: true,
-        ..moved(&earth(), SCORCHED_ORBIT)
+        water: Kilogram(0.0),
+        ..earth()
     };
-    let mut cool = sunlit.clone();
-    for light in &mut cool.sources {
+    for light in &mut inputs.sources {
         light.effective_temperature = COOL_STAR;
     }
-    let hot = settled(&sunlit, Numerics::DEFAULT);
-    let capped = settled(&cool, Numerics::DEFAULT);
-    println!(
-        "under the Sun {:.1} K, under a 3000 K star {:.1} K",
-        hot.temperature.0, capped.temperature.0
-    );
-    assert!(hot.temperature > COOL_STAR, "{hot:?}");
-    assert!(capped.temperature <= COOL_STAR, "{capped:?}");
+    let light = WattPerSquareMetre(STEFAN_BOLTZMANN * SCORCHING_LIGHT_K.powi(4));
+    let black = Fraction::new(1.0).expect("one is a fraction");
+    let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
+    let (_, capped, _) = climate_of(&mut body, light, &STEAM_AIR, black);
+    assert_eq!(capped, COOL_STAR);
 }

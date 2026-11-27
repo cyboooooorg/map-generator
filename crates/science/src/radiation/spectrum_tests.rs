@@ -527,8 +527,10 @@ fn the_spectrum_of_a_level_is_its_bins() {
                 one.smooth
             );
         }
-        // The tail holds no absorption: the column sums it on the
-        // shortwave table's bins (`column::beyond`).
+        // A structural contract, not a value: the tail holds no
+        // absorption in the reference spectrum, because
+        // `column::beyond::beyond` carries the whole region past
+        // 5000 cm⁻¹ on the shortwave table's bins.
         for lines in &spectrum.lines {
             assert_eq!(lines[TAIL], [0.0; G]);
         }

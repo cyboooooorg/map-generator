@@ -560,6 +560,9 @@ const RUNAWAY_AIR: PartialPressures = PartialPressures {
     ar: 0.0,
 };
 
+/// Definition: the rounding of `(σT⁴/σ)^¼` back to `T`, a share, 1e-12.
+const ROUNDING: f64 = 1e-12;
+
 /// Definition: the equilibrium temperature, K, of [`RUNAWAY_AIR`]'s light.
 const RUNAWAY_LIGHT_K: f64 = 3100.0;
 
@@ -586,9 +589,14 @@ fn no_surface_is_hotter_than_its_star() {
     println!("free {:.1} K, under the Sun {:.1} K", free.x, capped.x);
     assert!(free.x > SOLAR_EFFECTIVE_TEMPERATURE.0, "{free:?}");
     assert_eq!(capped.x, SOLAR_EFFECTIVE_TEMPERATURE.0);
-    // A lower bound over the ceiling is kept: under a ceiling below the
-    // light's own equilibrium temperature, the grey body still radiates
-    // what the surface absorbs.
+    // Under a ceiling below the light's own equilibrium temperature the
+    // lower bound is kept: the grey body still radiates what the surface
+    // absorbs, and the search does not go past it.
     let grey = solve(Kelvin(RED_DWARF_K));
-    assert!(grey.x >= RUNAWAY_LIGHT_K, "{grey:?}");
+    let bound = Kelvin(RED_DWARF_K).0.max(RUNAWAY_LIGHT_K);
+    assert!(grey.x >= RUNAWAY_LIGHT_K * (1.0 - ROUNDING), "{grey:?}");
+    assert!(
+        grey.x <= bound * (1.0 + ROUNDING),
+        "{grey:?} over {bound} K"
+    );
 }
