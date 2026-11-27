@@ -955,7 +955,14 @@ reads the forcings, never the central object's kind).
    skin temperature $T_\text{eq}/2^{1/4}$.
 2. **The infrared.** 250 bins of 20 cm⁻¹ from 0 to 5000 cm⁻¹ (a black
    body at 640 K emits 99.6 % of its light below 5000 cm⁻¹) and a tail
-   past 5000 cm⁻¹ that takes the absorption of the last bin. In each bin,
+   past 5000 cm⁻¹ (74 % of a black body at 3000 K): the near infrared on
+   the shortwave table's bins up to 14 364 cm⁻¹ (0.7 µm), its lines and
+   continua of water and CO₂ emitting and absorbing as in the bins, and
+   past 0.7 µm the ground's light through the air's Rayleigh scattering
+   alone, `1/(1 + 0.83 τ_R)` per band of the star's (study 41, #775; see
+   [Runaway surfaces past the published
+   profiles](planet-atmospheres.md#runaway-surfaces-past-the-published-profiles-study-41-775)).
+   In each bin,
    the lines of CO₂, water, methane, ozone and N₂O (eight $g$-points
    each, overlapped at random; ozone laid out on Earth's AFGL shape, see
    [ozone.md](ozone.md); N₂O in the tests' airs only, #737), the

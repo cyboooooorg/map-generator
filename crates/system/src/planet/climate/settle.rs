@@ -396,6 +396,7 @@ fn climate_of(
             emissivity,
             i.gravity,
             body.numerics.solver,
+            i.ceiling(),
             &mut body.columns,
         );
         (*air, t, false)

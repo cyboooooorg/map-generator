@@ -410,6 +410,16 @@ line lists, partition sums and line shapes as `opacity.bin`:
   crate takes from `co2-cia.tsv` (see Continua); ozone and O₂. The
   shortwave takes the CO₂–CO₂ pairs only, not those of `pairs-cia.tsv`
   (N₂'s fundamental at 4.3 µm and first overtone at 2.2 µm).
+- **Read by the infrared too:** the longwave column's sum past
+  `opacity.bin`'s 5000 cm⁻¹ (`column::beyond`, study 41, #775) takes the
+  air's emission and absorption on this table's bins from 5000 to
+  14 364 cm⁻¹, the bin that straddles 5000 cm⁻¹ from 5000 cm⁻¹ only. Its
+  grid tops out at 900 K and 100 bar as `opacity.bin`'s does, and is
+  read past them the same way: a hotter level takes the 900 K lines, a
+  deeper one scales them as `p`. HITRAN2024 has no hot lines (a hot
+  column needs HITEMP's), so a runaway's near infrared past 900 K is
+  an extrapolation (`docs/science/planet-atmospheres.md`, "Runaway
+  surfaces past the published profiles").
 
 Layout, little-endian, as `opacity.bin` but for these fields:
 

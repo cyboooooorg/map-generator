@@ -262,6 +262,19 @@ pub(crate) struct ClimateInputs {
 }
 
 impl ClimateInputs {
+    /// The hottest the surface can settle at: the effective temperature
+    /// of the hottest star that lights it
+    /// (`science::balance::second_law_ceiling`, the second law; study 41,
+    /// issue #775).
+    pub(crate) fn ceiling(&self) -> Kelvin {
+        science::balance::second_law_ceiling(
+            self.sources
+                .iter()
+                .filter(|s| s.flux.0 > 0.0)
+                .map(|s| s.effective_temperature),
+        )
+    }
+
     /// The ozone column the infrared column lays out
     /// (`science::radiation::column::outgoing_longwave`): each star's
     /// ([`Light::ozone`]) weighted by its share of the planet's light,

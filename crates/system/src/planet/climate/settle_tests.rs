@@ -704,3 +704,49 @@ fn a_climate_with_a_stable_root_settles_on_it() {
     let off = radiative(derived, 1.0) - fixed.climate.x;
     assert!(off.abs() < ALBEDO_TOLERANCE_K.0, "{off} K: {fixed:?}");
 }
+
+/// Definition: a runaway's air for the second law's test, 400 bar of
+/// steam and 230 of CO₂ in weights (study 41's seed 25 b, rounded), a
+/// test input.
+const STEAM_AIR: Weights = Weights {
+    n2: 0.0,
+    co2: 230.0,
+    h2o: 400.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: 0.0,
+    ar: 0.0,
+};
+
+/// Definition: the orbit, au, of the second law's test, at which the
+/// steam of [`STEAM_AIR`] settles above [`COOL_STAR`] under a Sun-like
+/// star (a test input).
+const SCORCHED_ORBIT: f64 = 0.02;
+
+/// Definition: a cool star's effective temperature, K, a test input.
+const COOL_STAR: Kelvin = Kelvin(3000.0);
+
+#[test]
+fn a_runaway_is_never_hotter_than_its_star() {
+    // The second law (`science::balance::second_law_ceiling`, study 41):
+    // the same light from a star of 3000 K leaves the surface at most at
+    // 3000 K, where a Sun-like star's lets it settle higher.
+    let sunlit = ClimateInputs {
+        air: STEAM_AIR,
+        runaway: true,
+        ..moved(&earth(), SCORCHED_ORBIT)
+    };
+    let mut cool = sunlit.clone();
+    for light in &mut cool.sources {
+        light.effective_temperature = COOL_STAR;
+    }
+    let hot = settled(&sunlit, Numerics::DEFAULT);
+    let capped = settled(&cool, Numerics::DEFAULT);
+    println!(
+        "under the Sun {:.1} K, under a 3000 K star {:.1} K",
+        hot.temperature.0, capped.temperature.0
+    );
+    assert!(hot.temperature > COOL_STAR, "{hot:?}");
+    assert!(capped.temperature <= COOL_STAR, "{capped:?}");
+}

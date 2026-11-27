@@ -527,10 +527,12 @@ fn the_spectrum_of_a_level_is_its_bins() {
                 one.smooth
             );
         }
+        // The tail holds no absorption: the column sums it on the
+        // shortwave table's bins (`column::beyond`).
         for lines in &spectrum.lines {
-            assert_eq!(lines[TAIL], lines[BINS - 1]);
+            assert_eq!(lines[TAIL], [0.0; G]);
         }
-        assert_eq!(spectrum.smooth[TAIL], spectrum.smooth[BINS - 1]);
+        assert_eq!(spectrum.smooth[TAIL], 0.0);
     }
 }
 
@@ -548,6 +550,32 @@ fn the_planck_spectrum_is_the_bins_and_their_rest() {
         }
         let black = STEFAN_BOLTZMANN * f64::powi(t, 4);
         let sum: f64 = planck.iter().sum();
+        assert!(
+            (sum / black - 1.0).abs() < SIGMA_T4_TOLERANCE,
+            "{t} K: {sum} vs {black}"
+        );
+    }
+}
+
+#[test]
+fn the_planck_flux_over_any_edges_is_their_integrals_and_the_rest() {
+    // Uneven edges across the head and tail series' switch, as the
+    // column's sum past the longwave table takes them: each interval is
+    // its exact integral, the last slot the rest, and the whole `σT⁴`
+    // from the first edge at 0.
+    let edges = [0.0, 1000.0, 5000.0, 7311.0, 14_364.0, 50_000.0];
+    let mut out = [0.0; 6];
+    for t in PLANCK_BANDS_K {
+        planck_over(t, &edges, &mut out);
+        for (j, p) in out[..edges.len() - 1].iter().enumerate() {
+            let one = planck_between(edges[j], edges[j + 1], t);
+            assert!(
+                (p - one).abs() <= SAME_SUM * one.max(TINY),
+                "{t} K, interval {j}: {p} vs {one}"
+            );
+        }
+        let black = STEFAN_BOLTZMANN * f64::powi(t, 4);
+        let sum: f64 = out.iter().sum();
         assert!(
             (sum / black - 1.0).abs() < SIGMA_T4_TOLERANCE,
             "{t} K: {sum} vs {black}"

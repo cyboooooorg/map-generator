@@ -220,8 +220,9 @@ impl Table {
     }
 
     /// The lines of one gas, of partial pressure `partial_bar` and molar
-    /// mass `molar_kg`, at `level` in the first `m` g-points (over the
-    /// bins) into `out`, per unit `ln p` (vertical optical depths), in
+    /// mass `molar_kg`, at `level` in the g-points `points` (over the
+    /// bins, `b * G + g`) into `out`, per unit `ln p` (vertical optical
+    /// depths), in
     /// single precision: its set broadened by the air (`sets.0`) and its
     /// set broadened by itself (`sets.1`), mixed by its share of the
     /// pressure, each interpolated in `ln k` into `by_air` and `by_self`
@@ -238,7 +239,7 @@ impl Table {
         partial_bar: f64,
         molar_kg: f64,
         sets: (usize, usize),
-        m: usize,
+        points: std::ops::Range<usize>,
         by_air: &mut [f32],
         by_self: &mut [f32],
         out: &mut [f32],
@@ -255,7 +256,7 @@ impl Table {
             (mass * (1.0 - share)).ln() as f32,
             (mass * share).ln() as f32,
         );
-        let node = |at: usize| -> &[f32] { &self.ln_k[at..at + m] };
+        let node = |at: usize| -> &[f32] { &self.ln_k[at + points.start..at + points.end] };
         interpolate(&air_at.map(node), &wa, air_ln, by_air);
         interpolate(&self_at.map(node), &ws, self_ln, by_self);
         add_exp(by_air, by_self, out);

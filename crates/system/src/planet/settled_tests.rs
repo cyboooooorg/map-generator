@@ -1043,3 +1043,21 @@ fn a_steam_world_that_loses_its_steam_keeps_its_rock() {
     assert!(h2o < STEAM_WORLD_MIN_BAR, "{h2o:?}");
     assert!(!has_steam(&s.bare.body));
 }
+
+#[test]
+fn a_surface_within_the_published_profiles_is_marked_so() {
+    // Venus's surface lies under Turbet et al. 2020's hottest steam
+    // profile, 4300 K (`science::steam::PUBLISHED_SURFACE_TOP`): its
+    // node says so, from the surface temperature alone.
+    let (venus, _, trace) = settled_of(&VENUS, NO_ICE_OBLIQUITY);
+    let c = climate(&venus);
+    assert!(!*c.past_published.value(), "{c:?}");
+    assert_eq!(
+        trace.node(c.past_published.node()).unwrap().code.as_str(),
+        codes::CLIMATE_PAST_PUBLISHED_PROFILES
+    );
+    assert_eq!(
+        derived_from(&trace, c.past_published.node()),
+        vec![c.global.surface_temperature.node()]
+    );
+}

@@ -231,6 +231,22 @@ pub fn hides_surface(runaway: bool, steam: Bar, surface: Kelvin) -> bool {
     runaway && steam >= STEAM_WORLD_MIN_BAR && surface >= CRITICAL_POINT_TEMPERATURE
 }
 
+/// Source: the hottest surface of the published steam profiles, K:
+/// Turbet et al. 2020 ran their radiative-convective steam columns over
+/// "surface temperatures (from 300 to 4300 K)" and hold their fit valid
+/// "as far as surface temperature remains between 300 and 4300 K" (§ 2.1
+/// and § 2.2, arXiv:1911.08878v3). No published steam or CO₂ profile
+/// reaches higher (study 41, issue #775): a surface past it is an
+/// extrapolation of the model's column, which the climate marks
+/// ([`past_published_profiles`]).
+pub const PUBLISHED_SURFACE_TOP: Kelvin = Kelvin(4300.0);
+
+/// Whether a surface at `surface` lies past [`PUBLISHED_SURFACE_TOP`],
+/// outside every published steam profile.
+pub fn past_published_profiles(surface: Kelvin) -> bool {
+    surface > PUBLISHED_SURFACE_TOP
+}
+
 #[cfg(test)]
 #[path = "steam_tests.rs"]
 mod tests;

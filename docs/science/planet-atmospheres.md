@@ -3624,9 +3624,10 @@ an emissivity of Triton measured apart from this balance.
 #### Runaway surfaces past the published profiles (study 41, #775)
 
 Study [41](https://github.com/cyboooooorg/map-generator/wiki/41-runaway-surface-audit)
-holds the probes and the full tables; this is its summary. No code
-changed with it: the fix waits for the user's choice among the options
-below.
+holds the probes and the full tables; this is its summary. The user
+chose options A and B on 2026-11-27, with a code for the surfaces past
+the published profiles; what was built is under "Decision and what was
+built" below, and option C is issue #781.
 
 **What the model does.** A body in a water runaway is not wet
 (`ClimateBody::wet`), so its surface is the root of one balance,
@@ -3768,9 +3769,9 @@ scattering alone, `1/(1 + 0.83 τ_R)`; all in K):
   the visible its Rayleigh scattering (`rayleigh.rs`). Sourced from
   data the crate holds; it roughly halves the hot surfaces but leaves
   them at about 1950 to 10 900 K, and the visible's treatment moves
-  them by up to 2750 K (water's continuum past 5000 cm⁻¹ is in MT_CKD's file but
-  not binned yet). The table's 900 K and the steam cap stay; each
-  runaway solve sums 147 more bins.
+  them by up to 2750 K (the table bins MT_CKD 4.3's water continuum to
+  14 364 cm⁻¹, `OPACITY.md`, "Shortwave table"). The table's 900 K and
+  the steam cap stay; each runaway solve sums up to 78 more bins.
 - **C. A radiative-convective column for runaways** (Selsis et al.
   2023; Nicholls et al. 2024; Guillot 2010 as its grey check), with the
   light each level absorbs from the shortwave column, and the melt's
@@ -3801,6 +3802,106 @@ column's levels with the steam capped at 70 bar, the shortwave table
 read at its 900 K top. The Turbet column applies Eq. 1 at its 30 S⊕
 top and ignores the CO₂: it shows where the published pure-steam fit
 ends, not these bodies' surfaces.
+
+**Decision and what was built (#775).** The user chose A and B
+(2026-11-27), B's visible through Rayleigh scattering, and a code in the
+cause tree for the surfaces past 4300 K; C is issue #781, and the
+volatiles' question (E) a comment on #685.
+
+- **B, the column past 5000 cm⁻¹** (`science::radiation::column`, its
+  module `beyond`). The tail band no longer copies the last bin. From
+  5000 to 14 364 cm⁻¹ the column sums the shortwave table's bins (the
+  one that straddles 5000 cm⁻¹ from 5000 cm⁻¹ only, up to 78 bins): CO₂'s
+  and water's lines, eight g-points each overlapped at random, and
+  MT_CKD 4.3's continua with the CO₂–CO₂ pairs, emitting and absorbing
+  layer by layer as in the longwave bins (log-mean depths, the uniform
+  air above the top, the diffusivity 1.66), without scattering. Past
+  0.7 µm the air only scatters: in each of the star's 93 bands from 0.2
+  to 0.7 µm the ground's Planck flux leaves through
+  `T = 1/(1 + (D/2) τ_R)`, `τ_R = τ_R(550 nm) (550 nm/λ)⁴` of the
+  column's surface air (Meador & Weaver 1980's conservative two-stream
+  layer, as the shortwave takes it), the light past 0.2 µm with the
+  bluest band's `T`; a scattering air emits nothing. The three parts
+  split the black body at their edges exactly
+  (`spectrum::planck_over`), so a transparent air sends out `σT⁴`.
+  Water clouds cover the sky past 5000 cm⁻¹ as they do in the bins: a
+  grey layer of `CLOUD_EMISSIVITY` at their top, whose share of the sky
+  sends out its top's Planck flux through the air above it. The parts a
+  column's warmest level sends under `NEGLIGIBLE` (1e-7) of its `σT⁴`
+  are taken as clear, as the cold bins are.
+- **A, the second law** (`science::balance::second_law_ceiling`, a
+  `Definition:`). `surface_temperature` takes a ceiling, the effective
+  temperature of the hottest star that lights the body (`HOTTEST`
+  without one), and its search stops there; a column that still
+  radiates less than the surface absorbs leaves the surface at the
+  ceiling, the balance unmet. A grey body above the ceiling is kept.
+- **The code** `planet.climate.past-published-profiles`, recorded from
+  the surface temperature for every climate: true past
+  `science::steam::PUBLISHED_SURFACE_TOP`, 4300 K, the hottest surface
+  of Turbet et al. 2020's steam profiles (`Source:`).
+- **Kept:** the 900 K and 100 bar top of both opacity tables (a hotter
+  level reads the 900 K lines, a deeper one scales them as `p`), the
+  70 bar steam cap, the imposed convective profile, the runaway albedo's
+  clamp to 7200 K, steam's heat capacity past 6000 K.
+
+The eight bodies under the built column (the study's probe on 2d-4's
+inputs, the albedo held at 2d-4's, K):
+
+| Planet | 2d-4 | B, as built | A and B |
+| --- | --- | --- | --- |
+| Reference 6 b | 8274.0 | 3560.5 | 3560.5 |
+| Reference 6 c | 10 333.8 | 4376.8 | 4376.8 |
+| Reference 6 d | 5316.6 | 2927.8 | 2927.8 |
+| Reference 6 e | 3517.4 | 2383.6 | 2383.6 |
+| Reference 6 f | 2297.2 | 1972.8 | 1972.8 |
+| Reference 8 d | 8760.5 | 3873.4 | 3873.4 |
+| Reference 8 e | 5502.6 | 3113.7 | 3113.7 |
+| Seed 25 b | 25 631.0 | 7935.6 | 7935.6 |
+
+B brings every surface under its star, so A binds none of them; two lie
+past 4300 K and are marked (reference 6 c and seed 25 b). They sit 22 to
+98 K above the study's probe, seed 25 b 189 K under it: the probe's
+near infrared was clear-sky with arithmetic-mean depths, the built one
+takes the clouds and log-mean depths. Under the solver's reference planets only Venus moves: 579.58 to
+579.28 K (its wet twin 613.08 to 612.62 K); Earth, Mars, Mercury and
+Titan keep their temperatures to 1e-4 K.
+
+**Validation** (tier 1):
+
+- a transparent air (1 mbar of N₂) sends out past 2 µm the black body's
+  share of Incropera et al. 2007's Table 12.1, `F(0→λT)` = 0.066 728,
+  0.273 232, 0.480 877 and 0.737 818 at 1000, 1500, 2000 and 3000 K,
+  within 5e-5 (the table strays from Planck's law with CODATA 2018's
+  `c₂` by up to 2.9e-5), and `σT⁴` in all within 1e-5;
+- past 0.7 µm 10 bar of N₂ at 3000 K lets the ground's light out by the
+  conservative two-stream transmission band by band, within
+  `NEGLIGIBLE` of `σT⁴`;
+- 260 bar of steam at 2300 and 3000 K send out past 2 µm 6.26e3 and
+  6.73e4 W/m², against the surface light Boukrouche et al. 2021 find
+  escaping (their `SCFF`, 3.8e4 and 3.3e5 W/m², § 4.2 and Appendix A),
+  held within a calibrated decade; the copied tail sent out 1.5 and
+  53 W/m²;
+- under the same light, a 3000 K star leaves a runaway at 3000 K where
+  the Sun lets it settle at 4864 K; a surface under 4300 K records the
+  code false, from its temperature alone.
+
+**Calibration.** One, a test tolerance: `BOUKROUCHE_FACTOR`, the decade
+within which the column's light past 2 µm must reach Boukrouche et
+al.'s. Their band-grey model averages ExoMol's water opacities per band
+and tunes them to SOCRATES; the column caps the steam at 70 bar, reads
+the 900 K lines and scatters past 0.7 µm. What was searched and not
+found: a published spectrally resolved outgoing radiation of a steam or
+CO₂ column past 2000 K that a k-distribution column could be held to
+more tightly (Selsis et al. 2023, Nicholls et al. 2024 and Lichtenberg
+et al. 2021 give figures, not tables).
+
+**Limitations of the fix.** The surfaces stay on the imposed convective
+profile, which the radiative-convective sources put 1000-2000 K too hot
+past the runaway (#781). The near infrared reads lines and continua at
+900 K (HITRAN2024 has no hot lines), lacks methane's, ozone's and N₂O's
+lines past 5000 cm⁻¹, and does not scatter; the visible absorbs nothing
+(water's and the melt's vapour's lines there are missing) and takes the
+grey cloud of the infrared. The steam past 70 bar is not in the column.
 
 #### Calibration of `SNOWBALL_WARM_BAR` (refit)
 
@@ -5297,7 +5398,9 @@ another paper, from memory) is said where it is used.
   (through HITRAN's references, not read).
 - Boukrouche, Lichtenberg and Pierrehumbert 2021, *ApJ* 919, 130,
   doi:10.3847/1538-4357/ac1345, arXiv:2107.14150, the end of the
-  plateau (Fig. 9) and the post-runaway equilibrium (§ 4.3; read).
+  plateau (Fig. 9), the surface light that escapes a steam column
+  (`SCFF`, § 4.2 and Appendix A) and the post-runaway equilibrium
+  (§ 4.3; read).
 - Bower, Kitzmann, Wolf, Sanan, Dorn and Oza 2019, *A&A* 631, A103,
   doi:10.1051/0004-6361/201935710, arXiv:1904.08300, the water a molten
   mantle keeps from its atmosphere (abstract read).
@@ -5476,6 +5579,10 @@ another paper, from memory) is said where it is used.
 - Ida and Lin 2005, *ApJ* 626, 1045, doi:10.1086/429953,
   arXiv:astro-ph/0502566, eq. 4 and the text of eq. 12: the ice line of
   Hayashi's thin disc at 170 K.
+- Incropera, DeWitt, Bergman and Lavine 2007, *Fundamentals of Heat
+  and Mass Transfer*, 6th ed., Wiley, Table 12.1, the black body's
+  share under a wavelength, `F(0→λT)` (the test of the column past
+  5000 cm⁻¹, study 41).
 - Jackson, Davis and Wheatley 2012, *MNRAS* 422, 2024,
   Table 2.
 - Jakosky, Slipski, Benna, Mahaffy et al. 2017, *Science* 355, 1408,
@@ -5541,6 +5648,8 @@ another paper, from memory) is said where it is used.
 - Krissansen-Totton, Fortney and Nimmo 2021, *Planet. Sci. J.* 2, 216,
   doi:10.3847/PSJ/ac2580, the argon degassing law of their Appendix A.3
   (read, open access).
+- Lacis and Oinas 1991, *J. Geophys. Res.* 96, 9027,
+  doi:10.1029/90JD01945, the random overlap of the g-points.
 - Lacis et al. 2010, doi:10.1126/science.1190653.
 - Lainey et al. 2009, doi:10.1038/nature08108, Io's tidal
   dissipation.
@@ -5619,6 +5728,10 @@ another paper, from memory) is said where it is used.
   the annual insolation integral (cited by Nadeau and McGehee).
 - McKay, Pollack and Courtin 1991,
   doi:10.1126/science.11538492, Titan's greenhouse.
+- Meador and Weaver 1980, *J. Atmos. Sci.* 37, 630,
+  doi:10.1175/1520-0469(1980)037<0630:TSATRT>2.0.CO;2, the two-stream
+  layer whose conservative limit lets the ground's light out past
+  0.7 µm.
 - Menou 2015, *Earth Planet. Sci. Lett.* 429, 20,
   doi:10.1016/j.epsl.2015.07.046, climate stability of habitable
   Earth-like planets (cited for the departure of #729 and the thaw

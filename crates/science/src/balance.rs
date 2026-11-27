@@ -98,8 +98,29 @@ pub const LEAST_STEP: f64 = 1.001;
 
 /// Definition: the hottest surface, K, [`bracket_up`] searches to, 1e6 K
 /// (legacy `bracket`): a guard against a column that never radiates
-/// enough, far above any surface the model makes.
+/// enough, far above any surface the model makes. A body under a star
+/// has a lower ceiling, its star's ([`second_law_ceiling`]).
 pub const HOTTEST: Kelvin = Kelvin(1.0e6);
+
+/// The hottest a surface lit by stars of effective temperatures `stars`
+/// can settle at, K: the hottest of them, or [`HOTTEST`] without one.
+///
+/// Definition: the second law of thermodynamics. A body heated by a
+/// star's light cannot grow hotter than the star's photosphere in a
+/// steady state: an element hotter than every other would lose heat to
+/// all of them (study 41, issue #775). A greenhouse raises the surface
+/// over its equilibrium temperature, never over its source's. The body's
+/// internal heat (at most a few W/m² in the model) could in principle
+/// carry it higher; no body the model makes holds the `σ T_eff⁴`, some
+/// 10⁶ W/m², that would take.
+pub fn second_law_ceiling(stars: impl IntoIterator<Item = Kelvin>) -> Kelvin {
+    stars
+        .into_iter()
+        .map(|t| t.0)
+        .filter(|t| *t > 0.0)
+        .reduce(f64::max)
+        .map_or(HOTTEST, Kelvin)
+}
 
 /// Definition: the least emissivity a surface radiates with, 0.01, a
 /// guard against a division by zero; every surface the model makes
@@ -176,20 +197,24 @@ pub fn regula_falsi(
 /// crosses zero going up from `start` (where it is below zero): steps of
 /// `T ← T (absorbed / OLR(T))^¼ ·` [`OVERSHOOT`] (exact for an outgoing
 /// radiation that grows as `T⁴`), at least [`LEAST_STEP`] each, the
-/// outgoing radiation floored at [`OLR_FLOOR`] of `absorbed`. Stops past
-/// [`HOTTEST`] with the last point as the upper end.
+/// outgoing radiation floored at [`OLR_FLOOR`] of `absorbed`. A step
+/// never goes past `top` (K): there it stops with the last point as the
+/// upper end, its `excess` still under zero if the crossing lies higher.
 pub fn bracket_up(
     mut excess: impl FnMut(f64) -> f64,
     absorbed: f64,
     start: Point,
+    top: Kelvin,
 ) -> (Point, Point) {
     let mut low = start;
     loop {
         let olr = (low.f + absorbed).max(OLR_FLOOR * absorbed);
-        let x = (low.x * (absorbed / olr).powf(0.25) * OVERSHOOT).max(low.x * LEAST_STEP);
+        let x = (low.x * (absorbed / olr).powf(0.25) * OVERSHOOT)
+            .max(low.x * LEAST_STEP)
+            .min(top.0);
         let f = excess(x);
         let point = Point { x, f };
-        if f >= 0.0 || x > HOTTEST.0 {
+        if f >= 0.0 || x >= top.0 {
             return (low, point);
         }
         low = point;
@@ -237,7 +262,10 @@ pub fn absorbed(
 /// all in its air: its surface cannot be colder). Without air the surface
 /// sits at that lower bound: the light and the heat alone. The root is
 /// bracketed by [`bracket_up`] and found by [`regula_falsi`] within
-/// `solver.tolerance`.
+/// `solver.tolerance`, at most `ceiling` ([`second_law_ceiling`] of the
+/// body's stars): a column that still radiates less than the surface
+/// absorbs there leaves the surface at the ceiling, the balance unmet
+/// (study 41). A lower bound over the ceiling is kept.
 #[expect(
     clippy::too_many_arguments,
     reason = "the inputs of one balance, and the caller's cache"
@@ -250,11 +278,12 @@ pub fn surface_temperature(
     emissivity: Fraction,
     gravity: MetrePerSecondSquared,
     solver: Solver,
+    ceiling: Kelvin,
     cache: &mut ColumnCache,
 ) -> Kelvin {
     Kelvin(
         surface_root(
-            starlight, gases, ozone, heat, emissivity, gravity, solver, cache,
+            starlight, gases, ozone, heat, emissivity, gravity, solver, ceiling, cache,
         )
         .x,
     )
@@ -274,6 +303,7 @@ pub(crate) fn surface_root(
     emissivity: Fraction,
     gravity: MetrePerSecondSquared,
     solver: Solver,
+    ceiling: Kelvin,
     cache: &mut ColumnCache,
 ) -> Root {
     let absorbed = absorbed(starlight, gases, heat).0;
@@ -315,7 +345,14 @@ pub(crate) fn surface_root(
             iterations: 0,
         };
     }
-    let (low, high) = bracket_up(&mut excess, absorbed, start);
+    let top = Kelvin(ceiling.0.max(lowest));
+    let (low, high) = bracket_up(&mut excess, absorbed, start, top);
+    if high.f < 0.0 {
+        return Root {
+            x: high.x,
+            iterations: 0,
+        };
+    }
     regula_falsi(excess, low, high, solver.tolerance.0, solver.iterations)
 }
 
