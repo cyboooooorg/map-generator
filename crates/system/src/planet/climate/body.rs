@@ -7,7 +7,9 @@
 use super::carbon::maximum_greenhouse;
 use super::{ClimateInputs, Numerics};
 use science::balance::PLATEAU_SURFACES;
-use science::balance::{earth_moist_plateau, moist_plateau, runaway_albedo, steam_share};
+use science::balance::{
+    earth_moist_plateau, earth_moist_plateau_under, moist_plateau, runaway_albedo, steam_share,
+};
 use science::outgassing::column_pressure;
 use science::radiation::albedo::{ShortwaveCache, Underneath, shortwave_budget};
 use science::radiation::clouds::cloud_cover;
@@ -163,24 +165,29 @@ impl<'a> ClimateBody<'a> {
     /// The moist plateau its runaway albedo binds at its stars' limit
     /// (legacy `Body::plateau`, l.1672): for a body in a water runaway
     /// that keeps water, its own steam column's ([`moist_plateau`] of its
-    /// dry air with its water, on its gravity and the saturated column,
-    /// started from Earth's) where it exceeds Earth's air's
-    /// ([`earth_moist_plateau`]); Earth's air's otherwise. Found once.
-    /// Earth's is ozone-free (`EARTH_PLATEAU_OZONE`), so a body whose own
-    /// ozone lowers its plateau under it takes Earth's: 0.35 W/m² bright
-    /// at 300 DU (`docs/science/ozone.md`, calibration 6).
+    /// dry air with its water and its infrared ozone, on its gravity and
+    /// the saturated column, started from Earth's) where it exceeds
+    /// Earth's air's under the same ozone
+    /// ([`earth_moist_plateau_under`]); Earth's air's, ozone-free
+    /// ([`earth_moist_plateau`]), otherwise, where no runaway reads it.
+    /// Found once. Both sides hold the body's ozone, so the floor keeps
+    /// standing for what Earth's air would send out in its place (a
+    /// thick air has no plateau of its own) without handing back the
+    /// light its ozone holds in (#761, `docs/science/ozone.md`, "Ozone
+    /// on the moist plateau").
     pub(crate) fn plateau(&mut self) -> WattPerSquareMetre {
         if let Some(p) = self.plateau {
             return p;
         }
-        let earth = earth_moist_plateau();
         let i = self.inputs;
         let p = if i.runaway && i.water.0 > 0.0 {
+            let ozone = i.longwave_ozone();
+            let earth = earth_moist_plateau_under(ozone, &mut self.columns);
             let dry = PartialPressures { h2o: 0.0, ..i.air };
             let water = self.water_column();
             let own = moist_plateau(
                 &dry,
-                i.longwave_ozone(),
+                ozone,
                 water,
                 i.gravity,
                 Profile::SATURATED,
@@ -190,7 +197,7 @@ impl<'a> ClimateBody<'a> {
             );
             WattPerSquareMetre(own.0.max(earth.0))
         } else {
-            earth
+            earth_moist_plateau()
         };
         self.plateau = Some(p);
         p
