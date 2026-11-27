@@ -87,7 +87,12 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # Builds before the timed run, so the budget measures the tests only.
       - run: cargo nextest run --profile tier1 --workspace --no-run
+      # The runners' tier-1 times vary by about 2x (69 to 160 s for the
+      # same tests): the CI budget is 180 s, the local one 120 s (user,
+      # 2026-11-27).
       - run: mise run test:tier1 -- --test-threads num-cpus
+        env:
+          TIER1_BUDGET: 180
 
   tier2:
     needs: changes

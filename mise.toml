@@ -57,7 +57,8 @@ description = "Tier 1 (unit tests, doctests and guardrails), budget 2 min (pass 
 usage = 'arg "[nextest_args]..." var=#true'
 run = [
   "eval cargo nextest run --profile tier1 --workspace ${usage_nextest_args:-}",
-  "cargo run -q -p guardrails -- budget target/nextest/tier1/junit.xml 120 'tier 1'",
+  # CI's runners vary by about 2x; the CI job sets TIER1_BUDGET (ci.yml).
+  "cargo run -q -p guardrails -- budget target/nextest/tier1/junit.xml ${TIER1_BUDGET:-120} 'tier 1'",
   # nextest does not run doctests; outside the budget gate, they are few.
   "cargo test --doc --workspace -q",
 ]
