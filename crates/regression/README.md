@@ -9,10 +9,14 @@ Test-only: it may depend on every engine, which a domain crate may not,
 even as a dev-dependency. Budget: 8 minutes on CI.
 
 `tests/planets.rs` holds one test, `the_reference_planets`, whose named
-sub-checks share one draw of the references (nextest runs each test in
-its own process, and each process that calls `references()` draws and
-models the eight systems again): the pinned digests of the reference
-systems and the purity of the draw, every placement modelled with a
+sub-checks share one generation of the references (`system::generate_with`;
+nextest runs each test in its own process, and each process that calls
+`references()` draws and models the eight systems again): the pinned
+digests of the reference systems and the purity of the generation
+(reference 1 generated again with `class_of`, same digest and
+timelines), `generate`'s timelines as `world::run` reads them (one per
+body, star first, body seeds, one keyframe at the present), every
+placement modelled with a
 valid state, unique trial seeds, reference 7's asked `earth-like` placed
 with a surface (the archetype's promise), the obliquity `class_of` read
 equal to the placement's, the class changes between draw and model and

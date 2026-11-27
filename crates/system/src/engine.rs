@@ -91,7 +91,6 @@ pub fn generate_with(
 
 #[cfg(test)]
 mod tests {
-    use science::units::Gyr;
     use timeline::Seed;
 
     use super::*;
@@ -102,7 +101,7 @@ mod tests {
         let inputs = Inputs {
             schema: INPUTS_SCHEMA,
             seed: Seed::new(1),
-            present: Some(Gyr(4.57)),
+            present: None,
             request: Request::Body(BodyRequest {
                 host_mass: None,
                 metallicity: None,

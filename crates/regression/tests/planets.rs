@@ -70,7 +70,7 @@ fn reads_of<'a>(reference: &'a Reference, placement: &Placement) -> Vec<&'a Logg
 #[test]
 fn the_reference_planets() {
     golden_digests();
-    the_draw_is_pure_within_a_run();
+    generation_is_pure_within_a_run();
     the_timelines_follow_the_draw();
     every_reference_planet_is_modelled();
     every_trial_seed_is_unique();
@@ -111,7 +111,7 @@ fn golden_digests() {
 /// reference request again, with the planet model's `class_of` instead of
 /// the logging classifier, gives the digest and the timelines of the
 /// shared build.
-fn the_draw_is_pure_within_a_run() {
+fn generation_is_pure_within_a_run() {
     let request = &reference_requests()[0];
     let again = generate_with(request, class_of).unwrap();
     assert_eq!(
