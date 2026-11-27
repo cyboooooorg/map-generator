@@ -157,10 +157,12 @@ must not change.
   `drawn`, one keyframe dated at `present`, every keyframe valid, and
   the planet states equal to what the previous regression loop
   produced (the pinned values staying green is that proof).
-  Determinism: `generate` twice on one reference gives equal output.
+  Determinism: the two generations of the next item are equal.
 - `generate` (with `class_of`) and `generate_with(…, class_of)` agree:
-  checked on the reference whose report the CLI tests already build, so
-  no extra generation.
+  checked on the request of reference 1 alone, without `references()`
+  (nextest runs each test in its own process, so reusing another
+  test's generation is not possible; two generations of one seed cost
+  less than the eight references).
 - `crates/cli/tests/system.rs` and `crates/regression/tests/cli.rs`
   move to schema 3 and the new pointers.
 - Tier budgets: the regression references are generated once per

@@ -28,17 +28,24 @@ placement once, then builds the present keyframes; `generate` is it with
   `seed` = `drawn.seed`.
 - Every keyframe is built after the last `model` call.
 - No test generates a system of its own outside tier 3: new tests use
-  `regression::references()` or the CLI tests' reference 1.
+  `regression::references()` or the request of reference 1
+  (`reference_requests()[0]`).
+- Tier 2 runs in debug (`mise run test:tier2`, no `--release`) and
+  nextest runs each test in its own process: every test that calls
+  `references()` pays the draw and model of all 8 references. New tests
+  call it at most once per test binary's test, and are as few as the
+  assertions allow (budget 480 s).
 - `REPORT_SCHEMA` goes from 2 to 3.
 
 ## Review Focus
 
 - A `Request::Body` input: `generate` returns `SystemError::BodyRequestNotDrawn`,
-  no panic (covered by an existing draw path; Task 1 adds the assertion
-  on `generate`'s error without drawing a system).
-- A system with zero planets: `generate` returns the star timeline only
-  (Task 1 asserts `timelines.len() == 1 + placements.len()` on every
-  reference, which includes it when one has none).
+  no panic (`draw_system` returns it before drawing the star,
+  `draw/mod.rs:97-100`; Task 1 asserts it on `generate`).
+- A system with zero planets: `generate` returns the star timeline
+  only. No special case in the code (the planet loop runs zero times);
+  Task 1's `1 + placements.len()` assertion covers it only if a
+  reference draws no planet, which the plan does not require.
 - `world::run` reading the result: the planet's present keyframe is
   found by `date() == timeline.present` (Task 1 asserts it).
 - `--explain <code>` with the code present in several keyframes: lists
@@ -81,32 +88,32 @@ placement once, then builds the present keyframes; `generate` is it with
   }
   ```
 
-- [ ] **Step 1: Write the failing tests** in `crates/regression/tests/generate.rs` (tier 2):
-  - `one_timeline_per_body_star_first`: for every `r` in `references()`,
-    `r.timelines.len() == 1 + r.drawn.placements.len()`;
-    `r.timelines[0].body == r.drawn.designation`, `seed == r.drawn.seed`,
-    its keyframe state is `BodyState::Star`; for each `(i, p)`,
-    `r.timelines[i + 1].body == p.designation`, `.seed == p.seed`.
-  - `each_timeline_has_its_present_keyframe`: every timeline has
-    `engine == ENGINE_VERSION`, `present == *r.drawn.age.value()`,
-    `keyframes.len() == 1`, `keyframes.iter().find(|k| k.date() == t.present).is_some()`,
-    and `keyframe.validate()` is `Ok`.
-  - `the_draw_s_ids_index_the_trace`: for every placement,
-    `r.trace.node(p.trial.mass.node()).is_some()`.
+- [ ] **Step 1: Write the failing tests** in `crates/regression/tests/generate.rs` (tier 2), three tests:
+  - `the_timelines_follow_the_draw` (one `references()` call, every
+    assertion over every `r`):
+    - `r.timelines.len() == 1 + r.drawn.placements.len()`;
+    - `r.timelines[0].body == r.drawn.designation`,
+      `r.timelines[0].seed == r.drawn.seed`, its keyframe state is
+      `BodyState::Star`;
+    - for each `(i, p)` of `r.drawn.placements`:
+      `r.timelines[i + 1].body == p.designation`,
+      `r.timelines[i + 1].seed == p.seed`, and
+      `r.trace.node(p.trial.mass.node()).is_some()`;
+    - every timeline: `engine == ENGINE_VERSION`,
+      `present == *r.drawn.age.value()`, `keyframes.len() == 1`,
+      `keyframes[0].date() == present`, `keyframes[0].validate().is_ok()`.
   - `generate_is_generate_with_class_of`: on `reference_requests()[0]`,
-    `system::generate(&inputs).unwrap() == system::generate_with(&inputs, class_of).unwrap().timelines`,
-    and `generate` twice gives equal output (determinism). Two
-    generations of reference 1: note the time in the commit body; if it
-    exceeds 5 s release, compare against `references()[0].timelines`
-    instead (same classifier outcome; the logging closure returns
-    `read.outcome`).
+    `system::generate(&inputs).unwrap() == system::generate_with(&inputs, class_of).unwrap().timelines`.
+    It does not call `references()`: two generations of one seed, which
+    also proves determinism within a run.
   - `a_body_request_is_not_drawn`: `generate` on an `Inputs` with
-    `Request::Body(..)` returns `Err(SystemError::BodyRequestNotDrawn)`
-    (fails before any draw, so it generates nothing).
+    `Request::Body(BodyRequest { .. })` returns
+    `Err(SystemError::BodyRequestNotDrawn)` (`SystemError` derives
+    `PartialEq`, `error.rs:14`: `assert_eq!`).
 
 - [ ] **Step 2: Run them to see them fail**
 
-  Run: `cargo nextest run -p regression --test generate`
+  Run: `cargo nextest run --profile tier2 -p regression --test generate`
   Expected: compile error (`generate_with`, `Reference::timelines` missing).
 
 - [ ] **Step 3: Implement `generate_with` and `generate` in `crates/system/src/engine.rs`**
@@ -138,12 +145,15 @@ placement once, then builds the present keyframes; `generate` is it with
 
 - [ ] **Step 6: Run the regression tier and the new tests**
 
-  Run: `cargo nextest run -p regression --profile tier2`
+  Run: `mise run test:tier2` (CLI tests in `regression/tests/cli.rs`
+  still pass here: `report` is untouched until Task 2)
   Expected: PASS, `golden_digests` and `the_reference_planets_are_pinned` unchanged.
 
-- [ ] **Step 7: Document** `crates/system/README.md`: the engine's entry
-  points (`generate`, `generate_with`, `Generated`), replacing any
-  mention of the future signature.
+- [ ] **Step 7: Document** `crates/system/README.md`: the `engine` row
+  (line 21, "`generate(inputs) -> Vec<Timeline>` (signature only)")
+  names `generate`, `generate_with`, `Generated`; the `planet` row
+  (line 20, "the CLI runs `model` on each placement") says `generate`
+  does.
 
 - [ ] **Step 8: Commit**
 
@@ -159,10 +169,10 @@ placement once, then builds the present keyframes; `generate` is it with
 
 **Files:**
 - Modify: `crates/cli/src/report.rs` (whole `report` and the structs)
-- Modify: `crates/cli/src/explain.rs:118-129` (`graphs`), its doc at lines 1-10, its unit tests if they build a schema-2 value
-- Modify: `crates/cli/src/system.rs` (help text naming pointers, if any)
+- Modify: `crates/cli/src/explain.rs:118-129` (`graphs`), its module doc (lines 1-6), its unit test at line 337 if its `json!` report uses `/star` or `/planets/../state`
+- Modify: `crates/cli/src/system.rs:17` (`--explain` help example pointer)
 - Modify: `crates/regression/tests/cli.rs`, `crates/cli/tests/system.rs:70`
-- Modify: `crates/cli/README.md`, `README.md:46`, `docs/superpowers/specs/2026-11-22-cli-world-design.md` (`generate` exists)
+- Modify: `crates/cli/README.md:30-56` (output section and example), `README.md:46`, `docs/superpowers/specs/2026-11-22-cli-world-design.md` (`generate` exists)
 
 **Interfaces:**
 - Consumes: `system::{generate_with, Generated}` from Task 1.
@@ -199,14 +209,18 @@ placement once, then builds the present keyframes; `generate` is it with
     expected text as today.
   - `a_repeated_code_is_ambiguous`: count planets from
     `report["timelines"].len() - 1`; the error still lists one pointer
-    per planet.
+    per planet, each starting with `/timelines/`.
+  - `a_unique_code_explains_it` (`system.star.mass`) stays as is: the
+    star's nodes are copied into every planet keyframe that depends on
+    them, and `explain_code` already keeps one tree per distinct
+    rendered text, so the code stays unique.
   - `crates/cli/tests/system.rs:70`: `/planets/0/designation` still
     exists in schema 3; keep the test, check it still exits 1.
 
 - [ ] **Step 2: Run them to see them fail**
 
-  Run: `cargo nextest run -p regression --test cli`
-  Expected: FAIL (schema 2 shape).
+  Run: `cargo nextest run --profile tier2 -p regression --test cli`
+  Expected: compile error or FAIL (schema 2 shape).
 
 - [ ] **Step 3: Rewrite `report`** on `generate_with(inputs, class_of)?`:
   build `planets` from `drawn.placements` (designation, archetype,
@@ -215,15 +229,18 @@ placement once, then builds the present keyframes; `generate` is it with
 
 - [ ] **Step 4: `graphs()` reads every timeline's keyframes**
   (`/timelines/*/keyframes/*`) plus the report's own graph. Update the
-  module doc (lines 1-10) for the new shape.
+  module doc (lines 1-6: "a keyframe's own graph, or the report's") and
+  the `--explain` help at `system.rs:17`.
 
 - [ ] **Step 5: Run the CLI tests**
 
-  Run: `cargo nextest run -p regression --test cli && cargo nextest run -p cli`
+  Run: `cargo nextest run --profile tier2 -p regression --test cli && cargo nextest run --profile tier1 -p map-generator`
   Expected: PASS.
 
-- [ ] **Step 6: Documentation**: `README.md:46` and `crates/cli/README.md`
-  examples use the schema-3 pointer and describe the report keys;
+- [ ] **Step 6: Documentation**: `README.md:46` and `crates/cli/README.md:56`
+  examples use the schema-3 pointer; `crates/cli/README.md:30-48`
+  describes the schema-3 keys (`timelines`, `planets`, `causes` of the
+  drawn masses only);
   `2026-11-22-cli-world-design.md` says `system::generate` exists (one
   line, signature unchanged).
 
@@ -239,5 +256,5 @@ placement once, then builds the present keyframes; `generate` is it with
 ### Task 3: Verification
 
 - [ ] **Step 1:** `mise run ci` in `~/Developer/mg-system-generate`. Expected: PASS within the tier budgets (tier 2 ≤ 480 s).
-- [ ] **Step 2:** `branch-reviewer` and `test-reviewer` on `feat/system-generate` with the spec and this plan, then `issue-auditor` with their reports and the draft PR text. Fix, re-run `mise run ci`.
+- [ ] **Step 2:** `branch-reviewer` and `test-reviewer` in parallel on `feat/system-generate` with the spec and this plan, then `issue-auditor` with their reports and the draft PR text (agents defined in origin/main's `.claude/agents/`). Fix, re-run `mise run ci`. Note the tier-2 time of `generate.rs` before and after in the PR text.
 - [ ] **Step 3:** Tell mapgen1 and mapgen2 before any `develop` rebuild; ask the user before opening the PR.
