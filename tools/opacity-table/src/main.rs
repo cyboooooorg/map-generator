@@ -41,7 +41,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use hitran::{Line, PartitionSum, T_REF, parse_line, strength_at};
 use kdist::{G, reduce};
 use lbl::{Cutoff, Pedestal, Shape, bin_spectrum};
-use table::{Header, SETS, Set, encode};
+use table::{Header, Set, encode};
 
 /// Avogadro constant, 1/mol (CODATA 2018, exact).
 const AVOGADRO: f64 = 6.022_140_76e23;
@@ -74,8 +74,11 @@ struct Isotopologue {
 }
 
 /// The main isotopologues of H₂O (161, 181, 171, 162) and CO₂ (626, 636,
-/// 628, 627), each over 1e-4 of its gas.
-const ISOTOPOLOGUES: [Isotopologue; 8] = [
+/// 628, 627), each over 1e-4 of its gas; every isotopologue HITRAN lists
+/// for O₃ (666, 668, 686, 667, 676), CH₄ (211, 311, 212, 312) and N₂O
+/// (446, 456, 546, 448, 447), the molar masses of its isotopologue table
+/// (hitran.org/docs/iso-meta, read 2026-11-26).
+const ISOTOPOLOGUES: [Isotopologue; 22] = [
     Isotopologue {
         molecule: 1,
         local: 1,
@@ -123,6 +126,90 @@ const ISOTOPOLOGUES: [Isotopologue; 8] = [
         local: 4,
         global: 10,
         molar_kg: 44.994_045e-3,
+    },
+    Isotopologue {
+        molecule: 3,
+        local: 1,
+        global: 16,
+        molar_kg: 47.984_745e-3,
+    },
+    Isotopologue {
+        molecule: 3,
+        local: 2,
+        global: 17,
+        molar_kg: 49.988_991e-3,
+    },
+    Isotopologue {
+        molecule: 3,
+        local: 3,
+        global: 18,
+        molar_kg: 49.988_991e-3,
+    },
+    Isotopologue {
+        molecule: 3,
+        local: 4,
+        global: 19,
+        molar_kg: 48.988_960e-3,
+    },
+    Isotopologue {
+        molecule: 3,
+        local: 5,
+        global: 20,
+        molar_kg: 48.988_960e-3,
+    },
+    Isotopologue {
+        molecule: 6,
+        local: 1,
+        global: 32,
+        molar_kg: 16.031_300e-3,
+    },
+    Isotopologue {
+        molecule: 6,
+        local: 2,
+        global: 33,
+        molar_kg: 17.034_655e-3,
+    },
+    Isotopologue {
+        molecule: 6,
+        local: 3,
+        global: 34,
+        molar_kg: 17.037_475e-3,
+    },
+    Isotopologue {
+        molecule: 6,
+        local: 4,
+        global: 35,
+        molar_kg: 18.040_830e-3,
+    },
+    Isotopologue {
+        molecule: 4,
+        local: 1,
+        global: 21,
+        molar_kg: 44.001_062e-3,
+    },
+    Isotopologue {
+        molecule: 4,
+        local: 2,
+        global: 22,
+        molar_kg: 44.998_096e-3,
+    },
+    Isotopologue {
+        molecule: 4,
+        local: 3,
+        global: 23,
+        molar_kg: 44.998_096e-3,
+    },
+    Isotopologue {
+        molecule: 4,
+        local: 4,
+        global: 24,
+        molar_kg: 46.005_308e-3,
+    },
+    Isotopologue {
+        molecule: 4,
+        local: 5,
+        global: 25,
+        molar_kg: 45.005_278e-3,
     },
 ];
 
@@ -334,7 +421,7 @@ fn shapes(gas: &Gas, broadening: Set, p_bar: f64, t_k: f64) -> Vec<Shape> {
         .filter_map(|line| {
             let &(_, doppler, q_ref, q_t) =
                 per_isotopologue.iter().find(|i| i.0 == line.isotopologue)?;
-            let gamma = if matches!(broadening, Set::WaterSelf | Set::Co2Self) {
+            let gamma = if broadening.self_broadened() {
                 line.gamma_self
             } else {
                 line.gamma_air
@@ -579,17 +666,34 @@ fn run() -> Result<(), String> {
     }
     let water = read_gas(&o, "h2o_", 1, 18.015e-3, Pedestal::Flat)?;
     let co2 = read_gas(&o, "co2_", 2, 44.009e-3, Pedestal::Quadratic)?;
+    // Methane, ozone and N₂O enter the longwave table only; LBLRTM cuts
+    // their lines with the flat pedestal of every molecule but CO₂
+    // ([`Pedestal`]).
+    let (ch4, o3, n2o) = if o.shortwave {
+        (None, None, None)
+    } else {
+        (
+            Some(read_gas(&o, "ch4_", 6, 16.043e-3, Pedestal::Flat)?),
+            Some(read_gas(&o, "o3_", 3, 47.997e-3, Pedestal::Flat)?),
+            Some(read_gas(&o, "n2o_", 4, 44.013e-3, Pedestal::Flat)?),
+        )
+    };
     eprintln!(
-        "{} H2O lines, {} CO2 lines; {} bins over {:?} cm-1, {} pressures, {} temperatures",
+        "{} H2O lines, {} CO2 lines, {} CH4 lines, {} O3 lines, {} N2O lines; {} bins over \
+         {:?} cm-1, {} pressures, {} temperatures",
         water.lines.len(),
         co2.lines.len(),
+        ch4.as_ref().map_or(0, |g| g.lines.len()),
+        o3.as_ref().map_or(0, |g| g.lines.len()),
+        n2o.as_ref().map_or(0, |g| g.lines.len()),
         header.bins,
         (header.bin(0).0, header.bin(header.bins - 1).1),
         header.pressures_bar.len(),
         header.temperatures_k.len()
     );
     let (n_p, n_t) = (header.pressures_bar.len(), header.temperatures_k.len());
-    let jobs: Vec<(usize, usize, usize)> = (0..SETS.len())
+    let sets = header.sets();
+    let jobs: Vec<(usize, usize, usize)> = (0..sets.len())
         .flat_map(|s| (0..n_p).flat_map(move |p| (0..n_t).map(move |t| (s, p, t))))
         .collect();
     let next = AtomicUsize::new(0);
@@ -605,11 +709,13 @@ fn run() -> Result<(), String> {
                         let Some(&(s, p, t)) = jobs.get(i) else {
                             break;
                         };
-                        let set = SETS[s];
-                        let gas = if matches!(set, Set::Co2 | Set::Co2Self) {
-                            &co2
-                        } else {
-                            &water
+                        let set = sets[s];
+                        let gas = match set {
+                            Set::Co2 | Set::Co2Self => &co2,
+                            Set::WaterForeign | Set::WaterSelf => &water,
+                            Set::Ch4 | Set::Ch4Self => ch4.as_ref().expect("longwave"),
+                            Set::O3 => o3.as_ref().expect("longwave"),
+                            Set::N2o => n2o.as_ref().expect("longwave"),
                         };
                         let (p_bar, t_k) = (header.pressures_bar[p], header.temperatures_k[t]);
                         let codes = job(gas, set, &header, p_bar, t_k);

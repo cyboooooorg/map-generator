@@ -174,6 +174,7 @@ fn a_wet_methane_balance_is_its_own_airs() {
         e.get()
             * outgoing_longwave(
                 &air,
+                inputs.longwave_ozone(),
                 Kelvin(x),
                 skin(light),
                 inputs.gravity,

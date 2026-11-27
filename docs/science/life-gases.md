@@ -281,24 +281,49 @@ ratios carry over.
 
 ### What it does now
 
-- **No biogenic gas.** `science::life::oxygenate` (planet PR 2d-4) gives
-  a `Modern` air O₂ at `O2_PER_N2` of its N₂ and removes its methane; an
-  `Oxidising` air loses its methane and keeps no O₂ (#717); `Anoxic` and
-  `Lifeless` airs pass through. N₂O is not a gas of the model
-  (`PartialPressures` holds N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂ and Ar;
-  #737).
+- **The `Modern` methane law is in `science`, not yet wired.**
+  `science::life_gases::modern_methane(stars, gravity)` gives the
+  methane of a `Modern` air, bar by weight (the column reads it as a
+  mole share, issue #749): $p = \Phi_A \tau g$ with
+  Prather et al. 2012's 202 Tg/yr spread over Earth's 5.112e14 m² and
+  their 9.5 years times the host factor of each star (calibration 1,
+  `methane_host_factor`), the stars' loss rates added by their share of
+  the light (calibration 2, `methane_lifetime`). Around the Sun on
+  Earth's 9.798 m/s² it gives 3.678e-7 bar, 672.8 ppb by moles in the
+  reference air, inside Prather et al.'s 680 ± 24 like for like
+  (`modern_methane_around_the_sun_is_prathers_column`). Planet PR 2d-4
+  calls it from its `Modern` stage (`life::oxygenate`); until then no
+  engine reads it, and the reference bodies' airs are unchanged.
+- **No biogenic gas in the engines yet.** `science::life::oxygenate`
+  (planet PR 2d-4) gives a `Modern` air O₂ at `O2_PER_N2` of its N₂ and
+  removes its methane; an `Oxidising` air loses its methane and keeps no
+  O₂ (#717); `Anoxic` and `Lifeless` airs pass through. N₂O is not a gas
+  of the model (`PartialPressures` holds N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂
+  and Ar; #737).
 - **Abiotic methane only.** Outgassed methane survives only under an
   equilibrium temperature of 150 K (`photochemistry::METHANE_SURVIVES`,
   a calibration) and is destroyed by Lyman α photolysis
   (`methane_left`).
-- **No lines yet, only pairs.** The infrared column has no methane or
-  N₂O lines (study 36 adds methane's first, N₂O's later). Methane
-  absorbs only through its N₂-CH₄ and CH₄-CH₄ pairs
-  (`radiation::spectrum::PAIRS`): study 36's first pull request removed
-  the grey stand-in for Titan's pairs (`radiation::methane`,
-  `CH4_OPACITY` 15.1, a calibration) that acted on any air holding
-  methane. Methane's lines, which this law joins, add to the pairs
-  without counting methane twice.
+- **Methane's lines are in the column (#704).** The infrared column
+  absorbs in methane's HITRAN lines (broadened by air and by methane
+  itself, `opacity.bin`'s sets 4 and 5, `CH4_SET` and `CH4_SELF_SET`,
+  counted from 0) on top of its N₂–CH₄ and
+  CH₄–CH₄ pairs (`radiation::spectrum::PAIRS`), the gases overlapped at
+  random. The grey stand-in that acted on any air holding methane
+  (`CH4_OPACITY`) went with study 36's first pull request, so no path
+  counts methane twice: the column reads one `ch4` per level, the lines
+  and the pairs each once, and the test airs that hold none
+  (`EARTH_MEASURED_AIR`, `EARTH_DRY_AIR`) stay without methane; the
+  CERES test carried CERES's 1803 ppb and dropped methane's 1.5 W/m²
+  from its `MINOR_GASES_W_M2`, until study 40 removed it.
+- **Weights read as moles (a departure).** The chain's partial pressures
+  are weights; the column reads $p_i/p$ as a share of the moles. The
+  law's 3.678e-7 bar of methane is 672.8 ppb by moles in Earth's air,
+  but the column would read it as 373 ppb ($16.04/28.96$ of it), so
+  methane's lines would take about half of what they should once 2d-4
+  wires it. The same holds for argon (radiative-transfer.md, "Gases that
+  only broaden") and for Titan's chain methane. Not fixed here: it
+  changes every air the column reads (issue #749).
 
 ### Where the code's docs disagree
 
@@ -382,8 +407,9 @@ points after its review:
   dwarfs. Interpolated in the logarithm, held past the ends, with its
   cliff and its faults written down.
 - **Methane first, with its lines** (study 36's second pull request).
-  N₂O comes later, with its lines and the `FORMAT` change of a new gas
-  (#737).
+  N₂O's lines joined the same rebuild of the table (decided 2026-11-27:
+  methane's tests need the N₂O of the line-by-line codes' air); N₂O as
+  a gas, its law and the `FORMAT` change come later (#737).
 - **`Oxidising`** keeps no CH₄ and no N₂O until #717 gives it O₂; a
   study follows then (#736). **`Anoxic`** gets its own study (#735).
 - **Several stars** (calibration 2): the loss rates add, each star
@@ -393,7 +419,9 @@ points after its review:
 
 ## Calibrations
 
-Decided 2026-11-26, none in the code yet.
+Decided 2026-11-26. Methane's are in the code since #704
+(`science::life_gases`); N₂O's wait for N₂O as a gas (#737; its
+lines are in the column's table since #704).
 
 ### Calibration 1: the host factor
 
@@ -422,6 +450,11 @@ more around an M8.
 Searched and not found: a law of either gas's lifetime against the
 host's ultraviolet; any model outside the Kasting family around a host
 other than the Sun; runs at pre-industrial fluxes.
+
+In the code (methane): `life_gases::methane_host_factor`, from the
+abundances `RK2018_CH4_PPM` and `RUGHEIMER_2015A_CH4_PPM` over their
+Suns' 1.73 and 1.6 ppm (`Calibration:` and `Source:`), tested at every
+grid point and past both ends (`host_factor_is_the_grids_ratio_at_its_points`).
 
 Its known faults:
 
@@ -453,7 +486,10 @@ Its known faults:
 
 Loss rates add: $1/\tau = \sum_i w_i/\tau_i$, each star's factor
 weighted by its share of the planet's light. The grids hold one star at
-Earth's total light; no source treats two hosts.
+Earth's total light; no source treats two hosts. In the code:
+`methane_lifetime` (stars whose flux is not positive count for nothing;
+with none, Earth's 9.5 years), tested by
+`several_stars_add_their_loss_rates_by_light`.
 
 ## Departures
 
@@ -465,7 +501,8 @@ Earth's total light; no source treats two hosts.
 - **No methane feedback (#738)**, since no flux other than Earth's
   exists yet.
 - **No CH₄ or N₂O in `Oxidising` (#736) or biogenic in `Anoxic`
-  (#735) airs; no N₂O at all until its lines (#737).**
+  (#735) airs; no N₂O in any air until N₂O is a gas (#737), though
+  the column's table holds its lines.**
 - **M dwarfs' activity (#739):** active here, quiescent for ozone.
 
 ## Effect on Earth
@@ -486,10 +523,11 @@ pairs' 0.83 ratio, temperature at study 32's 2.0 W/m²/K:
 
 Methane's sunlight at these amounts moves the Bond albedo by less than
 0.0005 (study 36). The CERES test of PR #711
-(`earths_clear_sky_column_is_ceres_like_for_like`) runs on a fixed test
-air, not on the engine's: it reads no law. When methane's lines land,
-its air can carry the measured methane of CERES's years as a test input
-and its `MINOR_GASES_W_M2` drop methane's 1.5 W/m² (study 36).
+(`earths_clear_sky_column_is_ceres_like_for_like`) ran on a fixed test
+air, not on the engine's: it read no law. With methane's lines (#704)
+its air carried the measured methane of CERES's years as a test input
+and its `MINOR_GASES_W_M2` dropped methane's 1.5 W/m² (study 36); study
+40 then removed the test, its gap left to track T11 (#757).
 
 ## Sources
 

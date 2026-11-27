@@ -47,8 +47,8 @@ use crate::planet::tests::{
 use crate::planet::tests::{derived_from, trial, water_world_trial};
 use crate::planet::water::boiled;
 use science::balance::{
-    EARTH_DRY_AIR, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, TOLERANCE, absorbed,
-    earth_moist_plateau, moist_plateau, skin,
+    EARTH_DRY_AIR, EARTH_PLATEAU_OZONE, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, TOLERANCE,
+    absorbed, earth_moist_plateau, moist_plateau, skin,
 };
 use science::constants::{PASCALS_PER_BAR, STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss};
@@ -625,6 +625,7 @@ fn plateau_surfaces_are_converged() {
     assert!(surfaces.len() > PLATEAU_SURFACES.len());
     let finer = moist_plateau(
         &EARTH_DRY_AIR,
+        EARTH_PLATEAU_OZONE,
         Bar(f64::INFINITY),
         STANDARD_GRAVITY,
         Profile::PLATEAU,
@@ -888,6 +889,7 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
         let sent = c.emissivity.get()
             * outgoing_longwave(
                 &c.air,
+                at.longwave_ozone(),
                 c.temperature,
                 skin(light),
                 at.gravity,
@@ -1244,7 +1246,16 @@ fn doubling_the_nitrogen_warms_a_late_archean_earth_by_a_few_kelvin() {
                 ..gases
             };
             let mut at = |profile| {
-                outgoing_longwave(&wet, Kelvin(t), skin, faint.gravity, profile, &mut cache).0
+                outgoing_longwave(
+                    &wet,
+                    faint.longwave_ozone(),
+                    Kelvin(t),
+                    skin,
+                    faint.gravity,
+                    profile,
+                    &mut cache,
+                )
+                .0
             };
             let (clear, all) = (at(Profile::CLEAR), at(Profile::CLIMATE));
             let f = cover(t);
@@ -1940,15 +1951,17 @@ fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
 /// an orbit just past a methane Earth's outer edge where the albedo's
 /// fixed point has none (#729): a warm climate at its maximum greenhouse
 /// derives a Rayleigh albedo that collapses its CO₂, and the collapsed
-/// climate derives one that warms it back. The edge is 1.2534 AU since
-/// CO₂'s phase step was split (#746), measured by
-/// `one_greenhouse_search_on_a_condensing_air` (1.2588 AU with #703's
-/// pairs before it; 1.4365 AU under the grey stand-in, on `main` since
-/// #734, 1.4355 AU on #729's branch, when this orbit was 1.44 AU, then
-/// 1.272 AU). Orbits from 1.261 to 1.267 AU cycle (probed every 0.001 AU
-/// at the solver's numerics: 1.260 settles at its maximum greenhouse,
-/// 1.268 frozen), and this one is their middle.
-const CYCLING_AU: f64 = 1.264;
+/// climate derives one that warms it back. The edge is 1.2720 AU since
+/// methane's lines (#704), measured by
+/// `one_greenhouse_search_on_a_condensing_air` (1.2534 AU since CO₂'s
+/// phase step was split, #746; 1.2588 AU with #703's pairs before it;
+/// 1.4365 AU under the grey stand-in, on `main` since #734, 1.4355 AU on
+/// #729's branch, when this orbit was 1.44 AU, then 1.272 and 1.264 AU).
+/// Orbits from 1.280 to 1.285 AU cycle (probed every 0.001 AU at the
+/// solver's numerics, before #741: 1.268 to 1.272 settle warm and
+/// unregulated, 1.273 to 1.279 and from 1.286 frozen), and this one is
+/// their middle.
+const CYCLING_AU: f64 = 1.282;
 
 /// Definition: the most albedo steps the cycling orbit may take before
 /// its bracket closes, 40: the bracket narrows from the swing (about
@@ -1979,23 +1992,37 @@ fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
 }
 
 /// Definition: test inputs placed around a methane Earth's outer edge,
-/// where the collapse's step is held, AU: just inside it (1.25), at the
-/// edge measured by `one_greenhouse_search_on_a_condensing_air` (1.2534
-/// since #746; 1.2588 with #703's pairs before it) and past it, where
-/// the fixed point cycles ([`CYCLING_AU`]). Before #703 the edge was
-/// 1.4365 AU and the orbits were 1.42875, 1.4355 and 1.44 AU.
-const STEP_ORBITS: [f64; 3] = [1.25, 1.2534, CYCLING_AU];
+/// where the collapse's step is held, AU: just inside it (1.265), at the
+/// edge measured by `one_greenhouse_search_on_a_condensing_air` (1.2720
+/// since methane's lines, #704; 1.2534 since #746; 1.2588 with #703's
+/// pairs before it) and past it, where the fixed point cycles
+/// ([`CYCLING_AU`]). Before #703 the edge was 1.4365 AU and the orbits
+/// were 1.42875, 1.4355 and 1.44 AU; before #704, 1.25, 1.2534 and
+/// 1.264 AU.
+const STEP_ORBITS: [f64; 3] = [1.265, 1.272, CYCLING_AU];
 
 /// Definition: frozen climates where the collapse's step is held round
-/// cool stars (star, AU, CO₂): calls of the thaw search on a methane
-/// Earth near its outer edge, measured on #731 (main a97c1ca1), where
-/// each albedo step collapsed its CO₂ in up to 45 (3300 K) and 85
-/// (4500 K) evaluations before the
-/// step rules of 2026-11-27. The second one cycled with the old step.
+/// cool stars (star, AU, CO₂): a methane Earth round a 3300 K star at
+/// 0.94, 0.96 and 0.98 of its outer edge (1.4147 AU), with methane's
+/// lines (#704) and the clouds' infrared emissivity (#705), at the
+/// geometric mean of the CO₂ it froze with and the most its thaw search
+/// leaves frozen (15.96 and 20.91, 20.81 and 37.56, 30.13 and 51.28 bar),
+/// a CO₂ the search passes through frozen: 215.72, 210.37 and 205.46 K.
+/// At the most it leaves frozen, within 0.004 bar of its thaw, an icy
+/// start's branch depends on the step: at 0.94 the plain step lands warm
+/// (316.1 K) where the step rules stay frozen; at 0.98 all three land
+/// warm (385.0 K) since #759, where the solve stores a frozen snowball
+/// (205.47 K). None of these thaw searches meets a cycling icy start
+/// (#759's stop). On #731 (main
+/// a97c1ca1), before #704 and #705, they were 4500 K at 1.2828 AU with
+/// 19.0296 and 19.6173 bar (the second cycled with the old step) and
+/// 3300 K at 1.3586 AU with 45.9 bar; with #704 and #705 those three thaw
+/// (308.6, 309.8 and 381.4 K), and a methane Earth round a 4500 K star
+/// is no longer bistable up to its edge (1.3315 AU).
 const COOL_FROZEN: [(Kelvin, f64, Bar); 3] = [
-    (Kelvin(4500.0), 1.2828, Bar(19.0296)),
-    (Kelvin(4500.0), 1.2828, Bar(19.6173)),
-    (Kelvin(3300.0), 1.3586, Bar(45.9)),
+    (Kelvin(3300.0), 1.3298, Bar(18.27)),
+    (Kelvin(3300.0), 1.3581, Bar(27.96)),
+    (Kelvin(3300.0), 1.3864, Bar(39.31)),
 ];
 
 /// Earth at `au` round a star of `teff` with Titan's methane in its air
@@ -2092,39 +2119,4 @@ fn collapse_step_is_converged() {
             );
         }
     }
-}
-
-/// Definition: a test input placed by a probe, not a fact of any body: a
-/// methane Earth round a 4500 K star at 0.9 of the way from its runaway
-/// orbit to its outer edge, 1.2828 AU (#731), whose icy start cycles
-/// between about 19.40 and 19.64 bar of CO₂ and thaws above (measured on
-/// main f6462ba2). Study 36's methane lines are expected to thaw it.
-const CYCLING_THAW: (Kelvin, f64) = (Kelvin(4500.0), 1.2828);
-
-#[test]
-#[ignore = "heavy: the thaw search of a methane Earth round a 4500 K star, about 60 s"]
-fn a_snowball_thaws_where_its_icy_start_starts_cycling() {
-    let (teff, au) = CYCLING_THAW;
-    let inputs = methane_earth_at(au, teff);
-    let solved = solve(&inputs, COLD_DRAW);
-    let b = solved.bistable.expect("bistable");
-    let thaw = b.thaw.expect("a CO₂ it holds thaws it");
-    let c = &solved.settle;
-    println!(
-        "froze {:.4}, still frozen {:.4}, thaw {:.4} bar, chance {:.5}; snowball {:.3} K, \
-         cycles {}, converged {}",
-        b.froze.0,
-        b.still_frozen.0,
-        thaw.0,
-        b.chance.get(),
-        c.temperature.0,
-        c.cycles,
-        c.converged
-    );
-    // The snowball is a frozen balance, not a cycle's cold side.
-    assert_eq!(solved.state, ClimateState::Snowball, "{solved:?}");
-    assert!(c.converged && !c.cycles && frozen_over(c), "{c:?}");
-    // Its thaw is where its icy start stops holding: it cycles there.
-    let at_thaw = frozen_at(&mut ClimateBody::new(&inputs, Numerics::DEFAULT), thaw);
-    assert!(at_thaw.cycles, "{thaw:?}: {at_thaw:?}");
 }

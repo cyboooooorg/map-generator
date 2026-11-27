@@ -7,7 +7,7 @@ use super::*;
 use crate::constants::SOLAR_EFFECTIVE_TEMPERATURE;
 use crate::orbit::EARTH_EQUILIBRIUM;
 use crate::radiation::test_points::{
-    EARTH_SURFACE_K, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K,
+    EARTH_SURFACE_K, NO_OZONE, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K,
 };
 
 /// Definition: the thin air of the greenhouse test, bar: 1 of N₂ and
@@ -145,6 +145,7 @@ fn earth_surface(gases: &PartialPressures, heat: WattPerSquareMetre) -> f64 {
     surface_temperature(
         earth_light(),
         gases,
+        NO_OZONE,
         heat,
         black(),
         STANDARD_GRAVITY,
@@ -196,6 +197,7 @@ fn a_dark_body_is_warmed_by_its_heat_alone() {
         let t = surface_temperature(
             DARK_STARLIGHT,
             &gases,
+            NO_OZONE,
             DARK_HEAT,
             black(),
             STANDARD_GRAVITY,
@@ -269,6 +271,7 @@ fn iterations_is_converged() {
         let root = surface_root(
             light,
             &gases,
+            NO_OZONE,
             heat,
             black(),
             gravity,
@@ -295,6 +298,7 @@ fn titans_pairs_hold_its_column_just_under_its_measured_surface() {
     let t = surface_temperature(
         starlight_of(Kelvin(TITAN_EFFECTIVE_K)),
         &TITAN_SURFACE_AIR,
+        NO_OZONE,
         WattPerSquareMetre(0.0),
         black(),
         TITAN_GRAVITY,
@@ -433,6 +437,7 @@ fn wet_earth(dry: &PartialPressures) -> f64 {
         };
         outgoing_longwave(
             &gases,
+            NO_OZONE,
             Kelvin(t),
             sky,
             STANDARD_GRAVITY,

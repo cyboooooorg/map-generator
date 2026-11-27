@@ -67,10 +67,11 @@ pub(crate) fn wet_balance(
     if bare >= CRITICAL_POINT_TEMPERATURE.0 {
         return None;
     }
+    let ozone = body.inputs.longwave_ozone();
     let columns = &mut body.columns;
     let mut excess_of = |t: f64, profile: Profile| {
         let gases = with_vapour(air, t, water);
-        e * outgoing_longwave(&gases, Kelvin(t), skin, gravity, profile, columns).0
+        e * outgoing_longwave(&gases, ozone, Kelvin(t), skin, gravity, profile, columns).0
             - absorbed(starlight, &gases, heat).0
     };
     let probe_holds = numerics
@@ -158,6 +159,7 @@ pub(crate) fn wet_climate(
     let t = surface_temperature(
         starlight,
         &steam,
+        i.longwave_ozone(),
         i.heat_flux,
         emissivity,
         i.gravity,

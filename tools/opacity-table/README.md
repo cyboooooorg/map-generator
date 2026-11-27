@@ -9,8 +9,9 @@ text files of the continua and the collision-induced pairs,
 with `--ozone` ozone's shortwave cross-sections on the same bands,
 `ozone.tsv`.
 
-`opacity.bin` is the correlated-k table of CO₂ and water line
-absorption, with MT_CKD's CO₂ continuum, that the climate column of the
+`opacity.bin` is the correlated-k table of the line absorption of CO₂,
+water, methane, ozone and N₂O, with MT_CKD's CO₂ continuum, that the climate
+column of the
 `science` crate reads. The generator never runs this tool: the tables are
 committed, and this tool only regenerates them. Their provenance, layout
 and citations are in `crates/science/data/OPACITY.md`.
@@ -18,11 +19,13 @@ and citations are in `crates/science/data/OPACITY.md`.
 ## Purpose
 
 For each absorber set (CO₂ broadened by air, water broadened by air, water
-broadened by itself, CO₂ broadened by itself), each pressure and each
+broadened by itself, CO₂ broadened by itself, methane broadened by air,
+methane broadened by itself, ozone broadened by air, N₂O broadened by
+air; the shortwave table keeps the first four), each pressure and each
 temperature of the grid, the tool sums the HITRAN lines of every 20 cm⁻¹
 bin from 0 to 5000 cm⁻¹ line by line (Voigt profiles cut at 25 cm⁻¹, less
-the pedestal MT_CKD's continua assume: water's flat plinth, CO₂'s
-quadratic one from LBLRTM), sorts the absorption coefficients of the bin
+the pedestal LBLRTM removes: water's, methane's, ozone's and N₂O's flat one at
+the cutoff, CO₂'s quadratic one), sorts the absorption coefficients of the bin
 and keeps the mean of each of 8 g-intervals. It writes them, quantised in
 `ln k`, into one binary file, followed by MT_CKD's CO₂ continuum averaged
 over the same bins.
@@ -47,14 +50,27 @@ tools/opacity-table/fetch.sh
 It fetches:
 
 - HITRAN line lists through HITRAN's public line-by-line API, in pieces of
-  250 cm⁻¹ from 0 to 14 500 cm⁻¹ (a piece without lines is answered 404
+  250 cm⁻¹ from 0 to 14 500 cm⁻¹ for water and CO₂ and from 0 to
+  5250 cm⁻¹ for ozone, methane and N₂O (a piece without lines is answered 404
   and kept as an empty file), for the main isotopologues (global ids 1-4:
   H₂¹⁶O, H₂¹⁸O, H₂¹⁷O, HD¹⁶O; 7-10: ¹²C¹⁶O₂, ¹³C¹⁶O₂, ¹⁶O¹²C¹⁸O,
-  ¹⁶O¹²C¹⁷O), as 160-character `.par` records:
+  ¹⁶O¹²C¹⁷O; 16-20: ¹⁶O₃ and its four ¹⁸O and ¹⁷O isotopologues
+  (666, 668, 686, 667, 676); 21-25: N₂O 446, 456, 546, 448, 447;
+  32-35: ¹²CH₄, ¹³CH₄, ¹²CH₃D, ¹³CH₃D), as
+  160-character `.par` records:
   `https://hitran.org/lbl/api?iso_ids_list=1,2,3,4&numin=0&numax=250&head=False&fixwidth=0&sep=[comma]&request_params=par_line`
-  (and so on for each piece, and `iso_ids_list=7,8,9,10` for CO₂). The
+  (and so on for each piece, `iso_ids_list=7,8,9,10` for CO₂,
+  `16,17,18,19,20` for ozone, `21,22,23,24,25` for N₂O,
+  `32,33,34,35` for methane). The
   server's `Content-Length` overstates each body by one byte per line, so
   `curl` reports exit code 18 on complete files; the script accepts it.
+  Check the pieces before building: on 2026-11-27 three water pieces came
+  back mixed with another molecule's records (CO₂ and CO lines, some cut
+  short); the tool refuses a malformed record but keeps going on a
+  well-formed one of another molecule, which it drops. A piece whose
+  records are not all 160 characters, or whose first two characters are
+  not its molecule's number, is to be deleted and fetched again
+  (`awk 'length($0) != 160'`, `cut -c1-2 | sort | uniq -c`).
   The API serves the current HITRAN edition: HITRAN2024 (Gordon et al.
   2026) since January 2026.
 - The HITRAN partition sums (TIPS), `https://hitran.org/data/Q/q<id>.txt`
@@ -96,8 +112,9 @@ cargo run --release -j 4 -p opacity-table -- \
 
 The first command writes `crates/science/data/opacity.bin`; the second
 writes the test-only table on bins half as wide, which the test
-`halving_bins_keeps_the_forcing` of `spectrum.rs` reads. Both take about
-three minutes on four threads.
+`halving_bins_keeps_the_forcing` of `spectrum.rs` reads. With methane's,
+ozone's and N₂O's four sets they take about twelve and three minutes on four
+threads.
 
 To build the shortwave table:
 

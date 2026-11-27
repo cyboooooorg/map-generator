@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::radiation::starlight::band_edge_m;
+use crate::radiation::test_points::{DRY_AIR_MOLAR_MASS, dobson_column};
 
 /// Source: the Hartley band's peak at 223 K, 1.165e-17 cm² at 255.3 nm
 /// (Serdyuchenko et al. 2014, data file `serdyuchenkogorshelev5digits.dat`,
@@ -161,4 +162,49 @@ fn an_air_without_oxygen_holds_no_ozone() {
     for t in [0.0, -1.0, f64::NAN, f64::INFINITY] {
         assert_eq!(ozone_column(EARTH_O2, Kelvin(t)), EARTH_OZONE_COLUMN);
     }
+}
+
+/// Source: the ozone column of the U.S. Standard profile, 346 DU (study
+/// 34 integrated libRadtran's `afglus.dat`, `docs/science/ozone.md`,
+/// "Where ozone comes from"), at its surface, 1.013 bar.
+const AFGL_US_COLUMN: (f64, f64) = (1.013, 346.0);
+
+/// Calibration: how far [`AFGL_US_OZONE`]'s own column (342.9 DU) may
+/// lie from [`AFGL_US_COLUMN`] (−0.89 %), relative: 1 %, a chosen bound
+/// for its 42 rows to 80 km (the file runs to 120 km), its four digits
+/// and study 34's integration of the file's own number densities; no
+/// source gives the error of such a truncation (`docs/science/ozone.md`,
+/// calibration 5).
+const AFGL_COLUMN_TOLERANCE: f64 = 0.01;
+
+#[test]
+fn the_afgl_shape_holds_the_us_standard_column() {
+    let (surface, column) = AFGL_US_COLUMN;
+    let own = dobson_column(
+        |p| afgl_mixing_ratio(p) * p,
+        surface,
+        crate::constants::STANDARD_GRAVITY.0,
+    );
+    assert!(
+        (own / column - 1.0).abs() < AFGL_COLUMN_TOLERANCE,
+        "{own} DU against {column}"
+    );
+}
+
+#[test]
+fn a_laid_out_column_holds_its_dobson_units() {
+    // Calibration 5: the shape scaled to the column, from the surface to
+    // space, on Earth's air, a thin air and a thick one.
+    let g = crate::constants::STANDARD_GRAVITY.0;
+    for surface in [0.006, 1.013, 90.0] {
+        let profile = OzoneProfile::of(EARTH_OZONE_COLUMN, surface, DRY_AIR_MOLAR_MASS, g);
+        assert!(profile.holds());
+        let column = dobson_column(|p| profile.bar_at(p), surface, g);
+        assert!(
+            (column / EARTH_OZONE_COLUMN.0 - 1.0).abs() < 1e-3,
+            "{surface} bar: {column} DU"
+        );
+    }
+    assert!(!OzoneProfile::of(DobsonUnit(0.0), 1.0, DRY_AIR_MOLAR_MASS, g).holds());
+    assert_eq!(OzoneProfile::NONE.bar_at(0.01), 0.0);
 }

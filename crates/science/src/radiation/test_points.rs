@@ -1,9 +1,10 @@
 //! The bodies and the Earth case the radiation tests share, each defined
 //! once.
 
-use crate::constants::GRAVITATIONAL_CONSTANT;
+use crate::constants::{AVOGADRO, GRAVITATIONAL_CONSTANT, PASCALS_PER_BAR};
 use crate::radiation::gases::PartialPressures;
-use crate::units::MetrePerSecondSquared;
+use crate::radiation::ozone::molecules_per_cm2;
+use crate::units::{DobsonUnit, MetrePerSecondSquared};
 
 /// Source: Venus's surface gravity, 8.87 m/s² (NASA Venus Fact Sheet,
 /// nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html, "Surface
@@ -127,3 +128,33 @@ pub(crate) const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
     o2: EARTH_PRESSURE_BAR * EARTH_N2_O2_SHARES.1,
     ar: 0.0,
 };
+
+/// Definition: no ozone column, for a test air that leaves ozone out of
+/// its infrared (`column::outgoing_longwave`) as the tests before issue
+/// #704 had it.
+pub(crate) const NO_OZONE: crate::units::DobsonUnit = crate::units::DobsonUnit(0.0);
+
+/// Source: the mean molar mass of the U.S. Standard Atmosphere 1976's dry
+/// air, 28.964 g/mol (NASA-TM-X-74335), kg/mol: the air whose weight
+/// carries the ozone of the tests' columns.
+pub(crate) const DRY_AIR_MOLAR_MASS: f64 = 28.964e-3;
+
+/// Definition: square centimetres per square metre.
+const CM2_PER_M2: f64 = 1e4;
+
+/// The column, Dobson units, of `ozone_bar(p)` (bar of ozone at `p` bar)
+/// over an air of `surface_bar` on `gravity` in a dry air of
+/// [`DRY_AIR_MOLAR_MASS`]: `∫ n_O₃ d ln p` from the surface to 1e-9 bar,
+/// summed on 4000 steps of `ln p` (midpoints).
+pub(crate) fn dobson_column(ozone_bar: impl Fn(f64) -> f64, surface_bar: f64, gravity: f64) -> f64 {
+    let (top, steps) = (1e-9_f64, 4000);
+    let span = (surface_bar / top).ln();
+    let per_ln_p: f64 = (0..steps)
+        .map(|i| ozone_bar(surface_bar * (-(i as f64 + 0.5) * span / steps as f64).exp()))
+        .sum::<f64>()
+        * span
+        / steps as f64;
+    per_ln_p * PASCALS_PER_BAR * AVOGADRO
+        / (DRY_AIR_MOLAR_MASS * gravity)
+        / (molecules_per_cm2(DobsonUnit(1.0)) * CM2_PER_M2)
+}

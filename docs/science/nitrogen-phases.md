@@ -445,7 +445,8 @@ Item 3 landed with issue #741, in its own pull request:
   world swept across its sea's freezing point starts at 61.49 K instead
   of 61.77 K, and a methane Earth frozen at 9.57 AU settles at 80.402 K
   instead of 80.520 K. Earth, Mars, the methane Earth's outer edge
-  (1.2534 AU) and its cycling orbit (1.264 AU) do not move: their
+  (1.2534 AU; 1.2720 AU with #704 and #705) and its cycling orbit
+  (1.264 AU; 1.282 AU with them) do not move: their
   columns stay over N₂'s critical point, 126.192 K. The Triton-like body
   moves by 0.009 K, inside the solver's tolerance. The real Titan is
   nowhere saturated in N₂: see [Titan's column against

@@ -117,6 +117,10 @@ fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
 `argon_degassed_share`).
 `science::{escape, dynamo, outgassing, volatiles, habitable, tectonics,
 photochemistry, snowball}`: [planet atmospheres](../../docs/science/planet-atmospheres.md).
+`science::life_gases`: `modern_methane` (the methane a `Modern` biosphere
+keeps, from Earth's flux, the lifetime under the stars and the gravity),
+`methane_lifetime`, `methane_host_factor`; see [life
+gases](../../docs/science/life-gases.md).
 
 ## Giants and envelopes
 
@@ -161,8 +165,10 @@ solver that uses them is `system::planet::climate`.
 
 ## Radiation
 
-`science::radiation::column`: `outgoing_longwave` (a column's infrared: lines
-of `data/opacity.bin`, continua, clouds; the caller owns the `ColumnCache`) and
+`science::radiation::column`: `outgoing_longwave` (a column's infrared: the
+lines of CO₂, water, methane, ozone and N₂O from `data/opacity.bin`, the ozone
+column laid out on Earth's AFGL shape, continua, pairs, clouds; the caller
+owns the `ColumnCache`) and
 `skin_temperature`; `radiation::clouds::cloud_cover`; `science::volatiles`: CO₂,
 methane, nitrogen and argon saturation. Shortwave: `albedo::shortwave_budget`
 (Bond albedo and absorbed light, for a star's temperature and metallicity; the

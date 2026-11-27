@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Downloads the raw inputs of the opacity table into raw/ (git-ignored):
 # HITRAN line lists of H2O and CO2 (main isotopologues, 0-14500 cm-1: the
-# longwave table's 0-5000 and the shortwave table's 2000-14400) through
-# HITRAN's public line-by-line API, the HITRAN partition sums (TIPS),
+# longwave table's 0-5000 and the shortwave table's 2000-14400) and of CH4,
+# O3 and N2O (0-5250 cm-1, the longwave table's only) through HITRAN's public
+# line-by-line API, the HITRAN partition sums (TIPS),
 # MT_CKD 4.3's water continuum coefficients, HITRAN's CO2-CO2, N2-N2,
 # O2-O2, O2-N2, N2-CH4 and CH4-CH4 collision-induced absorption, and
 # Serdyuchenko et al.'s ozone cross-sections (IUP Bremen). The files the
@@ -14,11 +15,17 @@ mkdir -p raw/lines raw/q
 agent="opacity-table-builder"
 
 # HITRAN global isotopologue ids: H2O 161, 181, 171, 162 (1-4);
-# CO2 626, 636, 628, 627 (7-10).
-for gas in h2o:1,2,3,4 co2:7,8,9,10; do
+# CO2 626, 636, 628, 627 (7-10); O3 666, 668, 686, 667, 676 (16-20);
+# CH4 211, 311, 212, 312 (32-35); N2O 446, 456, 546, 448, 447 (21-25).
+# CH4, O3 and N2O enter the longwave table only, whose lines reach 5000
+# cm-1 plus the 25 cm-1 cutoff.
+for gas in h2o:1,2,3,4:14250 co2:7,8,9,10:14250 o3:16,17,18,19,20:5000 ch4:32,33,34,35:5000 \
+  n2o:21,22,23,24,25:5000; do
   name="${gas%%:*}"
-  ids="${gas#*:}"
-  for lo in $(seq 0 250 14250); do
+  rest="${gas#*:}"
+  ids="${rest%:*}"
+  last="${rest##*:}"
+  for lo in $(seq 0 250 "$last"); do
     hi=$((lo + 250))
     out="raw/lines/${name}_${lo}_${hi}.par"
     [[ -s "$out" || -e "$out.empty" ]] && continue
@@ -36,7 +43,7 @@ for gas in h2o:1,2,3,4 co2:7,8,9,10; do
   done
 done
 
-for id in 1 2 3 4 7 8 9 10; do
+for id in 1 2 3 4 7 8 9 10 16 17 18 19 20 21 22 23 24 25 32 33 34 35; do
   [[ -s "raw/q/q${id}.txt" ]] || curl -sS -A "$agent" -o "raw/q/q${id}.txt" "https://hitran.org/data/Q/q${id}.txt"
 done
 

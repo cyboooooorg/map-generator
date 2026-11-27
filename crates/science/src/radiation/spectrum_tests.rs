@@ -222,9 +222,10 @@ fn earth_air(co2_ppm: f64) -> PartialPressures {
 /// A path through the air: the optical depth of each g-point of each
 /// gas, and the smooth part's, summed layer by layer.
 fn add_layer(path: &mut BinAbsorption, a: &BinAbsorption, b: &BinAbsorption, span: f64) {
-    for g in 0..G {
-        path.co2[g] += log_mean(a.co2[g], b.co2[g]) * span;
-        path.water[g] += log_mean(a.water[g], b.water[g]) * span;
+    for ((path, a), b) in path.lines.iter_mut().zip(&a.lines).zip(&b.lines) {
+        for g in 0..G {
+            path[g] += log_mean(a[g], b[g]) * span;
+        }
     }
     path.smooth += log_mean(a.smooth, b.smooth) * span;
 }
@@ -262,6 +263,8 @@ fn olr_bins(
         Level {
             temperature_k: point.temperature_k,
             gases: g,
+            ozone_bar: 0.0,
+            n2o_bar: 0.0,
             gravity_m_s2: EARTH_GRAVITY,
         }
     };
@@ -318,6 +321,8 @@ fn venus_level() -> Level {
             so2,
             ..PartialPressures::default()
         },
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
         gravity_m_s2: VENUS_GRAVITY,
     }
 }
@@ -344,12 +349,14 @@ fn water_mixes_its_two_broadenings_by_its_share() {
             n2,
             ..PartialPressures::default()
         },
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
         gravity_m_s2: EARTH_GRAVITY,
     };
     let per_kg = |l: &Level| {
         let a = absorption_per_ln_p(ROTATION_BIN, l);
         let mass = l.mass_per_ln_p(l.gases.h2o, H2O_MOLAR_MASS);
-        a.water.map(|k| k / mass)
+        a.lines[LineGas::Water as usize].map(|k| k / mass)
     };
     let trace = per_kg(&level(TRACE_BAR, 1.0));
     let steam = per_kg(&level(1.0, 0.0));
@@ -467,6 +474,8 @@ fn the_spectrum_of_a_level_is_its_bins() {
                 h2o: earth_h2o,
                 ..earth_air(earth_ppm)
             },
+            ozone_bar: 0.0,
+            n2o_bar: 0.0,
             gravity_m_s2: EARTH_GRAVITY,
         },
         venus,
@@ -477,6 +486,8 @@ fn the_spectrum_of_a_level_is_its_bins() {
                 ch4: titan_ch4,
                 ..PartialPressures::default()
             },
+            ozone_bar: 0.0,
+            n2o_bar: 0.0,
             gravity_m_s2: TITAN_GRAVITY,
         },
         Level {
@@ -487,6 +498,8 @@ fn the_spectrum_of_a_level_is_its_bins() {
                 co2: steam_co2,
                 ..PartialPressures::default()
             },
+            ozone_bar: 0.0,
+            n2o_bar: 0.0,
             gravity_m_s2: EARTH_GRAVITY,
         },
     ];
@@ -496,11 +509,15 @@ fn the_spectrum_of_a_level_is_its_bins() {
         absorption_spectrum(level, &mut spectrum);
         for i in 0..BINS {
             let one = absorption_per_ln_p(i, level);
-            let all = one.co2.iter().chain(&one.water).chain([&one.smooth]);
+            let all = one.lines.iter().flatten().chain([&one.smooth]);
             assert!(all.into_iter().all(|x| *x >= 0.0), "bin {i}: {one:?}");
-            for g in 0..G {
-                assert!(close(spectrum.co2[i][g], one.co2[g]), "CO₂ bin {i}");
-                assert!(close(spectrum.water[i][g], one.water[g]), "water bin {i}");
+            for (gas, (lines, one)) in LineGas::ALL
+                .iter()
+                .zip(spectrum.lines.iter().zip(&one.lines))
+            {
+                for g in 0..G {
+                    assert!(close(lines[i][g], one[g]), "{gas:?} bin {i}");
+                }
             }
             assert!(
                 close(spectrum.smooth[i], one.smooth),
@@ -510,8 +527,9 @@ fn the_spectrum_of_a_level_is_its_bins() {
                 one.smooth
             );
         }
-        assert_eq!(spectrum.co2[TAIL], spectrum.co2[BINS - 1]);
-        assert_eq!(spectrum.water[TAIL], spectrum.water[BINS - 1]);
+        for lines in &spectrum.lines {
+            assert_eq!(lines[TAIL], lines[BINS - 1]);
+        }
         assert_eq!(spectrum.smooth[TAIL], spectrum.smooth[BINS - 1]);
     }
 }
@@ -550,6 +568,8 @@ fn a_level_weighs_its_argon() {
     let level = |gases| Level {
         temperature_k: EARTH_SURFACE_K,
         gases,
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
         gravity_m_s2: EARTH_GRAVITY,
     };
     // Source: dry air, NASA Earth fact sheet: 78.08 % N₂, 20.95 % O₂,
@@ -648,6 +668,8 @@ fn the_pairs_are_hitrans_files() {
             ch4,
             ..PartialPressures::default()
         },
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
         gravity_m_s2: TITAN_GRAVITY,
     };
     let one = pair(N2, Ch4).depth(110.0, &level(1.0, 0.05));
@@ -668,6 +690,8 @@ fn the_fast_pairs_are_the_reference() {
             co2: 0.0,
             ..earth_air(0.0)
         },
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
         gravity_m_s2: EARTH_GRAVITY,
     };
     let titan = Level {
@@ -677,6 +701,8 @@ fn the_fast_pairs_are_the_reference() {
             ch4: titan_ch4,
             ..PartialPressures::default()
         },
+        ozone_bar: 0.0,
+        n2o_bar: 0.0,
         gravity_m_s2: TITAN_GRAVITY,
     };
     let mut fast = FastLevel::default();

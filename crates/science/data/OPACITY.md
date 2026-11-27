@@ -1,7 +1,7 @@
 # Opacity table
 
-`opacity.bin` holds the absorption of CO₂'s and water's spectral lines that
-the climate column integrates (`crates/science/src/radiation/spectrum.rs`,
+`opacity.bin` holds the absorption of the spectral lines of CO₂, water,
+methane, ozone and N₂O that the climate column integrates (`crates/science/src/radiation/spectrum.rs`,
 issue #523; read by `crates/science/src/radiation/ktable.rs`), and MT_CKD's
 CO₂ continuum on the same bins. The lines form a correlated-k table: within
 each 20 cm⁻¹ bin from 0 to 5000 cm⁻¹
@@ -22,7 +22,33 @@ collision-induced pairs (`mt-ckd-water.tsv`, `co2-cia.tsv`,
 
 ## Provenance
 
-The tables were copied byte for byte from the tag `legacy-final`. The
+`opacity.bin` and `opacity-halved.bin` were rebuilt on 2026-11-27 with
+methane's, ozone's and N₂O's sets (issue #704, study 36's second pull
+request; N₂O's joined the same rebuild by the user's decision of that
+day, its lines being needed for methane's overlap), by
+`tools/opacity-table` on the branch `feat/climate-methane-ozone-lines`,
+from the downloads of that day (below). Their first four sets were
+compared code by code with the files they replace, kept as the
+reference in `git show a97c1ca1:crates/science/data/opacity.bin` (and
+`opacity-halved.bin`):
+
+- `opacity-halved.bin` (0-2500 cm⁻¹): the four sets equal the old ones
+  code for code, and so do the header and the CO₂ continuum.
+- `opacity.bin`: the four sets equal the old ones but in the last two
+  bins, 4960-5000 cm⁻¹, where 0.2 % of the codes differ (885, 1163,
+  1482 and 927 of 480 000 per set): the old build had the pieces up to
+  5000 cm⁻¹ only, so the wings of the lines between 5000 and 5025 cm⁻¹
+  (635 of water's) were missing from it. The header and the CO₂
+  continuum are equal.
+- The same day's first build held seven sets (without N₂O's); the
+  eight-set tables hold its seven sets code for code, in both files,
+  with the same header but for the number of sets and the same CO₂
+  continuum. A scratch build of the eight sets, made to measure N₂O's
+  overlap before the decision, is the committed `opacity.bin` byte for
+  byte.
+
+Before 2026-11-27 the tables were copied byte for byte from the tag
+`legacy-final`. The
 generator is `tools/opacity-table`, at the commit `ef6ef794` of 2026-11-19
 (`feat(planet): add the CO2 far wings from MT_CKD`), the last to touch
 `opacity.bin` before the tag; the tables were built from HITRAN2024
@@ -33,8 +59,10 @@ SHA-256 of the files:
 
 | File | SHA-256 |
 | --- | --- |
-| `opacity.bin` | `d5645512b269292e752745056643c0a4faf1e4dd658cb0ddc8c141cdaaee2ae7` |
-| `opacity-halved.bin` | `497afef8d6b3fce2b45a73449a766d3958f915de476a1ee3c69ad4644efc6ab1` |
+| `opacity.bin` (2026-11-27, eight sets) | `47c5515032225c2892fefc201b5d4da76df1fc9b3c5b212f2561504ca235643f` |
+| `opacity-halved.bin` (2026-11-27, eight sets) | `52f1b627feccca549ab4f9114116cc58f13437b0c8f01894054cd7b57774bd66` |
+| `opacity.bin` (`legacy-final`, four sets, the reference) | `d5645512b269292e752745056643c0a4faf1e4dd658cb0ddc8c141cdaaee2ae7` |
+| `opacity-halved.bin` (`legacy-final`, four sets) | `497afef8d6b3fce2b45a73449a766d3958f915de476a1ee3c69ad4644efc6ab1` |
 | `shortwave.bin` | `de6ffe0a5069fc6fcbde77badace9377b40095c3352d3ba385b4aea12b1c2380` |
 
 The line lists cannot be fetched again identically: HITRAN serves its
@@ -59,7 +87,9 @@ cargo run --release -j 4 -p opacity-table -- --continua
 ```
 
 The k-tables (`opacity.bin`, `opacity-halved.bin`) were not regenerated
-for the port: they are `legacy-final`'s files byte for byte. The two
+for the port: they were `legacy-final`'s files byte for byte until
+2026-11-27 (see [Provenance](#provenance)); each took ten and two
+minutes on four threads then. The two
 continuum files were: on 2026-11-22 the three continuum inputs were
 downloaded again by hand, with the URLs of `fetch.sh`, into a scratch
 `raw/` (all three matched the SHA-256 that `fetch.sh` checks), and
@@ -91,6 +121,10 @@ is git-ignored.
 | Partition sums of the same isotopologues | TIPS, as HITRAN serves it | `https://hitran.org/data/Q/q<id>.txt` | 2026-11-18 |
 | Water continuum (in `spectrum.rs` for the longwave; binned into `shortwave.bin`) | MT_CKD 4.3 | `absco-ref_wv-mt-ckd.nc`, `https://github.com/AER-RC/MT_CKD_H2O`, tag 4.3 | 2026-11-18 |
 | CO₂ continuum (in the table) | MT_CKD 4.3: LBLRTM's `contnm.f90` at commit `f66bb596`, the submodule of `AER-RC/MT_CKD` tag 4.3 | `https://github.com/AER-RC/LBLRTM` | 2026-11-19 |
+| CH₄ lines: ¹²CH₄, ¹³CH₄, ¹²CH₃D, ¹³CH₃D (ids 32-35), 0-5250 cm⁻¹ in 21 pieces, 324 952 records up to 5025 cm⁻¹ (196 600, 74 815, 49 301, 4 236 by isotopologue), 324 314 lines read by the tool | HITRAN2024, as served | same API, `iso_ids_list=32,33,34,35` | 2026-11-27 |
+| O₃ lines: ¹⁶O₃ and its ¹⁸O and ¹⁷O isotopologues 668, 686, 667, 676 (ids 16-20), 0-5250 cm⁻¹ in 21 pieces, 471 481 records up to 5025 cm⁻¹ (298 198, 57 907, 18 887, 65 467, 31 022), 446 231 lines read by the tool | HITRAN2024, as served | same API, `iso_ids_list=16,17,18,19,20` | 2026-11-27 |
+| N₂O lines: ¹⁴N₂¹⁶O, ¹⁴N¹⁵N¹⁶O, ¹⁵N¹⁴N¹⁶O, ¹⁴N₂¹⁸O, ¹⁴N₂¹⁷O (ids 21-25), 0-5250 cm⁻¹ in 21 pieces, 440 211 records up to 5025 cm⁻¹ (228 788, 57 286, 62 405, 58 183, 33 549 by isotopologue), 433 434 lines read by the tool | HITRAN2024, as served | same API, `iso_ids_list=21,22,23,24,25` | 2026-11-27 |
+| Partition sums of ids 16-25 and 32-35 | TIPS, as HITRAN serves it | `https://hitran.org/data/Q/q<id>.txt` | 2026-11-27 |
 
 The design named HITRAN2020 (Gordon et al. 2022); HITRAN's server now
 serves only its successor, HITRAN2024, so the table is built from it.
@@ -101,6 +135,46 @@ SHA-256 of the inputs of `opacity.bin`, concatenated in file-name order
 `cat raw/lines/co2_*` `cec95004862a0652506141e10915cddf4df065e152d6334c5691f96289360b0a`,
 `absco-ref_wv-mt-ckd.nc` `69944eb8b045c268e2daeb2cddf536b99f9e9efe7e91c425067b46a5b287ddb3`,
 `contnm.f90` `643f4173063d51759a0ea9e5715d0fcbd4066902452a2a5e56f62d37de69bcf7`.
+
+The downloads of 2026-11-27 (water and CO₂ again, with methane and
+ozone): `cat raw/lines/h2o_*` of the pieces up to 5000 cm⁻¹ gives the
+same `55b9aaec…` as above, and of all the pieces the same `a506a99b…`;
+CO₂'s pieces up to 5000 cm⁻¹ give
+`4261f19c6ce9a0216bab26d4bf8925e07233ba02c60fa595c018db8f42b41610` and
+all of them `90fadf9f1dfc67083eb9b89c77effb994071ef3e13c9897fd9d9c0b57bfcdfe4`
+(HITRAN served CO₂ differently; the codes it gives below 4960 cm⁻¹
+are the old ones, see [Provenance](#provenance)). `cat raw/lines/ch4_*`
+`05dbe44e9ff434f139413b53e5b8c490ebb052f609c9788e806394bd531024c2`
+(53 803 946 bytes), `cat raw/lines/o3_*`
+`dd0a34fdbc5799fd98fce2a9da890602efc915358836b478c26845ae00d45c29`
+(76 070 890 bytes), `cat raw/lines/n2o_*`
+`2d9a2a11aa020cf0218c0867993bcaa1e543b2b32d4bc2822d13bcf86ab5da29`
+(72 039 772 bytes; every record of every piece is 160 characters of
+N₂O, checked). Partition sums (SHA-256):
+
+| File | SHA-256 |
+| --- | --- |
+| `q16.txt` | `c30dd2fa2c621e3c907bf67d290f693fa2279d10bb1bcd36db6ec7b22d8a8bb5` |
+| `q17.txt` | `9328bfa878b79a907d9e14d04bb39aa8775fe5193ffed20b275c8f017d00d910` |
+| `q18.txt` | `f80e926a2ad75c963f048337991ab3f7594923cf65e17468f2b935c5c17ab42f` |
+| `q19.txt` | `b1b3cf3bf0563297c172ab6ec9b0c7d2f52f0bf0ab90040fb2a55b1caefd345b` |
+| `q20.txt` | `bb61492649b428b0397bbddc21cef29e72fff2757a9807357acde92176f123f6` |
+| `q21.txt` | `9afea5328b9639ebd9b7876953cb14c5bef3022de0d623a14470416faf78b1c8` |
+| `q22.txt` | `3267f62650f1861bbde625c1ecb56249c1785d1a08d3927d8d015205f7552287` |
+| `q23.txt` | `9c75047a296eca59a5060776d96f5c44993a64744ac207e651f4db86869358df` |
+| `q24.txt` | `c5a669535f0fbb967e8f3f5913acf99a639309ec0891d0252fb095b91f8ab06c` |
+| `q25.txt` | `84b0d7e5ecd3c541a2fd7ad3eb07065206ffe726656062d7c98ad9aa46a9397e` |
+| `q32.txt` | `114694a9c8f5faa79880bb016eff165dabe020b1d96f089d6ef585ca4fb9bc76` |
+| `q33.txt` | `cfb5aefa40cf49345aa773e355eb8fcfafc6c28c968168d049daa3f52a2d50a5` |
+| `q34.txt` | `541cf1e8dc6b7a14c5efea5d8eb3d0aacd2e51145f226c9d3f083352fe439ba2` |
+| `q35.txt` | `2feaf85b3c25578f1cec0c891f9790f0f058d13f08c73535c98005df313dae3c` |
+
+Three water pieces of the first
+fetch that day came back mixed with another molecule's records (CO₂ in
+`h2o_4000_4250.par`, CO in `h2o_5750_6000.par` and
+`h2o_6000_6250.par`, some records cut short) and `h2o_13750_14000.par`
+empty; they were deleted and fetched again, after which every record of
+every piece is 160 characters of its own molecule.
 With the pieces up to 14 500 cm⁻¹ that `shortwave.bin` reads (2026-11-19;
 HITRAN answers 404 for the CO₂ pieces without lines, 13 000-13 500 and
 14 250-14 500 cm⁻¹, which `fetch.sh` keeps empty), `cat raw/lines/h2o_*.par`
@@ -152,8 +226,8 @@ and `cat raw/lines/co2_*.par`
 - **Lines.** Each line's intensity moves from 296 K to the grid's
   temperature with HITRAN's formula (partition sum, lower-state energy,
   stimulated emission). Its Lorentz half width is
-  `(296/T)^n_air γ p`, with `γ` the air-broadened width for the two air
-  sets and the self-broadened width (`γ_self`) for the two self sets
+  `(296/T)^n_air γ p`, with `γ` the air-broadened width for the air
+  sets and the self-broadened width (`γ_self`) for the self sets
   (HITRAN's `.par` records carry only `n_air`, used for both). Its
   centre moves by `δ_air p`. Its Doppler width is the isotopologue's.
 - **Shape.** Voigt (Humlíček's W4), cut at 25 cm⁻¹ from the centre, less
@@ -162,7 +236,11 @@ and `cat raw/lines/co2_*.par`
   25 cm⁻¹ (the "plinth"). For CO₂, `(2 − d²/B²)` times the Lorentz value
   at the cutoff `B` = 25 cm⁻¹, at the distance `d` from the centre (the
   `fcnt_fn` of LBLRTM's fourth function, `oprop.f90`, which MT_CKD's CO₂
-  continuum assumes since mt_ckd_2.0). The line coupling LBLRTM applies
+  continuum assumes since mt_ckd_2.0). For methane, ozone and N₂O
+  (`Pedestal::Flat`), the flat Lorentz value at the cutoff, as for
+  water: `CONVF4` removes it from "all molecules other than co2"
+  (`oprop.f90`, commit `f66bb596`), and none of the three has a
+  continuum. The line coupling LBLRTM applies
   to CO₂'s lines is not in the `.par` records and is left out.
 - **CO₂ continuum.** MT_CKD's CO₂ continuum, `C(ν)` every 2 cm⁻¹ in
   `contnm.f90` (`BLOCK DATA BFCO2`, times `XFACCO2` over 2000-2998
@@ -184,19 +262,26 @@ and `cat raw/lines/co2_*.par`
   transmission within 0.02 for paths from 1e-4 to 1e2 kg/m² (the builder's
   test).
 - **Units.** m²/kg of the gas at natural isotopic abundance (molar masses
-  18.015 and 44.009 g/mol).
+  18.015, 44.009, 16.043, 47.997 and 44.013 g/mol for water, CO₂,
+  methane, ozone and N₂O).
 
 ## Grid
 
 - Pressures: 15, every half decade from 1e-5 to 100 bar (total pressure).
 - Temperatures: 16, 100 to 350 K every 25 K, then 400, 500, 600, 800 and
   900 K (450 and 700 K were dropped with the fourth set, to keep the file
-  under 4 MB).
+  under 4 MB; the eight sets make 7.7 MB).
 - Sets: CO₂ broadened by air; water broadened by air; water broadened by
-  itself; CO₂ broadened by itself. The column mixes each gas's two sets by
-  its share of the pressure, so that pure CO₂ (Venus, Mars, a thick CO₂
-  air at the outer edge of the habitable zone) takes its self-broadened
-  lines, some 1.3 times as wide as in air.
+  itself; CO₂ broadened by itself; methane broadened by air; methane
+  broadened by itself; ozone broadened by air; N₂O broadened by air
+  (#704). The column mixes
+  each gas's two sets by its share of the pressure, so that pure CO₂
+  (Venus, Mars, a thick CO₂ air at the outer edge of the habitable zone)
+  takes its self-broadened lines, some 1.3 times as wide as in air, and a
+  methane-rich air (Titan's 5.65 %) its methane's own. Ozone and N₂O,
+  traces in every air, have their air set only, read for both. No air
+  of the model holds N₂O until it is a gas (#737); the tests give it to
+  their columns.
 - The science crate interpolates `ln k` linearly in `ln p` and in `T`. Past the
   grid it clamps the temperature, and scales `k` as `p` above 100 bar and
   below 1e-5 bar.
@@ -207,7 +292,7 @@ Little-endian:
 
 | Field | Type |
 | --- | --- |
-| magic `MGOPACK2` | 8 bytes |
+| magic `MGOPACK3` (`MGOPACK2` for the four sets before #704; eight sets) | 8 bytes |
 | bins, g-points, pressures, temperatures, sets | 5 × u32 |
 | bin width, cm⁻¹ | f64 |
 | g-interval edges | (g-points + 1) × f64 |
@@ -220,9 +305,10 @@ Little-endian:
 
 A code `q` ≥ 1 stands for `ln k = −30 + (q − 1) × 48/65534` (k from
 9.4e-14 to 6.6e7 m²/kg, a step of 0.07 %); code 0 is a coefficient under
-9.4e-14 m²/kg, taken as nothing. `opacity.bin` is 3 844 380 bytes
-(250 bins × 8 g-points × 15 pressures × 16 temperatures × 4 sets, then
-the continuum's 250 bins); `opacity-halved.bin` 1 204 292 bytes.
+9.4e-14 m²/kg, taken as nothing. `opacity.bin` is 7 684 380 bytes
+(250 bins × 8 g-points × 15 pressures × 16 temperatures × 8 sets, then
+the continuum's 250 bins); `opacity-halved.bin` 2 404 292 bytes. The
+shortwave table keeps its four sets (magic `MGSWCK01`).
 `crates/science/src/radiation/ktable.rs` decodes and interpolates both this
 layout and the shortwave one below.
 

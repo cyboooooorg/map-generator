@@ -192,6 +192,8 @@ impl Field {
                         let rest = dry - co2;
                         Level {
                             temperature_k: row[t],
+                            ozone_bar: 0.0,
+                            n2o_bar: 0.0,
                             gravity_m_s2: STANDARD_GRAVITY.0,
                             gases: PartialPressures {
                                 n2: rest * EARTH_AIR.n2 / others,

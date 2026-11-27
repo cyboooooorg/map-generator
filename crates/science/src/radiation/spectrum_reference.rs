@@ -7,7 +7,7 @@
 //! read it; the generator never does.
 
 use super::*;
-use crate::radiation::ktable::{CO2_SELF_SET, CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
+use crate::radiation::ktable::Table;
 
 /// Hemispheric flux, W/m², that a black body at `t_k` emits in bin `i`:
 /// `π ∫ B_ν dν` over the bin, exact (see [`planck_between`]).
@@ -42,10 +42,8 @@ pub(crate) fn planck_between(lo: f64, hi: f64, t_k: f64) -> f64 {
 /// across the bin.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct BinAbsorption {
-    /// CO₂'s lines at each g-point.
-    pub(crate) co2: [f64; G],
-    /// Water's lines at each g-point.
-    pub(crate) water: [f64; G],
+    /// Each gas's lines at each g-point, in the order of [`LineGas::ALL`].
+    pub(crate) lines: [[f64; G]; LINE_GASES],
     /// The continua of water and CO₂ and the collision-induced pairs.
     pub(crate) smooth: f64,
 }
@@ -53,9 +51,9 @@ pub(crate) struct BinAbsorption {
 impl BinAbsorption {
     /// Mean transmission of the bin through `amount` times this
     /// absorption (an optical depth per `ln p` times a span of `ln p`),
-    /// along the slant of [`DIFFUSIVITY`]: CO₂'s and water's
-    /// transmissions, each summed over its g-points with [`weights`],
-    /// multiply (random overlap), and the smooth part's with them.
+    /// along the slant of [`DIFFUSIVITY`]: each gas's transmission,
+    /// summed over its g-points with [`weights`], multiply (random
+    /// overlap), and the smooth part's with them.
     pub(crate) fn transmission(&self, amount: f64) -> f64 {
         let w = weights();
         let gas = |k: &[f64; G]| -> f64 {
@@ -64,12 +62,12 @@ impl BinAbsorption {
                 .map(|(k, w)| w * (-DIFFUSIVITY * k * amount).exp())
                 .sum()
         };
-        gas(&self.co2) * gas(&self.water) * (-DIFFUSIVITY * self.smooth * amount).exp()
+        self.lines.iter().map(gas).product::<f64>() * (-DIFFUSIVITY * self.smooth * amount).exp()
     }
 }
 
 /// Absorption per unit `ln p` (vertical optical depths) in bin `i` of
-/// every absorber at `level`: CO₂'s and water's lines at their g-points,
+/// every absorber at `level`: each gas's lines at its g-points,
 /// and the continua of water and CO₂ and the collision-induced pairs (see
 /// the module documentation).
 pub(crate) fn absorption_per_ln_p(i: usize, level: &Level) -> BinAbsorption {
@@ -132,10 +130,9 @@ fn co2_continuum(i: usize, level: &Level) -> f64 {
 /// [`BinAbsorption`]; the tail's is the last bin's, see [`TAIL`]).
 #[derive(Clone, Debug)]
 pub(crate) struct Spectrum {
-    /// CO₂'s lines, per band and g-point.
-    pub(crate) co2: [[f64; G]; BANDS],
-    /// Water's lines, per band and g-point.
-    pub(crate) water: [[f64; G]; BANDS],
+    /// Each gas's lines, per band and g-point, in the order of
+    /// [`LineGas::ALL`].
+    pub(crate) lines: [[[f64; G]; BANDS]; LINE_GASES],
     /// The continua of water and CO₂ and the collision-induced pairs, per
     /// band.
     pub(crate) smooth: [f64; BANDS],
@@ -144,8 +141,7 @@ pub(crate) struct Spectrum {
 impl Default for Spectrum {
     fn default() -> Self {
         Self {
-            co2: [[0.0; G]; BANDS],
-            water: [[0.0; G]; BANDS],
+            lines: [[[0.0; G]; BANDS]; LINE_GASES],
             smooth: [0.0; BANDS],
         }
     }
@@ -155,8 +151,9 @@ impl Default for Spectrum {
 /// tail's is the last bin's, see [`TAIL`]): the same sums, with what does
 /// not depend on the bin taken once per level.
 pub(crate) fn absorption_spectrum(level: &Level, out: &mut Spectrum) {
-    out.co2[..BINS].fill([0.0; G]);
-    out.water[..BINS].fill([0.0; G]);
+    for gas in &mut out.lines {
+        gas[..BINS].fill([0.0; G]);
+    }
     out.smooth[..BINS].fill(0.0);
     let p = level.pressure_bar();
     let t = level.temperature_k;
@@ -164,49 +161,40 @@ pub(crate) fn absorption_spectrum(level: &Level, out: &mut Spectrum) {
         lines_spectrum(level, out);
         smooth_spectrum(level, &mut out.smooth);
     }
-    out.co2[TAIL] = out.co2[BINS - 1];
-    out.water[TAIL] = out.water[BINS - 1];
+    for gas in &mut out.lines {
+        gas[TAIL] = gas[BINS - 1];
+    }
     out.smooth[TAIL] = out.smooth[BINS - 1];
 }
 
-/// CO₂'s and water's lines of every bin at `level`, from [`OPACITY`] as
+/// Each gas's lines in every bin at `level`, from [`OPACITY`] as
 /// [`Table::bin_absorption`] takes them.
 fn lines_spectrum(level: &Level, out: &mut Spectrum) {
     let table = &*OPACITY;
     let p = level.pressure_bar();
     let t = level.temperature_k;
-    let g = &level.gases;
     let interpolate = |at: &[usize; 4], w: &[f64; 4], i: usize| {
         w[0] * f64::from(table.ln_k[at[0] + i])
             + w[1] * f64::from(table.ln_k[at[1] + i])
             + w[2] * f64::from(table.ln_k[at[2] + i])
             + w[3] * f64::from(table.ln_k[at[3] + i])
     };
-    if g.co2 > 0.0 {
-        let (by_air, wa, scale) = table.corners(CO2_SET, p, t);
-        let (own, ws, _) = table.corners(CO2_SELF_SET, p, t);
-        let mass = scale * level.mass_per_ln_p(g.co2, CO2_MOLAR_MASS);
-        let share = (g.co2 / p).clamp(0.0, 1.0);
+    for (gas, rows) in LineGas::ALL.into_iter().zip(&mut out.lines) {
+        let bar = gas.bar(level);
+        if bar <= 0.0 {
+            continue;
+        }
+        let (air_set, self_set) = gas.sets();
+        let (by_air, wa, scale) = table.corners(air_set, p, t);
+        let (own, ws, _) = table.corners(self_set, p, t);
+        let mass = scale * level.mass_per_ln_p(bar, gas.molar_kg());
+        let share = (bar / p).clamp(0.0, 1.0);
         let (air_mass, self_mass) = (mass * (1.0 - share), mass * share);
-        for (b, row) in out.co2[..BINS].iter_mut().enumerate() {
+        for (b, row) in rows[..BINS].iter_mut().enumerate() {
             for (k, o) in row.iter_mut().enumerate() {
                 let i = b * G + k;
                 *o = air_mass * interpolate(&by_air, &wa, i).exp()
                     + self_mass * interpolate(&own, &ws, i).exp();
-            }
-        }
-    }
-    if g.h2o > 0.0 {
-        let (foreign, wf, scale) = table.corners(WATER_FOREIGN_SET, p, t);
-        let (own, ws, _) = table.corners(WATER_SELF_SET, p, t);
-        let mass = scale * level.mass_per_ln_p(g.h2o, H2O_MOLAR_MASS);
-        let share = (g.h2o / p).clamp(0.0, 1.0);
-        let (by_air, by_self) = (mass * (1.0 - share), mass * share);
-        for (b, row) in out.water[..BINS].iter_mut().enumerate() {
-            for (k, o) in row.iter_mut().enumerate() {
-                let i = b * G + k;
-                *o = by_air * interpolate(&foreign, &wf, i).exp()
-                    + by_self * interpolate(&own, &ws, i).exp();
             }
         }
     }
@@ -227,8 +215,9 @@ fn smooth_spectrum(level: &Level, out: &mut [f64; BANDS]) {
 /// the pressure, the continua, the pairs).
 pub(crate) fn depth_above(rate: &Spectrum, out: &mut Spectrum) {
     for i in 0..BANDS {
-        out.co2[i] = rate.co2[i].map(|k| 0.5 * k);
-        out.water[i] = rate.water[i].map(|k| 0.5 * k);
+        for (o, r) in out.lines.iter_mut().zip(&rate.lines) {
+            o[i] = r[i].map(|k| 0.5 * k);
+        }
         out.smooth[i] = smooth_above(rate.smooth[i]);
     }
 }
@@ -266,32 +255,19 @@ impl Table {
         if p <= 0.0 || t <= 0.0 || level.gravity_m_s2 <= 0.0 || bin >= self.bins {
             return out;
         }
-        let g = &level.gases;
-        if g.co2 > 0.0 {
-            let mass = level.mass_per_ln_p(g.co2, CO2_MOLAR_MASS);
-            let share = (g.co2 / p).clamp(0.0, 1.0);
-            let mut own = [0.0; G];
-            self.coefficients(CO2_SET, p, t, bin, mass * (1.0 - share), &mut out.co2);
-            self.coefficients(CO2_SELF_SET, p, t, bin, mass * share, &mut own);
-            for (c, s) in out.co2.iter_mut().zip(own) {
-                *c += s;
+        for (gas, row) in LineGas::ALL.into_iter().zip(&mut out.lines) {
+            let bar = gas.bar(level);
+            if bar <= 0.0 {
+                continue;
             }
-        }
-        if g.h2o > 0.0 {
-            let mass = level.mass_per_ln_p(g.h2o, H2O_MOLAR_MASS);
-            let share = (g.h2o / p).clamp(0.0, 1.0);
+            let (air_set, self_set) = gas.sets();
+            let mass = level.mass_per_ln_p(bar, gas.molar_kg());
+            let share = (bar / p).clamp(0.0, 1.0);
             let mut own = [0.0; G];
-            self.coefficients(
-                WATER_FOREIGN_SET,
-                p,
-                t,
-                bin,
-                mass * (1.0 - share),
-                &mut out.water,
-            );
-            self.coefficients(WATER_SELF_SET, p, t, bin, mass * share, &mut own);
-            for (w, s) in out.water.iter_mut().zip(own) {
-                *w += s;
+            self.coefficients(air_set, p, t, bin, mass * (1.0 - share), row);
+            self.coefficients(self_set, p, t, bin, mass * share, &mut own);
+            for (c, s) in row.iter_mut().zip(own) {
+                *c += s;
             }
         }
         let lo = bin as f64 * self.bin_width_cm;

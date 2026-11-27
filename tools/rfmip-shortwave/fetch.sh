@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Downloads what crates/science/data/rfmip-profiles.tsv and the RFMIP tests'
-# quoted reference values are built from into
-# raw/ (git-ignored, about 11 MB): the RFMIP-IRF atmospheric profiles
+# Downloads what crates/science/data/rfmip-profiles.tsv,
+# crates/science/data/rfmip-longwave.tsv and the RFMIP tests'
+# quoted reference values (the shortwave's absorbed sunlight and the
+# longwave's outgoing radiation at the top) are built from into
+# raw/ (git-ignored, about 17 MB): the RFMIP-IRF atmospheric profiles
 # (input4MIPs UColorado-RFMIP-1-2, Pincus et al. 2016) and the clear-sky
-# shortwave fluxes of the rad-irf experiment computed by LBLRTM-12-8 (the
-# line-by-line reference) and RTE-RRTMGP-181204, from the ESGF node of
+# shortwave fluxes and upward longwave (rlu) of the rad-irf experiment
+# computed by LBLRTM-12-8 (the line-by-line reference) and
+# RTE-RRTMGP-181204, from the ESGF node of
 # ORNL. The netCDF files are checked against SHA256SUMS (the checksums ESGF
 # publishes); the tool reads the same variables as OPeNDAP text views of
 # those files, served by the same node, whose checksums are recorded too.
@@ -25,7 +28,7 @@ get() { # url out
 }
 
 files=("$input")
-for v in rsd rsu; do
+for v in rsd rsu rlu; do
   files+=("$(output LBLRTM-12-8 v20190514 "$v" AER)")
   files+=("$(output RTE-RRTMGP-181204 v20191007 "$v" RTE-RRTMGP-Consortium)")
 done
@@ -39,8 +42,17 @@ for f in "${files[@]}"; do
       ;;
     rsd_*) vars="rsd" ;;
     rsu_*) vars="rsu" ;;
+    rlu_*) vars="rlu" ;;
   esac
   get "$server/dodsC/$f.ascii?$vars" "raw/${name%.nc}.txt"
+  case "$name" in
+    multiple_input4MIPs*)
+      # The longwave field (rfmip-longwave.tsv): ozone, the surface, and
+      # the well-mixed gases the methane and N2O steps change.
+      vars="ozone,surface_temperature,surface_emissivity,methane_GM,nitrogen_GM,oxygen_GM,nitrous_oxide_GM"
+      get "$server/dodsC/$f.ascii?$vars" "raw/${name%.nc}-longwave.txt"
+      ;;
+  esac
 done
 
 shasum -a 256 -c --quiet SHA256SUMS
