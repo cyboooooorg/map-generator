@@ -3347,7 +3347,7 @@ their measured air (see "Test air and Solar System bounds" below):
 | Body | Result | Target | Observed |
 |---|---|---|---|
 | Earth | 288 K, water, regulated, thermostat CO₂ 0.010605 bar by weight, a partial pressure of 6.819e-3 bar, Bond albedo 0.3066 (no O₂, so no ozone); on the measured air, with its 300 DU of ozone in the light and in the infrared (#704), Bond albedo 0.2907 and 289.38 K at 280 ppm (before #749, which keeps the air in weights: 6.910e-3 bar read as a partial pressure, 0.3064, 0.2906 and 289.39 K; before #704 and the clouds' infrared emissivity of #705: 4.071e-3 bar, 0.3071, 0.2914 and 288.18 K; before the N₂ and O₂ pairs of #703: 4.206e-3 bar and 288.02 K; on `main` after #655, before #705: 2.058e-3 bar, 0.2961 and 287.27 K under the reference Earth's albedo) | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
-| Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the model's own 579.578 K (printed by the tier-3 `venus_prints_its_temperature`, release, on this branch, #594) is a tier-3 number, not a tier-2 pin | 737 K |
+| Venus | 579.578 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the model's own 579.578 K (printed by the tier-3 `venus_prints_its_temperature`, release, on this branch, #594) is a tier-3 number, not a tier-2 pin | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
 | Titan | 92.36 K on the measured air, hydrocarbons; the reference Titan settles at 92.39 K on the chain's own air (92.33 K and 92.62 K before #749, whose chain methane, 2.11 bar by weight, the column read as a partial pressure; 92.64 K and 92.97 K before N₂ condensed in the column, #741; 93.86 K and 94.24 K under methane's grey stand-in, before #703; 104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | its equilibrium temperature, dry, temperate | within 1 K of it | airless |
@@ -4661,24 +4661,23 @@ Earth's gravity, 672.8 ppb of the moles in Earth's air.
 **The climate solved again.** The climate is solved again on the
 oxygenated air: climate, life, oxygenation, climate (decided on
 2026-11-24 in 2d-3a). Legacy kept the climate solved on the air before
-life and gave the oxygenated air only to the surface. On the reference
-Earth that air has no O₂: 0.75 bar, 283.8 K at 280 ppm of CO₂, and its
-thermostat needs about 2 000 ppm. On Earth's measured air (N₂ 78.08 %,
-O₂ 20.95 % of 1.014 bar) the solver gives 287.1 K at 280 ppm, inside
-the 286 to 290 K window of the tests (a test definition: Myhre et al.
-1998 give the 280 ppm, not a temperature). The second solve brings the
-reference Earth part of the way: its oxygenated air holds 0.746 bar of
-N₂ and 0.228 bar of O₂ (0.974 bar, no argon; measured 2026-11-25). Once
-the chain gives it Modern methane as well (dbf5b603) the second solve
-settles at 288.000 K with its thermostat's CO₂ at 2.4058e-4 bar by weight
-(the model's output, the tier-2 `the_reference_planets` net does not pin it:
-no reference planet is alive today, as reference 7's earth-like drew
-lifeless, so the figure is the model's for an Earth drawn alive,
-`the_reference_earth_lives_and_reaches_its_climate`); the 285.8 K it gave
-at 280 ppm under that albedo was measured earlier, with the O₂ counted by
-weight. The
-class does not read the
-O₂; the climate does, through the pressure. The second solve takes no
+life and gave the oxygenated air only to the surface. Before life the
+reference Earth's air has no O₂, and its thermostat holds 288 K with
+0.010605 bar of CO₂ by weight (the table of the climate solver's
+targets above); on Earth's measured air (N₂ 78.08 %, O₂ 20.95 % of
+1.014 bar) the solver gives 289.38 K at 280 ppm, inside the 286 to
+290 K window of the tests (a test definition: Myhre et al. 1998 give the
+280 ppm, not a temperature). After life, at the modern stage, the
+reference Earth's air holds 0.2285 bar of O₂ by weight (`O2_PER_N2`,
+0.306 of its N₂, "The oxygenated air"), 0.01294 bar of argon (the
+chain's own, `earth_weighs_its_argon`, "Argon (study 29)") and the methane of
+`modern_methane` (above); the second solve settles at 288.000 K with its
+thermostat's CO₂ at 2.4058e-4 bar by weight. These are the model's
+outputs for an Earth drawn alive, printed by the tier-3
+`the_reference_earth_lives_and_reaches_its_climate`; the tier-2
+`the_reference_planets` net does not pin them, as no reference planet is
+alive (reference 7's earth-like drew lifeless). The class does not read
+the O₂; the climate does, through the pressure. The second solve takes no
 boil verdict (a declared simplification): the class and the surface
 liquid read the second climate, the biosphere the first.
 
@@ -4838,7 +4837,7 @@ inventory (the share of the surface under water, which the world reads
 for its sea level), and the basin capacity above is a second law, for
 where the land drowns. They are not reconciled: `ocean_fraction` does not
 read the basins' capacity, so the two can disagree on a low-gravity
-planet, whose basins hold more (a follow-up issue).
+planet, whose basins hold more (#774).
 
 **The dense air.** `DENSE_AIR_BAR` is 1 bar, for the runaway greenhouse
 (Venus has 92 bar; a runaway that lost its air is a bare rock). No
@@ -4846,8 +4845,10 @@ source sets a pressure that parts a runaway greenhouse from a bare rock:
 the published criteria are the absorbed light (Goldblatt et al. 2013)
 or the distance to the star (Hamano et al. 2013), so it stays a
 calibration (study 27). The hydrocarbon world needs its air above methane's
-triple-point pressure (`methane_triple_pressure`, 0.1169 bar, NIST), under
-which no liquid methane is stable; it took the 1 bar until part 4, when
+triple-point pressure (`methane_triple_pressure`, 0.117 bar: Setzmann
+and Wagner 1991's saturation at their triple point, 90.6941 K, with
+NIST's 0.1169 bar as a cross-check), under which no liquid methane is
+stable; it took the 1 bar until part 4, when
 Titans drawn with 0.6 to 1 bar kept lakes but were classed ice worlds.
 It keeps a cold body with a trace of methane over its ice under a thin
 air an ice world. Titan has 1.4643 bar in the model, on its chain's own air
@@ -5812,6 +5813,8 @@ another paper, from memory) is said where it is used.
   of vaporisation, through the NIST Chemistry WebBook.
 - Wolf and Toon 2014, doi:10.1089/ast.2013.1112.
 - Wright et al. 2011, *ApJ* 743, 48.
+- Wright et al. 2012, *ApJ* 753, 160, doi:10.1088/0004-637X/753/2/160,
+  the frequency of hot Jupiters and their period under 10 days.
 - Xiao, Sriskandaruban and Maynard-Casely 2025, *Int. J. Thermophys.*
   46, 14, doi:10.1007/s10765-024-03469-2, solid argon's equation of
   state and its sublimation pressure, eq. 55 (read in the Research
