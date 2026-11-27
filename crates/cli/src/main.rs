@@ -1,5 +1,6 @@
 //! `map-generator`: the binary. Parses the arguments, runs the library's
-//! `dispatch`, prints on stdout and maps the errors to exit codes.
+//! `dispatch`, prints on stdout, prints the drawn seed's notice and the
+//! errors on stderr, and maps the errors to exit codes.
 
 use std::io::{self, ErrorKind, Write as _};
 use std::process::ExitCode;
@@ -11,7 +12,12 @@ use map_generator::error::CliError;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    match dispatch(&cli) {
+    let run = dispatch(&cli);
+    if let Some(seed) = run.drawn_seed {
+        let n = seed.get();
+        eprintln!("map-generator: seed {n} drawn; rerun with --seed {n}");
+    }
+    match run.output {
         Ok(text) => match writeln!(io::stdout().lock(), "{text}") {
             Ok(()) => ExitCode::SUCCESS,
             // The reader closed the pipe (`| head`): nothing left to say.

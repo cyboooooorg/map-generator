@@ -12,24 +12,38 @@ pub mod report;
 pub mod system;
 mod world;
 
+use timeline::Seed;
+
 use crate::args::{Cli, Command};
 use crate::error::CliError;
 
-/// Runs the command of `cli` and returns the text for stdout. When the
-/// seed was drawn, the notice to replay it goes on stderr.
-///
-/// # Errors
-///
-/// The command's own error: the draw, the explain path or the output.
-pub fn dispatch(cli: &Cli) -> Result<String, CliError> {
+/// What a command gives back to `main`: the root seed when it was drawn
+/// (`main` prints the notice to replay it, also when the command then
+/// fails), and the text for stdout or the command's error.
+#[derive(Debug)]
+pub struct Run {
+    /// The root seed drawn because `--seed` was omitted; `None` when it
+    /// was given, or when drawing it failed.
+    pub drawn_seed: Option<Seed>,
+    /// The text for stdout, or the command's error: the draw, the explain
+    /// path or the output.
+    pub output: Result<String, CliError>,
+}
+
+/// Runs the command of `cli`. Prints nothing: `main` keeps stdout and
+/// stderr.
+#[must_use]
+pub fn dispatch(cli: &Cli) -> Run {
     match &cli.command {
-        Command::System(command) => {
-            let root = command.system.root_seed()?;
-            if root.drawn {
-                let n = root.seed.get();
-                eprintln!("map-generator: seed {n} drawn; rerun with --seed {n}");
-            }
-            system::run(command, root.seed)
-        }
+        Command::System(command) => match command.system.root_seed() {
+            Ok(root) => Run {
+                drawn_seed: root.drawn.then_some(root.seed),
+                output: system::run(command, root.seed),
+            },
+            Err(error) => Run {
+                drawn_seed: None,
+                output: Err(error),
+            },
+        },
     }
 }

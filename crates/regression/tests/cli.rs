@@ -96,7 +96,7 @@ fn asked_archetypes_are_placed() {
 
 #[test]
 fn prints_the_draw_as_json() {
-    let text = dispatch(&cli(&[], 1)).unwrap();
+    let text = dispatch(&cli(&[], 1)).output.unwrap();
     let json: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(json["schema"], 1);
     assert!(json.get("classifier").is_none(), "the classifier is gone");
@@ -114,20 +114,24 @@ fn prints_the_draw_as_json() {
 #[ignore = "heavy: draws a system twice (260 s in debug); tier 2 checks the draw is pure on the shared references"]
 fn the_same_seed_prints_the_same_bytes() {
     assert_eq!(
-        dispatch(&cli(&[], 42)).unwrap(),
-        dispatch(&cli(&[], 42)).unwrap()
+        dispatch(&cli(&[], 42)).output.unwrap(),
+        dispatch(&cli(&[], 42)).output.unwrap()
     );
 }
 
 #[test]
 fn explain_prints_a_tree() {
-    let text = dispatch(&cli(&["--explain", "/planets/0/orbit/period"], 1)).unwrap();
+    let text = dispatch(&cli(&["--explain", "/planets/0/orbit/period"], 1))
+        .output
+        .unwrap();
     assert!(text.starts_with("system.draw.period = "), "{text}");
 }
 
 #[test]
 fn explain_a_code_held_by_no_field_names_its_dependents() {
-    let error = dispatch(&cli(&["--explain", "system.draw.break-up-fraction"], 1)).unwrap_err();
+    let error = dispatch(&cli(&["--explain", "system.draw.break-up-fraction"], 1))
+        .output
+        .unwrap_err();
     assert!(matches!(error, CliError::Explain(_)), "{error}");
     assert!(
         error
