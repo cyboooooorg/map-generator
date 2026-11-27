@@ -20,7 +20,7 @@ use regression::reference_requests;
 use science::units::Gyr;
 use serde_json::Value;
 use system::{ArchetypeId, Inputs};
-use timeline::{Code, Seed, TracedFields};
+use timeline::{BodyState, Code, Seed, TracedFields};
 
 /// The flags that give reference 1's inputs.
 const REFERENCE_ONE: &[&str] = &["--seed", "1", "--metallicity", "0"];
@@ -56,11 +56,21 @@ fn reference_one_json() -> &'static Value {
 // The report.
 
 #[test]
-fn the_star_timeline_has_one_keyframe_at_the_present() {
+fn every_timeline_has_one_keyframe_at_the_present() {
     let report = report_one();
     assert!(!report.planets.is_empty(), "reference 1 draws a planet");
-    assert_eq!(report.star.keyframes.len(), 1);
-    assert_eq!(report.star.keyframes[0].date(), report.star.present);
+    assert_eq!(report.timelines.len(), 1 + report.planets.len());
+    assert!(matches!(
+        report.timelines[0].keyframes[0].state(),
+        BodyState::Star(_)
+    ));
+    for (timeline, planet) in report.timelines[1..].iter().zip(&report.planets) {
+        assert_eq!(timeline.body, planet.designation);
+    }
+    for timeline in &report.timelines {
+        assert_eq!(timeline.keyframes.len(), 1);
+        assert_eq!(timeline.keyframes[0].date(), timeline.present);
+    }
 }
 
 #[test]
@@ -68,16 +78,21 @@ fn the_star_timeline_has_one_keyframe_at_the_present() {
 fn a_fixed_present_is_the_star_s_present() {
     let Command::System(command) = cli(&["--present", "4.5", "--host-mass", "1"]).command;
     let fixed = report(&command.system.inputs(Seed::new(1))).unwrap();
-    assert_eq!(fixed.star.present, Gyr(4.5));
+    for timeline in &fixed.timelines {
+        assert_eq!(timeline.present, Gyr(4.5), "{}", timeline.body);
+    }
 }
 
 #[test]
-fn every_planet_node_is_in_the_planet_graph() {
+fn every_node_is_in_its_graph() {
     let mut report = report_one();
     let len = report.causes.nodes.len();
     report.causes.validate().unwrap();
     for planet in &mut report.planets {
         planet.for_each_node(&mut |id| assert!((id.get() as usize) < len));
+    }
+    for timeline in &report.timelines {
+        timeline.keyframes[0].validate().unwrap();
     }
 }
 
@@ -110,24 +125,42 @@ fn asked_archetypes_are_placed() {
 fn prints_the_draw_as_json() {
     let json: Value = serde_json::from_str(&run(&[]).unwrap()).unwrap();
     assert_eq!(json["schema"], REPORT_SCHEMA);
-    assert_eq!(REPORT_SCHEMA, 2);
+    assert_eq!(REPORT_SCHEMA, 3);
     assert_eq!(
         json["inputs"],
         serde_json::to_value(reference_one()).unwrap(),
         "the flags give reference 1's inputs"
     );
     assert!(json.get("classifier").is_none(), "the classifier is gone");
-    for key in ["inputs", "engine", "family", "star", "planets", "causes"] {
+    for key in [
+        "inputs",
+        "engine",
+        "family",
+        "timelines",
+        "planets",
+        "causes",
+    ] {
         assert!(json.get(key).is_some(), "missing {key}");
     }
+    assert!(json.get("star").is_none(), "the star is timelines[0]");
     let planets = json["planets"].as_array().unwrap();
     assert!(!planets.is_empty());
     for planet in planets {
-        assert!(planet["state"]["class"].is_object(), "{planet}");
-        // The orbit, spin and sources are in `state` only.
-        for key in ["orbit", "spin", "sources"] {
+        for key in ["designation", "archetype", "mass"] {
+            assert!(planet.get(key).is_some(), "missing {key}: {planet}");
+        }
+        // The seed and the state are in the planet's timeline only.
+        for key in ["seed", "state"] {
             assert!(planet.get(key).is_none(), "{key} twice: {planet}");
-            assert!(!planet["state"][key].is_null(), "{key}: {planet}");
+        }
+    }
+    let timelines = json["timelines"].as_array().unwrap();
+    assert_eq!(timelines.len(), 1 + planets.len());
+    for timeline in &timelines[1..] {
+        let state = &timeline["keyframes"][0]["state"]["planet"];
+        assert!(state["class"].is_object(), "{timeline}");
+        for key in ["orbit", "spin", "sources"] {
+            assert!(!state[key].is_null(), "{key}: {timeline}");
         }
     }
 }
@@ -146,7 +179,11 @@ fn the_same_seed_prints_the_same_bytes() {
 
 #[test]
 fn a_pointer_to_a_period_explains_it() {
-    let text = run(&["--explain", "/planets/0/state/orbit/period"]).unwrap();
+    let text = run(&[
+        "--explain",
+        "/timelines/1/keyframes/0/state/planet/orbit/period",
+    ])
+    .unwrap();
     let lines: Vec<&str> = text.lines().collect();
     assert!(lines[0].starts_with("system.draw.period = "), "{text}");
     assert!(text.contains("system.star.mass"));
@@ -172,14 +209,14 @@ fn a_unique_code_explains_it() {
 #[test]
 fn a_repeated_code_is_ambiguous() {
     let report = reference_one_json();
-    let planets = report["planets"].as_array().unwrap().len();
+    let planets = report["timelines"].as_array().unwrap().len() - 1;
     assert!(planets >= 2, "reference 1 draws {planets} planets");
     match explain(report, "system.draw.period") {
         Err(ExplainError::Ambiguous { pointers, .. }) => {
             // One field per node: each planet holds its period once, in
             // its state's orbit.
             assert_eq!(pointers.len(), planets, "{pointers:?}");
-            assert!(pointers.iter().all(|p| p.starts_with("/planets/")));
+            assert!(pointers.iter().all(|p| p.starts_with("/timelines/")));
         }
         other => panic!("expected Ambiguous, got {other:?}"),
     }

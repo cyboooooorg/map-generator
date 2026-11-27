@@ -3,7 +3,8 @@
 //! It works on the report serialised to JSON, so it needs no type of the
 //! engines: a traced value is an object with exactly `value` and `node`,
 //! and its graph is the `causes.nodes` of its nearest ancestor that has
-//! a `causes` key (a star keyframe's own graph, or the report's).
+//! a `causes` key (a keyframe's own graph, or the report's for the drawn
+//! masses of `planets`).
 
 use std::collections::BTreeSet;
 use std::fmt::{self, Write as _};
@@ -115,12 +116,15 @@ fn explain_pointer(report: &Value, path: &str) -> Result<String, ExplainError> {
     }
 }
 
-/// Every graph of the report: its own and each keyframe's.
+/// Every graph of the report: its own and each keyframe's, of every
+/// timeline.
 fn graphs(report: &Value) -> Vec<&Vec<Value>> {
     let keyframes = report
-        .pointer("/star/keyframes")
+        .get("timelines")
         .and_then(Value::as_array)
         .into_iter()
+        .flatten()
+        .filter_map(|timeline| timeline.get("keyframes")?.as_array())
         .flatten();
     nodes_of(report)
         .into_iter()

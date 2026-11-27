@@ -13,8 +13,10 @@ use std::collections::BTreeSet;
 use regression::{LoggedRead, Reference, digest, reference_requests, references};
 use science::escape::MIN_ENVELOPE;
 use system::planet::{ALBEDO_TOLERANCE_K, class_of, is_giant};
-use system::{ArchetypeId, Placement, draw_with};
-use timeline::{Biosphere, Code, LiquidKind, NodeId, Origin, PlanetClass, PlanetState, Trace};
+use system::{ArchetypeId, ENGINE_VERSION, Placement, generate_with};
+use timeline::{
+    Biosphere, BodyState, CauseGraph, Code, LiquidKind, NodeId, Origin, PlanetClass, PlanetState,
+};
 
 /// Definition: the index of the `earth-like` request in
 /// `regression::reference_requests()` (seed 7).
@@ -33,21 +35,23 @@ fn name(reference: &Reference, placement: &Placement) -> String {
     )
 }
 
-/// Every placement of every reference with its state, designation first.
+/// Every placement of every reference with its present state and the
+/// cause graph of that state's keyframe, designation first.
 fn planets() -> impl Iterator<
     Item = (
         usize,
         &'static Reference,
         &'static Placement,
         &'static PlanetState,
+        &'static CauseGraph,
     ),
 > {
     references().iter().enumerate().flat_map(|(i, r)| {
         r.drawn
             .placements
             .iter()
-            .zip(&r.planets)
-            .map(move |(placement, state)| (i, r, placement, state))
+            .zip(r.planets())
+            .map(move |(placement, (state, graph))| (i, r, placement, state, graph))
     })
 }
 
@@ -66,7 +70,8 @@ fn reads_of<'a>(reference: &'a Reference, placement: &Placement) -> Vec<&'a Logg
 #[test]
 fn the_reference_planets() {
     golden_digests();
-    the_draw_is_pure_within_a_run();
+    generation_is_pure_within_a_run();
+    the_timelines_follow_the_draw();
     every_reference_planet_is_modelled();
     every_trial_seed_is_unique();
     the_earth_like_reference_has_a_surface();
@@ -102,24 +107,70 @@ fn golden_digests() {
     assert_eq!(digests, EXPECTED, "golden digests: {digests:?}");
 }
 
-/// The draw is a pure function of its inputs: drawing the first reference
-/// request again gives the digest of the shared draw.
-fn the_draw_is_pure_within_a_run() {
+/// Generation is a pure function of its inputs: generating the first
+/// reference request again, with the planet model's `class_of` instead of
+/// the logging classifier, gives the digest and the timelines of the
+/// shared build.
+fn generation_is_pure_within_a_run() {
     let request = &reference_requests()[0];
-    let again = draw_with(request, &mut Trace::new(), class_of).unwrap();
-    assert_eq!(digest(&again), digest(&references()[0].drawn), "purity");
+    let again = generate_with(request, class_of).unwrap();
+    assert_eq!(
+        digest(&again.drawn),
+        digest(&references()[0].drawn),
+        "purity"
+    );
+    assert!(
+        again.timelines == references()[0].timelines,
+        "purity: the timelines differ"
+    );
+}
+
+/// `generate`'s contract with its readers (`world::run`): one timeline per
+/// body, the star first then the placements in order, each with its body
+/// seed and one keyframe at the present; the draw's ids index the trace.
+fn the_timelines_follow_the_draw() {
+    for r in references() {
+        let who = r.drawn.designation.to_string();
+        let present = *r.drawn.age.value();
+        assert_eq!(r.timelines.len(), 1 + r.drawn.placements.len(), "{who}");
+        let star = &r.timelines[0];
+        assert_eq!(star.body, r.drawn.designation, "{who}");
+        assert_eq!(star.seed, r.drawn.seed, "{who}");
+        assert!(
+            matches!(star.keyframes[0].state(), BodyState::Star(_)),
+            "{who}: the first timeline is not the star's"
+        );
+        for (i, p) in r.drawn.placements.iter().enumerate() {
+            let timeline = &r.timelines[i + 1];
+            assert_eq!(timeline.body, p.designation, "{who}");
+            assert_eq!(timeline.seed, p.seed, "{}", p.designation);
+            assert!(
+                r.trace.node(p.trial.mass.node()).is_some(),
+                "{}: the trial mass is not in the trace",
+                p.designation
+            );
+        }
+        for timeline in &r.timelines {
+            let body = timeline.body.to_string();
+            assert_eq!(timeline.engine, ENGINE_VERSION, "{body}");
+            assert_eq!(timeline.present, present, "{body}");
+            assert_eq!(timeline.keyframes.len(), 1, "{body}");
+            assert_eq!(timeline.keyframes[0].date(), present, "{body}");
+            timeline.keyframes[0].validate().unwrap();
+        }
+    }
 }
 
 fn every_reference_planet_is_modelled() {
     let mut count = 0;
     for r in references() {
         assert_eq!(
-            r.planets.len(),
+            r.planets().count(),
             r.drawn.placements.len(),
             "{}",
             r.drawn.designation
         );
-        for state in &r.planets {
+        for (state, _) in r.planets() {
             state.validate().unwrap();
             count += 1;
         }
@@ -156,7 +207,7 @@ fn the_earth_like_reference_has_a_surface() {
         .drawn
         .placements
         .iter()
-        .zip(&r.planets)
+        .zip(r.planets().map(|(state, _)| state))
         .find(|(p, _)| p.trial.archetype.as_ref() == Some(&earth_like))
         .expect("reference 7 asks an earth-like");
     assert!(
@@ -174,7 +225,7 @@ fn the_obliquity_class_of_read_is_the_placements() {
     // placement's, bit for bit (it does not depend on the radius); a
     // giant's reads have none.
     let mut checked = 0;
-    for (_, r, placement, state) in planets() {
+    for (_, r, placement, state, _) in planets() {
         let reads = reads_of(r, placement);
         assert!(
             !reads.is_empty(),
@@ -231,7 +282,7 @@ const CLASS_CHANGES: &[(&str, &str, f64, &str, &str)] = &[];
 
 fn class_changes_between_draw_and_model_are_pinned() {
     let mut changes = Vec::new();
-    for (_, r, placement, state) in planets() {
+    for (_, r, placement, state, _) in planets() {
         let drawn_class = draw_class(r, placement);
         let e = placement.trial.orbit.eccentricity.value().get();
         if drawn_class != *state.class.value() {
@@ -356,7 +407,7 @@ fn row(state: &PlanetState, designation: String) -> (String, String, String, Str
 
 fn the_reference_planets_are_pinned() {
     let actual: Vec<_> = planets()
-        .map(|(_, r, p, state)| {
+        .map(|(_, r, p, state, _)| {
             row(
                 state,
                 p.designation.to_string() + &format!("@{}", r.inputs.seed.get()),
@@ -406,7 +457,7 @@ fn living_planets_keep_their_stage() {
     // that lost it is pinned.
     let mut living = 0;
     let mut lost = 0;
-    for (_, r, placement, state) in planets() {
+    for (_, r, placement, state, graph) in planets() {
         let Some(surface) = state.surface.as_ref() else {
             continue;
         };
@@ -415,11 +466,11 @@ fn living_planets_keep_their_stage() {
             continue;
         }
         living += 1;
-        let node = r.trace.node(surface.life.node()).unwrap();
+        let node = graph.node(surface.life.node()).unwrap();
         let Origin::Derived { from } = &node.origin else {
             panic!("{}: the life node is a leaf", name(r, placement));
         };
-        let first = r.trace.node(from[0]).unwrap();
+        let first = graph.node(from[0]).unwrap();
         assert_eq!(
             first.value,
             timeline::NodeValue::Code(Code::of(LiquidKind::Water.code())),
@@ -442,9 +493,9 @@ fn living_planets_keep_their_stage() {
     );
 }
 
-/// The codes of the ancestors of `id` (itself included) that contain
-/// `needle`.
-fn ancestors_coded(trace: &Trace, id: NodeId, needle: &str) -> BTreeSet<String> {
+/// The codes of the ancestors of `id` (itself included) in `graph` that
+/// contain `needle`.
+fn ancestors_coded(graph: &CauseGraph, id: NodeId, needle: &str) -> BTreeSet<String> {
     let mut pending = vec![id];
     let mut seen = BTreeSet::new();
     let mut found = BTreeSet::new();
@@ -452,7 +503,7 @@ fn ancestors_coded(trace: &Trace, id: NodeId, needle: &str) -> BTreeSet<String> 
         if !seen.insert(id) {
             continue;
         }
-        let node = trace.node(id).unwrap();
+        let node = graph.node(id).unwrap();
         if node.code.as_str().contains(needle) {
             found.insert(node.code.as_str().to_owned());
         }
@@ -473,11 +524,11 @@ fn boiled_off_placements_end_bare() {
     for (reference, letters) in [(5_usize, ["c", "d"]), (7, ["d", "e"])] {
         let r = &references()[reference];
         for letter in letters {
-            let (placement, state) = r
+            let (placement, (state, graph)) = r
                 .drawn
                 .placements
                 .iter()
-                .zip(&r.planets)
+                .zip(r.planets())
                 .find(|(p, _)| p.designation.to_string().ends_with(letter))
                 .unwrap_or_else(|| panic!("reference {} has no {letter}", reference + 1));
             let who = name(r, placement);
@@ -492,7 +543,7 @@ fn boiled_off_placements_end_bare() {
             ];
             let mut boil = BTreeSet::new();
             for node in outputs {
-                boil.extend(ancestors_coded(&r.trace, node, "boil"));
+                boil.extend(ancestors_coded(graph, node, "boil"));
             }
             for code in [
                 "planet.envelope.boil-off-ceiling",

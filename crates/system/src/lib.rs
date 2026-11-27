@@ -21,6 +21,7 @@ pub mod star;
 
 pub use archetype::ArchetypeId;
 pub use draw::{Drawn, draw_with};
+pub use engine::{Generated, generate, generate_with};
 pub use error::SystemError;
 pub use families::Family;
 pub use inputs::{BodyRequest, INPUTS_SCHEMA, Inputs, Request, SystemRequest};
