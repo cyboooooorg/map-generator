@@ -1462,6 +1462,22 @@ Legacy's rules, and why the rewrite departs from them:
   class reads that one.
 - **The super-Earth.** Borucki et al. 2011 say what legacy cites.
 
+**Calibration of the ice world's surface water.** `ICE_WORLD_MIN_OCEANS`,
+0.01 Earth ocean (#452), is ported as legacy had it. What it was fitted
+against: Mars's water ice. Carr & Head 2015 put its polar deposits and
+shallow ground ice at about 34 m of global equivalent layer, about
+4.9e18 kg, 0.0035 of the rewrite's `OCEAN_MASS` (1.4e21 kg; derived,
+about 0.004). How: by hand, a little over twice that one body's share,
+so that a body keeping a Mars's worth of ice is not yet an ice world;
+no distribution was fitted. What was searched and not found
+([study 27](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit),
+its table of the class constants and item 2 of its "New
+calibrations"): a surface water that makes an ice world; the definitions
+found (the COSPAR draft's icy worlds) are by the crust's volume. Carr &
+Head 2015 itself was not reached by study 27 (a 403 and an empty ADS
+record): the 34 m is the figure as study 22 reads it in the abstract,
+and as legacy quotes it.
+
 ## In the app
 
 ### What you see
@@ -2484,6 +2500,33 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      and bulk K/U ratios", *Icarus* 339, 113551,
      [doi:10.1016/j.icarus.2019.113551](https://doi.org/10.1016/j.icarus.2019.113551)
      (record only, as Lammer et al. 2021 quote it, study 31).
+143. Carr, M. H. & Head, J. W. 2015, "Martian surface/near-surface water
+     inventory: sources, sinks, and changes with time", *Geophysical
+     Research Letters* 42, 726–732,
+     [doi:10.1002/2014GL062464](https://doi.org/10.1002/2014GL062464)
+     (abstract, as study 22 reads it; not reached by study 27).
+144. Mazeh, T., Holczer, T. & Faigler, S. 2016, "Dearth of short-period
+     Neptunian exoplanets", *Astronomy & Astrophysics* 589, A75,
+     [doi:10.1051/0004-6361/201528065](https://doi.org/10.1051/0004-6361/201528065),
+     [arXiv:1602.07843](https://arxiv.org/abs/1602.07843).
+145. Helled, R., Nettelmann, N. & Guillot, T. 2020, "Uranus and Neptune:
+     origin, evolution and internal structure", *Space Science Reviews*
+     216, 38,
+     [doi:10.1007/s11214-020-00660-3](https://doi.org/10.1007/s11214-020-00660-3),
+     [arXiv:1909.04891](https://arxiv.org/abs/1909.04891).
+146. Kuskov, O. L. & Kronrod, V. A. 2005, Europa's share of ice and water,
+     as quoted in "Icy worlds: moons and dwarf planets",
+     [arXiv:2511.18776](https://arxiv.org/abs/2511.18776) (search summary,
+     study 27).
+147. Dawson, R. I. & Johnson, J. A. 2018, "Origins of hot Jupiters",
+     *Annual Review of Astronomy and Astrophysics* 56, 175–221,
+     [doi:10.1146/annurev-astro-081817-051853](https://doi.org/10.1146/annurev-astro-081817-051853),
+     preprint [arXiv:1801.06117](https://arxiv.org/abs/1801.06117).
+
+The values, tables and pages read for entries 143 to 147 are in
+[27-life-and-class-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit)
+and, for Carr & Head 2015,
+[22-surface-water (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/22-surface-water).
 
 The values, tables and pages read for entries 125 to 142 are in
 [31-late-formation-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/31-late-formation-audit),
