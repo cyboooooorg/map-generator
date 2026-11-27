@@ -3006,7 +3006,10 @@ snowball Earth of Hoffman et al. 2017, doi:10.1126/sciadv.1600983); the
 frozen branch's CO₂ is what its thermostat reaches: the most that leaves
 it frozen, just short of the CO₂ that thaws it (`still_frozen_bar`), or
 its maximum greenhouse where none thaws it, less what its cold surface
-frosts out (issue #522).
+frosts out (issue #522). An icy start that cycles (no fixed point, see
+"A climate with no fixed point" below) holds no frozen balance: it
+counts as thawed, and the thaw search stops at the first one (see "A
+thaw search that meets a cycle" below).
 Where both exist the planet is a snowball (`Climate::snowball`) when its
 formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
 `d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (9.80 bar in the
@@ -3775,6 +3778,46 @@ at it no longer passes for a settled one: the climate it belongs to is
 stored not converged (`planet.climate.converged` false), and
 `collapse_step_is_converged` fails on it. Crossing that flat gap in
 fewer climates is left to a search of its own.
+
+#### A thaw search that meets a cycle (#731)
+
+The thaw search bisects `ln CO₂` between the CO₂ the temperate branch
+froze with and its maximum greenhouse, from an icy start at each CO₂
+(13 steps, `THAW_STEPS`). Between the CO₂ where that start settles
+frozen and the CO₂ where it thaws, a methane Earth near its outer edge
+round a 4500 K star has a band where the start has no fixed point and
+cycles: at 1.2828 AU (0.9 of the way from its runaway orbit to its
+edge) it stays frozen up to 19.34 bar, cycles from about 19.50 to 19.64
+bar, and thaws at 19.647 bar (measured on main f6462ba2, release).
+Legacy's bisection, which the rewrite kept until 2026-11-27, counted a
+cycling start as frozen, since it is stored on its cold side (#729): it
+converged on the top of the band, spent 6 of its 13 calls there at 19
+to 22 albedo steps each (99 of 138 s), and stored the snowball as a
+cycle's cold side (222.578 K, `cycles` true), with a thaw at 19.6473
+bar and a snowball chance of 0.1099.
+
+A snowball whose CO₂ has entered the band has no frozen balance left:
+its climate swings to the warm side, the static analogue of the limit
+cycles of Kadoya and Tajika 2014 and Menou 2015. The thaw is therefore
+where the band starts, and since 2026-11-27 (decided with the user,
+#731) the search stops at its first cycling call: that CO₂ is the
+thaw, and the last CO₂ that stayed frozen is the snowball's. On that
+methane Earth the thaw goes to 19.4984 bar (−0.76 %), the chance to
+0.0979, and the snowball is a frozen balance (223.102 K at 19.3409 bar,
+`cycles` false); the search takes about 56 s instead of 138 s. The
+bottom of the band is then known only within the bracket the search
+had reached when it met the band (19.34 to 19.50 bar here, 0.8 %), not
+within `THAW_STEPS`: continuing the search with a cycle counted as
+thawed would place it within 0.013 % (19.3974 bar) but costs as much as
+before (130 s), the frozen calls just under the band taking 11 to 13
+albedo steps each. An icy start that cycles at the frozen CO₂ or at the
+maximum greenhouse counts as thawed too. Round the Sun (1.25, 1.2534
+and 1.264 AU) and round a 3300 K star (1.3231, 1.3586 and 1.3657 AU),
+no call of the search cycles, and the plain Earth's never does (#731):
+those climates do not change. The tier-3 test
+`a_snowball_thaws_where_its_icy_start_starts_cycling` holds the 4500 K
+case, and `collapse_step_is_converged` checks that the collapse's step
+does not flip its frozen climates between settling and cycling.
 
 #### Solver constants (rule of #648)
 

@@ -1,5 +1,5 @@
 use super::ClimateInputs;
-use super::branches::{Solved, solve};
+use super::branches::{IcyStart, Solved, solve, thaw_search};
 use super::fixture::{earth, moved, titan};
 use science::surface::Liquid;
 use science::units::Kilogram;
@@ -124,4 +124,68 @@ fn a_hydrocarbon_sea_world_is_temperate() {
         "{solved:?}"
     );
     assert_eq!(solved.state, ClimateState::Temperate, "{solved:?}");
+}
+
+/// Definition: test inputs, a synthetic thaw search in `ln CO₂` from 1
+/// to 100 bar, its icy start thawing from 30 bar up and, in the cycling
+/// case, cycling from 20 to 30 bar. Not a body's CO₂.
+const SEARCH: (f64, f64) = (1.0, 100.0);
+
+/// Definition: the synthetic thaw and the bottom of its cycling band,
+/// bar ([`SEARCH`]).
+const SYNTHETIC_THAW: f64 = 30.0;
+const SYNTHETIC_BAND: f64 = 20.0;
+
+/// Definition: the synthetic search's steps, 13, as `THAW_STEPS`.
+const SEARCH_STEPS: usize = 13;
+
+/// The synthetic icy start at `co2`, counting its calls in `calls`.
+fn synthetic(co2: f64, band: bool, calls: &mut usize) -> IcyStart {
+    *calls += 1;
+    if co2 >= SYNTHETIC_THAW {
+        IcyStart::Thaws
+    } else if band && co2 >= SYNTHETIC_BAND {
+        IcyStart::Cycles
+    } else {
+        IcyStart::StaysFrozen
+    }
+}
+
+#[test]
+fn a_thaw_search_with_no_cycle_bisects_every_step() {
+    let mut calls = 0;
+    let (still_frozen, thaw) = thaw_search(SEARCH.0, SEARCH.1, SEARCH_STEPS, |c| {
+        synthetic(c, false, &mut calls)
+    });
+    assert_eq!(calls, SEARCH_STEPS);
+    assert!(still_frozen < SYNTHETIC_THAW && SYNTHETIC_THAW <= thaw);
+    // 13 halvings of ln(100): the bracket is 100^(2^-13) wide.
+    let width = (SEARCH.1 / SEARCH.0).ln() / f64::from(1u32 << SEARCH_STEPS);
+    assert!(
+        (thaw / still_frozen).ln() <= width * (1.0 + 1e-9),
+        "{still_frozen} {thaw}"
+    );
+}
+
+#[test]
+fn a_thaw_search_stops_at_its_first_cycling_call() {
+    // An icy start that cycles has no frozen balance: the snowball stops
+    // holding there, so that CO₂ is its thaw, and the last CO₂ that stayed
+    // frozen is the snowball's.
+    let mut calls = 0;
+    let (still_frozen, thaw) = thaw_search(SEARCH.0, SEARCH.1, SEARCH_STEPS, |c| {
+        synthetic(c, true, &mut calls)
+    });
+    assert!(calls < SEARCH_STEPS, "{calls} calls");
+    let mut last = 0;
+    assert_eq!(
+        synthetic(thaw, true, &mut last),
+        IcyStart::Cycles,
+        "{thaw} bar"
+    );
+    assert_eq!(
+        synthetic(still_frozen, true, &mut last),
+        IcyStart::StaysFrozen,
+        "{still_frozen} bar"
+    );
 }

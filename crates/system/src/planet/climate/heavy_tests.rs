@@ -2076,10 +2076,56 @@ fn collapse_step_is_converged() {
                 frozen_over(&b),
                 "{at}, {name}: {a:?} {b:?}"
             );
+            // The thaw search stops at its first cycling call: a step
+            // that flipped a climate between settling and cycling would
+            // move the thaw.
+            assert_eq!(a.cycles, b.cycles, "{at}, {name}: {a:?} {b:?}");
             assert!(
                 (a.temperature.0 - b.temperature.0).abs() < super::ALBEDO_TOLERANCE_K.0,
                 "{at}, {name}: {a:?} {b:?}"
             );
         }
     }
+}
+
+/// Definition: a test input placed by a probe, not a fact of any body: a
+/// methane Earth round a 4500 K star at 0.9 of the way from its runaway
+/// orbit to its outer edge, 1.2828 AU (#731), whose icy start cycles
+/// between about 19.50 and 19.64 bar of CO₂ and thaws above (measured on
+/// main f6462ba2). Study 36's methane lines are expected to thaw it.
+const CYCLING_THAW: (Kelvin, f64) = (Kelvin(4500.0), 1.2828);
+
+#[test]
+#[ignore = "heavy: the thaw search of a methane Earth round a 4500 K star, about 60 s"]
+fn a_snowball_thaws_where_its_icy_start_starts_cycling() {
+    let (teff, au) = CYCLING_THAW;
+    let inputs = inputs_at(&EARTH, au, teff);
+    let inputs = ClimateInputs {
+        air: PartialPressures {
+            ch4: titan().air.ch4,
+            ..inputs.air
+        },
+        ..inputs
+    };
+    let solved = solve(&inputs, COLD_DRAW);
+    let b = solved.bistable.expect("bistable");
+    let thaw = b.thaw.expect("a CO₂ it holds thaws it");
+    let c = &solved.settle;
+    println!(
+        "froze {:.4}, still frozen {:.4}, thaw {:.4} bar, chance {:.5}; snowball {:.3} K, \
+         cycles {}, converged {}",
+        b.froze.0,
+        b.still_frozen.0,
+        thaw.0,
+        b.chance.get(),
+        c.temperature.0,
+        c.cycles,
+        c.converged
+    );
+    // The snowball is a frozen balance, not a cycle's cold side.
+    assert_eq!(solved.state, ClimateState::Snowball, "{solved:?}");
+    assert!(c.converged && !c.cycles && frozen_over(c), "{c:?}");
+    // Its thaw is where its icy start stops holding: it cycles there.
+    let at_thaw = frozen_at(&mut ClimateBody::new(&inputs, Numerics::DEFAULT), thaw);
+    assert!(at_thaw.cycles, "{thaw:?}: {at_thaw:?}");
 }
