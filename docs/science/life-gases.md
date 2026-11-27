@@ -281,7 +281,7 @@ ratios carry over.
 
 ### What it does now
 
-- **The `Modern` methane law is in `science`, not yet wired.**
+- **A `Modern` air keeps the methane of its biosphere.**
   `science::life_gases::modern_methane(stars, gravity)` gives the
   methane of a `Modern` air, bar by weight (the climate reads its share
   of the moles from the whole air, issue #749): $p = \Phi_A \tau g$ with
@@ -292,14 +292,18 @@ ratios carry over.
   Earth's 9.798 m/s² it gives 3.678e-7 bar, 672.8 ppb by moles in the
   reference air, inside Prather et al.'s 680 ± 24 like for like
   (`modern_methane_around_the_sun_is_prathers_column`). Planet PR 2d-4
-  calls it from its `Modern` stage (`life::oxygenate`); until then no
-  engine reads it, and the reference bodies' airs are unchanged.
-- **No biogenic gas in the engines yet.** `science::life::oxygenate`
-  (planet PR 2d-4) gives a `Modern` air O₂ at `O2_PER_N2` of its N₂ and
-  removes its methane; an `Oxidising` air loses its methane and keeps no
-  O₂ (#717); `Anoxic` and `Lifeless` airs pass through. N₂O is not a gas
-  of the model (`PartialPressures` holds N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂
-  and Ar; #737).
+  wires it: `science::life::oxygenate` gives a `Modern` air O₂ at
+  `O2_PER_N2` of its N₂ and this methane, read from each star's
+  effective temperature and orbit-mean flux on the planet
+  (`StellarSource`) and the planet's surface gravity
+  (`a_modern_air_keeps_the_methane_of_its_stars`). The planet engine
+  records it as `planet.life.air.ch4`, derived from the life node, the
+  surface gravity and each source's flux and effective temperature
+  (`system::planet::life`), and solves the climate again on that air.
+- **No other biogenic gas in the engines.** An `Oxidising` air loses
+  its methane and keeps no O₂ (#717); `Anoxic` and `Lifeless` airs pass
+  through. N₂O is not a gas of the model (`PartialPressures` holds N₂,
+  CO₂, H₂O, CH₄, NH₃, SO₂, O₂ and Ar; #737).
 - **Abiotic methane only.** Outgassed methane survives only under an
   equilibrium temperature of 150 K (`photochemistry::METHANE_SURVIVES`,
   a calibration) and is destroyed by Lyman α photolysis
@@ -320,10 +324,9 @@ ratios carry over.
   weights; the column reads partial pressures, shares of the moles. The
   climate keeps its air in weights and converts the whole air at each
   law it calls (`Weights::partial_pressures`), so the law's 3.678e-7 bar
-  of methane by weight would reach the column as 672.8 ppb of the moles
-  in Earth's air once 2d-4 wires the law
-  (`weights_read_as_study_37_reads_its_methane`), where the column would
-  have read it as 373 ppb ($16.04/28.96$ of it) before. Argon and
+  of methane by weight reaches the column as 672.8 ppb of the moles in
+  Earth's air (`weights_read_as_study_37_reads_its_methane`), where the
+  column would have read it as 373 ppb ($16.04/28.96$ of it) before. Argon and
   Titan's chain methane are read the same way.
 
 ### Where the code's docs disagree

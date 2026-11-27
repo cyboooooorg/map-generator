@@ -14,7 +14,7 @@ use super::codes;
 use super::interior::InteriorError;
 use super::settled::{Settled, climate_of};
 use science::life::{Stage, oxygenate, stage};
-use science::units::{Bar, Fraction, Gyr};
+use science::units::{Bar, EarthFlux, Fraction, Gyr, Kelvin};
 use timeline::{Biosphere, Code, Gas, LiquidKind, NodeId, Provenance, Trace, Traced};
 
 /// A settled planet and its life.
@@ -40,7 +40,11 @@ pub(crate) struct Living {
 /// 3. an oxidising or modern biosphere oxygenates the bare air
 ///    ([`oxygenate`]): `planet.life.air.o2` (from the N₂ for a modern
 ///    one, the bare air's O₂ for an oxidising one, and the life node),
-///    `planet.life.air.ch4` (from the life node) and
+///    `planet.life.air.ch4` (none for an oxidising one, from the life
+///    node; the methane a modern biosphere keeps,
+///    `science::life_gases::modern_methane`, from the life node, the
+///    surface gravity and each source's flux and effective temperature)
+///    and
 ///    `planet.life.air.pressure` (the sum of the partials); its climate is
 ///    solved again on that air ([`climate_of`]) and replaces the first.
 ///
@@ -111,15 +115,24 @@ fn biosphere(s: Stage) -> Biosphere {
 
 /// `bare` with its air oxygenated at the stage `s` of the life node
 /// `life` ([`oxygenate`]), its new O₂, CH₄ and pressure recorded.
-fn oxygenated(
+pub(super) fn oxygenated(
     bare: &Bare,
     s: Stage,
     life: Traced<Biosphere>,
     trace: &mut Trace,
 ) -> Result<Bare, InteriorError> {
     let mut bare = bare.clone();
+    let gravity = bare.body.bulk().surface_gravity;
+    let sources = bare.trial.sources.iter();
+    let stars: Vec<(Kelvin, EarthFlux)> = sources
+        .clone()
+        .map(|s| (*s.effective_temperature.value(), *s.flux.value()))
+        .collect();
+    let lights: Vec<NodeId> = sources
+        .flat_map(|s| [s.flux.node(), s.effective_temperature.node()])
+        .collect();
     let surface = bare.surface.as_mut().expect("a climate has a surface");
-    let air = oxygenate(&weights(&surface.atmosphere), s);
+    let air = oxygenate(&weights(&surface.atmosphere), s, &stars, *gravity.value());
     let partial = &mut surface.atmosphere.partial;
     let o2_from = if s == Stage::Modern {
         partial[&Gas::N2].node()
@@ -131,7 +144,14 @@ fn oxygenated(
         Bar(air.o2),
         &[o2_from, life.node()],
     )?;
-    let ch4 = trace.record(Code::of(codes::LIFE_AIR_CH4), Bar(air.ch4), &[life.node()])?;
+    // A modern biosphere's methane reads the stars' light and the gravity
+    // (`science::life_gases::modern_methane`); an oxidising air's none.
+    let mut ch4_from = vec![life.node()];
+    if s == Stage::Modern {
+        ch4_from.push(gravity.node());
+        ch4_from.extend(lights);
+    }
+    let ch4 = trace.record(Code::of(codes::LIFE_AIR_CH4), Bar(air.ch4), &ch4_from)?;
     partial.insert(Gas::O2, o2);
     partial.insert(Gas::Ch4, ch4);
     let from: Vec<NodeId> = partial.values().map(Traced::node).collect();

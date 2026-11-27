@@ -8,17 +8,19 @@
 //! small water world, and on the reference Earth in
 //! `climate::heavy_tests::the_reference_earth_lives_and_reaches_its_climate`.
 
+use super::bare::bare_with;
 use super::climate::Rotation;
 use super::climate::fixture::rotation;
 use super::codes;
 use super::draws::{LABELS, life_draw, snowball_draw};
-use super::life::{Living, living};
+use super::life::{Living, living, oxygenated};
 use super::settled::{Settled, settled_with};
 use super::settled_tests::{SMALL_MASS, nodes_of};
 use super::tests::{
     EARTH, MARS, ReferenceBody, VENUS, ancestry, derived_from, reference_trial, water_world_trial,
 };
-use science::life::O2_PER_N2;
+use science::life::{O2_PER_N2, Stage};
+use science::life_gases::modern_methane;
 use science::units::{Degree, Gyr};
 use std::collections::BTreeSet;
 use timeline::{Biosphere, Code, Gas, LiquidKind, Provenance, Seed, Trace, Traced};
@@ -95,6 +97,18 @@ fn small_water_world() -> (Settled, Rotation, f64, Trace) {
     (settled, rot, snowball_draw(seed), trace)
 }
 
+/// The methane of a modern biosphere on `bare`
+/// (`science::life_gases::modern_methane` of its stars and gravity).
+fn modern_methane_of(bare: &super::bare::Bare) -> science::units::Bar {
+    let stars: Vec<_> = bare
+        .trial
+        .sources
+        .iter()
+        .map(|s| (*s.effective_temperature.value(), *s.flux.value()))
+        .collect();
+    modern_methane(&stars, *bare.body.bulk().surface_gravity.value())
+}
+
 /// The codes of every node `node` derives from, itself included.
 fn causes(trace: &Trace, node: timeline::NodeId) -> BTreeSet<String> {
     ancestry(trace, node)
@@ -146,7 +160,8 @@ fn the_second_solve_is_what_the_class_reads() {
     let o2 = air.partial[&Gas::O2];
     assert_eq!(o2.value().0, O2_PER_N2 * n2.value().0);
     assert!(derived_from(&trace, o2.node()).contains(&n2.node()));
-    assert_eq!(air.partial[&Gas::Ch4].value().0, 0.0);
+    let bare = &life.settled.bare;
+    assert_eq!(*air.partial[&Gas::Ch4].value(), modern_methane_of(bare));
     let second = life.settled.climate.as_ref().unwrap();
     let t = second.global.surface_temperature;
     assert_ne!(t.node(), first.global.surface_temperature.node());
@@ -158,4 +173,40 @@ fn the_second_solve_is_what_the_class_reads() {
     let (settled, lifeless, _) = living_with(small_water_world(), LIFELESS_DRAW);
     assert_eq!(*lifeless.life.unwrap().value(), Biosphere::Lifeless);
     assert_eq!(lifeless.settled, settled);
+}
+
+#[test]
+fn a_modern_air_keeps_the_methane_of_its_stars() {
+    let mut trace = Trace::new();
+    let (t, d) = reference_trial(&mut trace, &EARTH);
+    let bare = bare_with(&t, &d, &mut trace).unwrap();
+    let life = trace
+        .leaf(Code::of("test.life"), Biosphere::Modern, Provenance::Input)
+        .unwrap();
+    let modern = oxygenated(&bare, Stage::Modern, life, &mut trace).unwrap();
+    let ch4 = modern.surface.as_ref().unwrap().atmosphere.partial[&Gas::Ch4];
+
+    // The law, on the stars and the gravity of the chain: the Sun at one
+    // Earth flux on the reference Earth's gravity (study 37's 3.68e-7
+    // bar is `science::life`'s test of the same call).
+    let gravity = bare.body.bulk().surface_gravity;
+    assert_eq!(*ch4.value(), modern_methane_of(&bare));
+    let parents = derived_from(&trace, ch4.node());
+    assert!(parents.contains(&life.node()), "{parents:?}");
+    assert!(parents.contains(&gravity.node()), "{parents:?}");
+    for s in t.sources.iter() {
+        assert!(parents.contains(&s.flux.node()), "{parents:?}");
+        assert!(
+            parents.contains(&s.effective_temperature.node()),
+            "{parents:?}"
+        );
+    }
+    let pressure = modern.surface.as_ref().unwrap().atmosphere.surface_pressure;
+    assert!(derived_from(&trace, pressure.node()).contains(&ch4.node()));
+
+    // An oxidising air keeps none, from the life node alone (#717).
+    let oxidising = oxygenated(&bare, Stage::Oxidising, life, &mut trace).unwrap();
+    let ch4 = oxidising.surface.as_ref().unwrap().atmosphere.partial[&Gas::Ch4];
+    assert_eq!(ch4.value().0, 0.0);
+    assert_eq!(derived_from(&trace, ch4.node()), vec![life.node()]);
 }

@@ -8,10 +8,10 @@
 //! partial pressures are weights (a gas's mass share times the surface
 //! pressure), so the partial pressure is `p = Φ_A τ g`, with `Φ_A` the
 //! flux per square metre. A `Modern` biosphere (the planet engine's
-//! stage, from 4 Gyr; PR 2d-4 calls [`modern_methane`]) takes Earth's
-//! pre-industrial natural flux per square metre, and the air the
-//! pre-industrial lifetime times the host factor of calibration 1
-//! ([`methane_host_factor`]): a cooler host sends less of the near
+//! stage, from 4 Gyr, which `life::oxygenate` gives [`modern_methane`])
+//! takes Earth's pre-industrial natural flux per square metre, and the
+//! air the pre-industrial lifetime times the host factor of calibration
+//! 1 ([`methane_host_factor`]): a cooler host sends less of the near
 //! ultraviolet that makes the OH radical, so the same flux keeps more
 //! methane. No methane feedback (the lifetime does not grow with the
 //! methane, #738); N₂O comes with N₂O as a gas (#737; its lines are in
@@ -24,7 +24,7 @@ use crate::units::{Bar, EarthFlux, Kelvin, MetrePerSecondSquared, Pascal, Year};
 
 #[cfg(test)]
 #[path = "life_gases_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 /// Source: Earth's natural emissions of methane in 1750, 202 ± 28 Tg of
 /// CH₄ per year (Prather, Holmes & Hsu 2012, *Geophys. Res. Lett.* 39,
@@ -162,10 +162,11 @@ pub fn methane_lifetime(stars: &[(Kelvin, EarthFlux)]) -> Year {
 /// it is 3.68e-7 bar, 673 ppb by moles in the reference Earth's air
 /// (study 37). None on a body without gravity.
 ///
-/// The infrared column reads the chain's weights as shares of the moles
-/// (`docs/science/radiative-transfer.md`, argon): it sees this methane
-/// as 16.043/28.96 of what it is, about 373 ppb of Earth's air (a
-/// departure, `docs/science/life-gases.md`, issue #749).
+/// The climate converts the air's weights to partial pressures, shares
+/// of the moles, at each law it calls (`Weights::partial_pressures`,
+/// issue #749): this methane reaches the infrared column as 672.8 ppb of
+/// the moles in Earth's air. The planet engine's `Modern` stage reads it
+/// through `life::oxygenate`.
 pub fn modern_methane(stars: &[(Kelvin, EarthFlux)], gravity: MetrePerSecondSquared) -> Bar {
     let g = gravity.0;
     if g.is_nan() || g <= 0.0 {

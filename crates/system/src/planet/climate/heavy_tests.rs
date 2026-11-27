@@ -2144,6 +2144,10 @@ fn the_reference_earth_lives_and_reaches_its_climate() {
     // again on the oxygenated air, is Earth's preindustrial one.
     let second = life.settled.climate.as_ref().unwrap();
     let t2 = second.global.surface_temperature.value().0;
+    println!(
+        "second solve: {t2:.3} K, CO2 {:.4e} bar",
+        second.atmosphere.partial[&Gas::Co2].value().0
+    );
     assert!(
         (PREINDUSTRIAL_RANGE.0.0..=PREINDUSTRIAL_RANGE.1.0).contains(&t2),
         "{t2} K, {second:?}"
@@ -2155,7 +2159,17 @@ fn the_reference_earth_lives_and_reaches_its_climate() {
         air.partial[&Gas::O2].value().0,
     );
     assert_eq!(o2, O2_PER_N2 * n2);
-    assert_eq!(air.partial[&Gas::Ch4].value().0, 0.0);
+    // The methane a modern biosphere keeps around the Sun on this gravity.
+    let stars: Vec<_> = t
+        .sources
+        .iter()
+        .map(|s| (*s.effective_temperature.value(), *s.flux.value()))
+        .collect();
+    let gravity = *life.settled.bare.body.bulk().surface_gravity.value();
+    assert_eq!(
+        *air.partial[&Gas::Ch4].value(),
+        science::life_gases::modern_methane(&stars, gravity)
+    );
 
     // The oxygenated air with Earth's preindustrial CO₂, solved. The
     // carbonate thermostat rebuilds the CO₂ from the carbon inventory

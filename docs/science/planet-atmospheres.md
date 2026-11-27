@@ -4644,12 +4644,17 @@ see "Earth's N₂ target"): the ratio of the mole fractions, 0.2682, would
 give the reference Earth 0.200 bar of O₂ instead of 0.228. Legacy's 0.27
 rounded 0.21 over 0.78, by volume. The ratio to N₂ is the model's choice of how Earth's air carries over to another planet:
 the O₂ of a planet is set by its biology and its sinks, which the model
-does not have. The methane is removed: in an oxygenated air OH destroys
-it within 9.1 ± 0.9 years (Prather, Holmes & Hsu 2012), and what is left
-is a steady state of the biological and other fluxes (Zahnle, Claire &
-Catling 2006), 1.9 ppm on today's Earth (NOAA GML). The model has no
-such flux, so the methane is zero from the oxidising step on (a
-`Definition:` of the model's scope).
+does not have. In an oxygenated air OH destroys methane within 9.1 ±
+0.9 years (Prather, Holmes & Hsu 2012), and what is left is a steady
+state of the biological and other fluxes (Zahnle, Claire & Catling
+2006), 1.9 ppm on today's Earth (NOAA GML). The oxidising air models no
+such flux, so its methane is zero (a `Definition:` of the model's
+scope, #717). A modern air keeps the methane of a modern biosphere:
+Earth's pre-industrial natural flux per square metre held against the
+lifetime its stars give it, on its gravity
+(`science::life_gases::modern_methane`, study 37,
+[Life gases](life-gases.md)), 3.678e-7 bar by weight around the Sun on
+Earth's gravity, 672.8 ppb of the moles in Earth's air.
 
 **The climate solved again.** The climate is solved again on the
 oxygenated air: climate, life, oxygenation, climate (decided on
@@ -4672,7 +4677,7 @@ liquid read the second climate, the biosphere the first.
 
 | Case | Result |
 | --- | --- |
-| Earth, life draw 0, 4.6 Gyr | life, O₂ at 0.306 of the N₂ by weight, no CH₄, climate solved again |
+| Earth, life draw 0, 4.6 Gyr | life, O₂ at 0.306 of the N₂ by weight, CH₄ of `modern_methane`, climate solved again |
 | Earth at 0.5 Gyr | no life |
 | Earth at 1.5 Gyr | life, no oxygen yet |
 | Earth at 3.0 Gyr | life, an oxidising air: no CH₄, no O₂ |

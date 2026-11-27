@@ -445,8 +445,10 @@ pub(crate) const LIFE_DRAW: &str = "planet.life.draw";
 /// (`science::life::oxygenate`): `O2_PER_N2` times the N2 for a modern
 /// biosphere, the bare air's O2 for an oxidising one.
 pub(crate) const LIFE_AIR_O2: &str = "planet.life.air.o2";
-/// Partial pressure of CH4 in the air life has oxygenated: 0 bar, the
-/// methane oxidised.
+/// Partial pressure of CH4 in the air life has oxygenated: 0 bar for an
+/// oxidising biosphere, the methane oxidised; for a modern one, the
+/// methane its flux keeps under its stars on its gravity
+/// (`science::life_gases::modern_methane`).
 pub(crate) const LIFE_AIR_CH4: &str = "planet.life.air.ch4";
 /// Surface pressure of the air life has oxygenated: the sum of its
 /// partial pressures.

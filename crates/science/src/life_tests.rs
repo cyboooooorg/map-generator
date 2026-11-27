@@ -1,4 +1,18 @@
 use super::*;
+use crate::constants::SOLAR_EFFECTIVE_TEMPERATURE;
+use crate::life_gases::modern_methane;
+use crate::life_gases::tests::{STUDY_37_BAR, STUDY_37_WITHIN, earth_gravity};
+use crate::units::{EarthFlux, Kelvin};
+
+/// Source: the Sun as seen from Earth, its effective temperature
+/// ([`SOLAR_EFFECTIVE_TEMPERATURE`]) and one Earth flux (the unit's
+/// definition), the host of study 37's derivation.
+const SUN: [(Kelvin, EarthFlux); 1] = [(SOLAR_EFFECTIVE_TEMPERATURE, EarthFlux(1.0))];
+
+/// Definition: a K2V host at one Earth flux, 5000 K (Rugheimer &
+/// Kaltenegger 2018, Table 1, a host of `life_gases`'s grid), whose
+/// methane is not the Sun's.
+const K2V: [(Kelvin, EarthFlux); 1] = [(Kelvin(5000.0), EarthFlux(1.0))];
 
 /// Definition: a draw under any chance, the lowest a draw can be.
 const LUCKY: f64 = 0.0;
@@ -94,9 +108,10 @@ fn o2_per_n2_is_the_cipm_ratio_by_weight() {
 
 #[test]
 fn oxygen_comes_in_two_steps() {
-    assert_eq!(oxygenate(&EARLY_AIR, Stage::Lifeless), EARLY_AIR);
-    assert_eq!(oxygenate(&EARLY_AIR, Stage::Anoxic), EARLY_AIR);
-    let oxidising = oxygenate(&EARLY_AIR, Stage::Oxidising);
+    let g = earth_gravity();
+    assert_eq!(oxygenate(&EARLY_AIR, Stage::Lifeless, &SUN, g), EARLY_AIR);
+    assert_eq!(oxygenate(&EARLY_AIR, Stage::Anoxic, &SUN, g), EARLY_AIR);
+    let oxidising = oxygenate(&EARLY_AIR, Stage::Oxidising, &SUN, g);
     assert_eq!(
         oxidising,
         Weights {
@@ -104,14 +119,31 @@ fn oxygen_comes_in_two_steps() {
             ..EARLY_AIR
         }
     );
-    let modern = oxygenate(&EARLY_AIR, Stage::Modern);
+    let modern = oxygenate(&EARLY_AIR, Stage::Modern, &SUN, g);
     assert_eq!(
         modern,
         Weights {
-            ch4: 0.0,
+            ch4: modern_methane(&SUN, g).0,
             o2: O2_PER_N2 * EARLY_AIR.n2,
             ..EARLY_AIR
         }
     );
     assert!(LIVING_EARTH_O2.contains(&modern.o2), "{}", modern.o2);
+}
+
+#[test]
+fn a_modern_air_keeps_the_methane_of_its_stars() {
+    let g = earth_gravity();
+    let around_the_sun = oxygenate(&EARLY_AIR, Stage::Modern, &SUN, g).ch4;
+    assert!(
+        (around_the_sun / STUDY_37_BAR - 1.0).abs() < STUDY_37_WITHIN,
+        "{around_the_sun}"
+    );
+    let around_a_k2v = oxygenate(&EARLY_AIR, Stage::Modern, &K2V, g).ch4;
+    assert_eq!(around_a_k2v, modern_methane(&K2V, g).0);
+    assert!(around_a_k2v > around_the_sun, "{around_a_k2v}");
+    // An oxidising air keeps none, whatever its host (#717).
+    for stars in [&SUN, &K2V] {
+        assert_eq!(oxygenate(&EARLY_AIR, Stage::Oxidising, stars, g).ch4, 0.0);
+    }
 }

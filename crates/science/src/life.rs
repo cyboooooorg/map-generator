@@ -10,8 +10,9 @@
 //! "Life". The engine draws the life draw from the planet's seed; this
 //! module only reads it.
 
+use crate::life_gases::modern_methane;
 use crate::radiation::gases::{N2_MOLAR_MASS, O2_MOLAR_MASS, Weights};
-use crate::units::Gyr;
+use crate::units::{EarthFlux, Gyr, Kelvin, MetrePerSecondSquared};
 
 /// Source: the oldest generally accepted evidence of life after Earth
 /// formed, 1.17 Gyr: the age of the CAIs, 4.567 Ga (4567.30 ± 0.16 Myr,
@@ -70,7 +71,8 @@ pub enum Stage {
     Anoxic,
     /// From [`OXYGEN_AFTER_GYR`]: no methane, O₂ taken as none.
     Oxidising,
-    /// From [`MODERN_OXYGEN_AFTER_GYR`]: modern O₂, no methane.
+    /// From [`MODERN_OXYGEN_AFTER_GYR`]: modern O₂, and the methane a
+    /// modern biosphere keeps ([`modern_methane`]).
     Modern,
 }
 
@@ -92,18 +94,27 @@ pub fn stage(water: bool, age: Gyr, draw: f64) -> Stage {
     }
 }
 
-/// The air of a planet at `stage`: unchanged without life and before
-/// [`OXYGEN_AFTER_GYR`]; without methane from it (OH destroys it within
-/// about nine years in an oxygenated air, and the model has no flux that
-/// would keep its steady state: a `Definition:` of the model's scope);
-/// and with `O2_PER_N2 × N₂` of O₂ from [`MODERN_OXYGEN_AFTER_GYR`]. The
-/// other gases pass through.
-pub fn oxygenate(air: &Weights, stage: Stage) -> Weights {
+/// The air of a planet at `stage`, lit by `stars` (each star's effective
+/// temperature and the flux it sends the planet) on a surface `gravity`:
+/// unchanged without life and before [`OXYGEN_AFTER_GYR`]; without
+/// methane from it (OH destroys it within about nine years in an
+/// oxygenated air, and the Proterozoic's flux is not modelled: a
+/// `Definition:` of the model's scope, #717); from
+/// [`MODERN_OXYGEN_AFTER_GYR`], `O2_PER_N2 × N₂` of O₂ and the methane a
+/// modern biosphere keeps under those stars on that gravity
+/// ([`modern_methane`], study 37), a weight as the air's. The other gases
+/// pass through; `stars` and `gravity` are read by the modern stage only.
+pub fn oxygenate(
+    air: &Weights,
+    stage: Stage,
+    stars: &[(Kelvin, EarthFlux)],
+    gravity: MetrePerSecondSquared,
+) -> Weights {
     match stage {
         Stage::Lifeless | Stage::Anoxic => *air,
         Stage::Oxidising => Weights { ch4: 0.0, ..*air },
         Stage::Modern => Weights {
-            ch4: 0.0,
+            ch4: modern_methane(stars, gravity).0,
             o2: O2_PER_N2 * air.n2,
             ..*air
         },
