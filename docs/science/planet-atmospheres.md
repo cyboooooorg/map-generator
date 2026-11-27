@@ -3819,9 +3819,18 @@ from 1.305 to 1.352 AU (at 1.282 AU it now regulates at 288 K with
 on its regulated side, near 288 K: not the frozen, unregulated cold
 side the test held. With no methane Earth to stand on, the tier-3 test
 `a_climate_with_no_fixed_point_stops_on_its_cold_side` and its orbit
-(`CYCLING_AU`) were deleted in #749; issue #767 records its intent and
-this orbit history, and rebuilds the stopping rule on constructed
-inputs.
+(`CYCLING_AU`) were deleted in #749. Since #767 the stopping rule is
+held in tier 1 on a constructed climate instead: `settle`'s loop is
+`albedo_fixed_point`, which reads a climate only through `AlbedoMap`
+(the climate solved under an albedo and an emissivity, its temperature,
+whether a thermostat holds it, the albedo and emissivity it derives,
+and the radiative equilibrium of an albedo and emissivity), and the test of the same name drives it with a climate that
+jumps at a radiative equilibrium of 274.4 K, warm above and deriving an
+albedo of 0.31, collapsed below and deriving 0.29, a swing of 0.02 as
+on the methane Earth past its edge. Started warm, the loop swings
+across the jump, its bracket closes on it, and it stops after 14 steps
+on the collapsed side, `cycles` and not settled (the test's bound is
+the old 40 steps). A smooth climate in the same loop settles.
 
 #### A collapse from the fold (#731)
 
@@ -3881,10 +3890,11 @@ at 4500 K (1.2828 AU) and 45 to 79 s at 3300 K (1.32 to 1.37 AU). On the
 traced gaps the two rules take 22 instead of 83 evaluations at 4500 K
 and 22 instead of 44 at 3300 K (simulated). Accepting that a narrow warm
 balance can be stepped over was the user's decision on 2026-11-27. The
-frozen climates of those solves (`COOL_FROZEN` in
-`collapse_step_is_converged`) are held against half the step, which
+frozen climates of those solves (pinned as `COOL_FROZEN` in
+`collapse_step_is_converged` until #767, placed at run time since) were
+held against half the step, which
 moves the rising cap, and against the plain step, which finds every
-root and so holds the falling rule too:
+root and so holds the falling rule too (measured then):
 
 | Frozen climate | Step rules | Half the step | Plain step | Old step (0.005) |
 | --- | --- | --- | --- | --- |
@@ -3954,6 +3964,37 @@ climate falls onto its frozen branch in the most albedo steps (7):
 | 1.321 AU | 280.0386 K | 280.0386 K | 9.8338 bar |
 | 1.3276 AU | 273.4592 K | 273.4592 K | 9.4980 bar |
 | 1.333 AU | 235.2849 K | 235.2849 K | 9.2392 bar |
+
+Since #767 the test places its orbits at run time instead of pinning
+them, so that a climate PR no longer re-probes them: round the Sun it
+bisects the methane Earth's edge and holds 0.995 of it, the edge, and
+the first orbit past it, by steps of 0.001 AU, whose climate is
+ice-covered (under `ICE_COVERED_TEMPERATURE`, about 254 K), the jump
+onto the frozen branch; round a 3300 K star it bisects the edge and
+scans down from it by 0.001 AU for the first three bistable orbits
+with a thaw whose icy start settles frozen at the geometric mean above.
+It prints each orbit its scans read (temperature, whether it cycles,
+whether it is bistable or never thaws), and an absent feature (no
+ice-covered orbit, no bistable orbit within 0.03 AU) is printed rather
+than failed. The two other convergence tests #767 names stay as they
+were: `collapse_tolerance_is_converged` holds an Earth at 1.6 AU and
+`thaw_steps_is_converged` an Earth at 1 AU, far from any methane
+Earth's edge, so no climate PR has had to move them. On main
+85c92921 it places:
+
+| Placed climate | Step rules | Half the step | Plain step |
+| --- | --- | --- | --- |
+| Sun, 1.3210 AU (0.995 of the edge) | 280.0400 K | 280.0400 K | |
+| Sun, 1.3276 AU (the edge) | 273.4178 K | 273.4178 K | |
+| Sun, 1.3336 AU (ice-covered) | 235.2033 K | 235.2033 K | |
+| 3300 K, 1.3079 AU, 33.64 bar | 247.2523 K | 247.2523 K | 247.2849 K |
+| 3300 K, 1.3069 AU, 32.78 bar | 247.9740 K | 247.9740 K | 248.0264 K |
+| 3300 K, 1.3059 AU, 32.41 bar | 249.0429 K | 249.0433 K | 249.0673 K |
+
+The 3300 K edge is 1.3079 AU, as #749 measured; its warm climate cycles
+at 1.3069 AU on its regulated side, which the test prints. The test
+takes 483 s in release against 150 s with pinned orbits: the two edge
+bisections cost the difference.
 
 Measured on 2026-11-26 at the old
 `COLLAPSE_STEP` (0.005), half, a quarter and the plain step, the
@@ -4093,7 +4134,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `PLATEAU_SURFACES_K` | 500 to 640 K by 20 K | Calibration | every 10 K and to 700 K, the plateau moves under 0.5 W/m² | 3 |
 | `COLLAPSE_ITERATIONS` | 300 | Definition | a collapsing Earth at 1.6 AU settles under it (tier 1); a methane Earth just past its outer edge with #703's pairs needs up to 207 steps, plain; a collapse stopped at it leaves its climate not converged | 1, 3 |
 | `COLLAPSE_TOLERANCE` | 1e-4 | Calibration | at 1e-5 the temperature moves under 0.01 K | 3 |
-| `COLLAPSE_STEP` | 0.05 of the CO₂, while the gap rises (0.005 for every step before 2026-11-27) | Calibration | at 0.025, and against the plain step for the falling rule, a methane Earth's frozen climates round 4500 and 3300 K stars move by at most 0.084 K (#731); at the old 0.0025 its climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs; since them and #746, 1.25, 1.2534 and 1.264 AU do not move, and from 1.262 to 1.268 AU full, half, quarter and plain steps stay within 0.11 K on a converged climate and 0.33 K on a cycle's cold side (5.6 K before the cap of #747) | 3 |
+| `COLLAPSE_STEP` | 0.05 of the CO₂, while the gap rises (0.005 for every step before 2026-11-27) | Calibration | at 0.025, and against the plain step for the falling rule, a methane Earth's climates around its edge round the Sun and its frozen climates round a 3300 K star, placed at run time since #767, move by at most 0.06 K; earlier, frozen climates round 4500 and 3300 K stars moved by at most 0.084 K (#731); at the old 0.0025 its climates at 1.42875, 1.4355 and 1.44 AU did not move before #703's pairs; since them and #746, 1.25, 1.2534 and 1.264 AU do not move, and from 1.262 to 1.268 AU full, half, quarter and plain steps stay within 0.11 K on a converged climate and 0.33 K on a cycle's cold side (5.6 K before the cap of #747) | 3 |
 | `POCKET_PROBE_NOISES` | 5 noises | Calibration | the synthetic pockets of #755: 5, 3, 1, 0 and 0 stops on an unstable root at 1.5, 2, 3, 5 and 8 noises, 26 unchecked; a stop on a stable root does not fire it | 1 |
 | `POCKET_PROBE_REACH` | 0.5 of the way to the point above | Definition | the probe stays inside the bracket | 1 |
 | `PHASE_BAND` | 1 K | Calibration | Titan-like and Triton-like sweeps settle across their points | 3 |
@@ -4102,7 +4143,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |
 | `ALBEDO_TOLERANCE_K` | 0.1 K | Calibration | at 0.01 K the reference climates move under 0.1 K | 1 |
 | `ALBEDO_DAMPING` | 0.5 | Definition | at 0.25 the converged climates agree | 3 |
-| `ALBEDO_BRACKET` | 1e-6 in albedo | Definition | a cycling climate stopped on its cold side within 40 steps (#729); the test was deleted in #749, no methane Earth cycling any more (#767) | 3 |
+| `ALBEDO_BRACKET` | 1e-6 in albedo | Definition | a cycling climate stopped on its cold side within 40 steps (#729), on a constructed climate since #767 (14 steps) | 1 |
 | `CONDENSE_ITERATIONS` | 100 | Definition | Titan and Triton settle under it | 1 |
 | `THERMOSTAT_TOLERANCE` | 1e-3 in ln CO₂ | Calibration | at 1e-4 Earth moves under 0.01 K | 1 |
 | `GREENHOUSE_DECADES` | 4 | Definition | the reference maxima lie inside the range | 1 |
