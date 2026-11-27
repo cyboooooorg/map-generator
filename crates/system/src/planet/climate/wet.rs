@@ -279,6 +279,19 @@ pub(crate) struct Kept<S> {
 /// the secant's zero on a falling `g`, can be stepped over: a limit accepted
 /// on 2026-11-27 for the speed, and held by the convergence test of
 /// [`super::COLLAPSE_STEP`].
+///
+/// Stepping over a pocket (a warm balance: an upper, stable root and a
+/// lower, unstable one, where `g` falls with the CO₂) can land within the
+/// noise above its unstable root, or within the tolerance below it, where
+/// the search would stop on a balance the plain step never reaches (#755).
+/// So a stop reached by a longer step than the plain one, or inside the
+/// bracket, is checked (within the evaluation budget `most`) by one more
+/// evaluation just above it
+/// ([`pocket_above`]): on a pocket the search closes in on its upper root
+/// instead, where the plain step stops. On synthetic pockets deeper than
+/// twice the noise on the traced 3300 K gap, this takes the stops on an
+/// unstable root from 26 of 4287 to none, for one more evaluation a
+/// collapse on average.
 pub(crate) fn collapse_search<S: Copy>(
     start: f64,
     mut solve: impl FnMut(f64) -> Kept<S>,
@@ -298,9 +311,32 @@ pub(crate) fn collapse_search<S: Copy>(
     let mut before: Option<(f64, f64)> = None;
     let mut last_step = 0.0_f64;
     let mut above = (c, c - here.kept, here);
+    // The point the last step left and whether that step was the plain
+    // one ([`pocket_above`] reads it only where `g` is above zero).
+    let mut left_from: Option<(f64, f64, Kept<S>)> = None;
+    let mut last_plain = true;
     while evaluations < most {
         let g = c - here.kept;
         if left && holds(c, here.kept) {
+            // A plain step never passes a root (`φ` grows with `c`); a
+            // longer one may have crossed a pocket down to its unstable
+            // root (#755).
+            if let Some(from) = left_from.filter(|_| !last_plain) {
+                evaluations += 1;
+                if let Some(pocket) =
+                    pocket_above(&mut solve, (c, here.noise), (from.0, from.1), tolerance)
+                {
+                    return bracketed(
+                        from,
+                        pocket,
+                        &mut solve,
+                        &holds,
+                        tolerance,
+                        most,
+                        evaluations,
+                    );
+                }
+            }
             return (c, here.state, evaluations, true);
         }
         let mut step = g;
@@ -335,9 +371,19 @@ pub(crate) fn collapse_search<S: Copy>(
         evaluations += 1;
         let gx = x - there.kept;
         if widest > 0.0 && gx < -there.noise {
-            return bracketed(above, (x, gx), &mut solve, &holds, most, evaluations);
+            return bracketed(
+                above,
+                (x, gx),
+                &mut solve,
+                &holds,
+                tolerance,
+                most,
+                evaluations,
+            );
         }
         before = Some((c, g));
+        left_from = Some((c, g, here));
+        last_plain = plain;
         last_step = step;
         (c, here) = (x, there);
         if gx > there.noise {
@@ -355,11 +401,20 @@ pub(crate) fn collapse_search<S: Copy>(
 /// Illinois rule, to a point above it that holds or one below it within
 /// its noise, where `g` jumps across the root by up to the noise of the
 /// solve ([`collapse_search`]).
+///
+/// The bracket may hold a pocket and the cold root below it: the Illinois
+/// rule's points can then come within the tolerance or the noise of the
+/// pocket's lower, unstable root. Each such stop is checked by
+/// [`pocket_above`] (within the evaluation budget `most`), towards the
+/// point above it, with its own `g` rather than the Illinois rule's
+/// halved one; on a pocket the search goes on in the bracket between the
+/// two, which holds its upper root (#755).
 fn bracketed<S: Copy>(
     high: (f64, f64, Kept<S>),
     low: (f64, f64),
     solve: &mut impl FnMut(f64) -> Kept<S>,
     holds: &impl Fn(f64, f64) -> bool,
+    tolerance: f64,
     most: usize,
     mut evaluations: usize,
 ) -> (f64, S, usize, bool) {
@@ -371,6 +426,18 @@ fn bracketed<S: Copy>(
         evaluations += 1;
         let gy = y - there.kept;
         if gy >= 0.0 {
+            if holds(y, there.kept) && evaluations < most {
+                evaluations += 1;
+                if let Some(pocket) = pocket_above(
+                    solve,
+                    (y, there.noise),
+                    (high.0, high.0 - high.2.kept),
+                    tolerance,
+                ) {
+                    (low, side) = (pocket, 0);
+                    continue;
+                }
+            }
             high = (y, gy, there);
             if side == 1 {
                 low.1 *= 0.5;
@@ -378,6 +445,18 @@ fn bracketed<S: Copy>(
             side = 1;
         } else {
             if gy >= -there.noise {
+                if evaluations < most {
+                    evaluations += 1;
+                    if let Some(pocket) = pocket_above(
+                        solve,
+                        (y, there.noise),
+                        (high.0, high.0 - high.2.kept),
+                        tolerance,
+                    ) {
+                        (low, side) = (pocket, 0);
+                        continue;
+                    }
+                }
                 return (y, there.state, evaluations, true);
             }
             low = (y, gy);
@@ -389,6 +468,58 @@ fn bracketed<S: Copy>(
     }
     let held = holds(high.0, high.2.kept);
     (high.0, high.2.state, evaluations, held)
+}
+
+/// Calibration: how far above a stop [`pocket_above`] looks, in noises:
+/// where the secant from the stop to the point above it reaches 5 times
+/// the stop's noise. On a stable root `g` there is about 5 noises above
+/// zero, beyond the ±1 noise a solve's tolerance lets `g` jump by, so the
+/// check does not fire there; on a pocket's unstable root it lands inside
+/// the pocket. It sets which pockets are seen, never a result where none
+/// is. Fitted on 4287 synthetic pockets deeper than twice the noise, cut
+/// into the gap traced round a 3300 K star (#755): the stops left on an
+/// unstable root are 5, 3, 1, 0 and 0 at 1.5, 2, 3, 5 and 8 noises (26
+/// unchecked), at the same cost. Held by the tier-1 test
+/// `a_collapse_does_not_stop_on_a_pockets_unstable_root`
+/// (`docs/science/planet-atmospheres.md`, "A collapse from the fold").
+pub(crate) const POCKET_PROBE_NOISES: f64 = 5.0;
+
+/// Definition: the farthest [`pocket_above`] looks above a stop, as a
+/// share of the way to the point above it, 0.5: the probe stays inside
+/// the bracket.
+const POCKET_PROBE_REACH: f64 = 0.5;
+
+/// Whether a search that would stop at `stop` (its CO₂ and its noise,
+/// bar), with `g` within the tolerance above zero or within its noise
+/// below, sits on the lower, unstable root of a pocket: one evaluation a
+/// little above it, towards `from` (a point above with `g > 0`, its CO₂
+/// and `g`). On a stable root `g` rises above it; on an unstable one it
+/// falls into the pocket. The point is where the secant from the stop to
+/// `from` reaches [`POCKET_PROBE_NOISES`] times the noise, at least
+/// `tolerance` of the CO₂ above the stop, and at most
+/// [`POCKET_PROBE_REACH`] of the way to `from`. Returns it, with its `g`,
+/// when `g` there is below minus its noise: a pocket the stop sits under
+/// (#755).
+///
+/// A pocket narrower than that point's distance, or shallower than the
+/// noise, is not seen: the search then stops where it would have.
+fn pocket_above<S>(
+    solve: &mut impl FnMut(f64) -> Kept<S>,
+    (x, noise): (f64, f64),
+    (above, g_above): (f64, f64),
+    tolerance: f64,
+) -> Option<(f64, f64)> {
+    let span = above - x;
+    if span <= 0.0 || g_above <= 0.0 {
+        return None;
+    }
+    let h = (POCKET_PROBE_NOISES * noise * span / g_above)
+        .max(tolerance * x)
+        .min(POCKET_PROBE_REACH * span);
+    let u = x + h;
+    let there = solve(u);
+    let gu = u - there.kept;
+    (gu < -there.noise).then_some((u, gu))
 }
 
 /// [`wet_climate`] of a body whose CO₂ has built up with no thermostat to
