@@ -168,13 +168,17 @@ const NITROGEN_WORLD_N2: Bar = Bar(0.5);
 /// surface spans the methane sea's freezing point ± 3 K. Legacy's
 /// 0.7 to 1.3 reached 77.8 K on the rewrite's column, 1 K short of
 /// 78.7 K; 1.5 reaches 79.7 K (measured, as legacy widened its nitrogen
-/// sweep when its column changed, issue #523).
+/// sweep when its column changed, issue #523; 78.87 K on `main` before
+/// N₂ condensed in the column and since, #741, which moved its cold end
+/// from 61.77 to 61.49 K).
 const METHANE_SWEEP: (f64, f64) = (0.7, 1.5);
 
 /// Definition: the light, against Titan's, over which the nitrogen
 /// world's surface spans nitrogen's triple point ± 3 K. Legacy's 0.7 to
 /// 1.25 starts at 64.7 K on the rewrite's column, over the 60.1 K the
-/// sweep must start under; 0.55 to 0.85 spans 57.9 to 67.5 K (measured).
+/// sweep must start under; 0.55 to 0.85 spans 57.9 to 67.5 K (measured
+/// then; 58.58 to 74.13 K on `main` before N₂ condensed in the column,
+/// 58.09 to 70.44 K since, #741).
 const NITROGEN_SWEEP: (f64, f64) = (0.55, 0.85);
 
 /// Definition: the most the nitrogen sweep's temperature may step
@@ -188,7 +192,8 @@ const NITROGEN_JUMP_K: f64 = 1.0;
 /// `ε OLR(T)` of their own column, across the nitrogen triple point: each
 /// is a fixed point of that balance, so the two ratios differ by the
 /// balance's residuals only, far under 1 %. Measured: absorbed ×1.5520
-/// against `ε OLR` ×1.5518, 0.01 % apart (before the N₂ pairs of #703,
+/// against `ε OLR` ×1.5518, 0.01 % apart (×1.5614 both since N₂ condenses
+/// in the column, #741; before the N₂ pairs of #703,
 /// when the thin air was transparent, against `ε T⁴`: ×1.5556 against
 /// ×1.5580).
 const PHASE_RATIO_TOLERANCE: f64 = 0.01;
@@ -777,6 +782,10 @@ fn settles_across(
     explained: &dyn Fn(Point<'_>, Point<'_>) -> bool,
 ) -> usize {
     let (first, last) = (&sweep[0].1, &sweep[sweep.len() - 1].1);
+    println!(
+        "the sweep spans {:.2} to {:.2} K",
+        first.temperature.0, last.temperature.0
+    );
     assert!(
         first.temperature.0 <= threshold_k - SPAN_K && last.temperature.0 >= threshold_k + SPAN_K,
         "the sweep spans {:.2} to {:.2} K, not {threshold_k:.2} ± {SPAN_K} K",
@@ -831,7 +840,7 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
     // jump, from the frost to the liquid, and it is a bistability, as the
     // runaway edge's step is (#523): nitrogen frost (Bond albedo 0.752,
     // emissivity 0.80) and liquid nitrogen over the darker ground (albedo
-    // 0.616, emissivity 1.00) are both stable fixed points over a range of
+    // 0.614, emissivity 1.00) are both stable fixed points over a range of
     // light (Charnay et al. 2014; study 38, `docs/science/nitrogen-phases.md`),
     // and the branch the fixed point reaches depends on its warm start.
     // The melting frost between them, inside `PHASE_BAND`, is the S curve's
@@ -841,18 +850,23 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
     // `settle` keeps only a root that attracts. Measured since: one jump,
     // 59.361 K (frost) at flux 0.006252 against 64.503 K (liquid) at
     // 0.006269 (albedo 0.7524 to 0.6158, emissivity 0.8001 to 1.0000,
-    // absorbed x1.5520 against ε OLR x1.5518). So a jump the sweep lets
-    // through must leave the frost, and the absorbed flux must rise as what
-    // the body sends to space does, within PHASE_RATIO_TOLERANCE.
+    // absorbed x1.5520 against ε OLR x1.5518); since N₂ condenses in the
+    // column (#741), 59.470 K at 0.006565 against 63.526 K at 0.006581
+    // (albedo 0.7525 to 0.6137, absorbed and ε OLR both x1.5614). So a
+    // jump the sweep lets through must leave the frost, and the absorbed
+    // flux must rise as what the body sends to space does, within
+    // PHASE_RATIO_TOLERANCE.
     //
     // What it sends to space was ε σ T⁴ while the thin air was
     // transparent, the premise of a grey column. Since the N₂ pairs of
     // #703 the air absorbs at the roto-translational peak where a 60 K
-    // surface emits most: the column sends out 6 % (frost) to 16 %
-    // (liquid) less than σ T⁴ (0.9432 and 0.8417 of it, study 38), so the
-    // check compares with the column's own ε OLR(T) at each climate's
-    // flux, the balance each fixed point solves, which tests the same
-    // physics without the grey premise (ε T⁴ is still printed).
+    // surface emits most: the column sends out 2 % (frost) to 7 %
+    // (liquid) less than σ T⁴ (0.9817 and 0.9278 of it at 59.25 and
+    // 64.4 K since N₂ condenses in it, #741; 0.9432 and 0.8417 on the dry
+    // adiabat before, study 38), so the check compares with the column's
+    // own ε OLR(T) at each climate's flux, the balance each fixed point
+    // solves, which tests the same physics without the grey premise (ε T⁴
+    // is still printed).
     let reference = titan();
     let air = PartialPressures {
         n2: NITROGEN_WORLD_N2.0,
@@ -920,7 +934,9 @@ fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
 /// Definition: the light, against Titan's, over which the nitrogen
 /// world's two branches are followed, 0.5 to 0.75: it spans both folds
 /// of its S curve, which study 38 measured at 0.542 and 0.645 of Titan's
-/// light (`docs/science/nitrogen-phases.md`).
+/// light on the dry adiabat and estimated at 0.591 and 0.704 with N₂
+/// condensing in the column (#741, where the test finds 0.590 and 0.705;
+/// `docs/science/nitrogen-phases.md`).
 const HYSTERESIS_SWEEP: (f64, f64) = (0.5, 0.75);
 
 /// The climates of the nitrogen world under each flux of `fluxes` in
@@ -954,7 +970,9 @@ fn a_nitrogen_world_keeps_its_frost_and_its_liquid_over_a_range_of_light() {
     // one light). Where the folds lie is the model's, not a fact: study
     // 38 measured them at 0.0070411 and 0.0059183 Earth fluxes on its S
     // curve, and this test found 0.0070506 and 0.0059258 when it was
-    // written (history only, not asserted).
+    // written; with N₂ condensing in the column (#741) the study estimated
+    // 0.007688 and 0.006449, and the test finds 0.0076953 and 0.0064470
+    // (history only, not asserted).
     let reference = titan();
     let base = ClimateInputs {
         air: PartialPressures {

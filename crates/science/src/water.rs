@@ -911,11 +911,12 @@ pub fn vapour_saturation_pressure(t: Kelvin) -> Pascal {
 }
 
 /// The condensate a vapour is in equilibrium with: water's here, CO2's
-/// too ([`crate::volatiles::co2_condensate`]).
+/// and N2's too ([`crate::volatiles::co2_condensate`],
+/// [`crate::volatiles::nitrogen_condensate`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Condensate {
-    /// The solid (water's ice Ih, CO2's frost): the sublimation curve and
-    /// its latent heat.
+    /// The solid (water's ice Ih, CO2's and N2's frost): the sublimation
+    /// curve and its latent heat.
     Ice,
     /// The liquid: the vaporisation curve and its latent heat.
     Liquid,

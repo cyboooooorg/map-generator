@@ -131,6 +131,13 @@ frost below its triple point, its liquid above), it condenses and the air
 follows CO₂'s pseudo-adiabat (Kasting 1991, Appendix B, which
 Kopparapu et al. 2013 follow "in the upper troposphere": the Appendix
 itself is paywalled and was not read, only Kopparapu's statement of it).
+Nitrogen does the same in a cold N₂ air (issue #741): where it reaches
+its saturation (its frost below 63.14 K, its liquid above), the air
+follows N₂'s pseudo-adiabat, as Charnay et al. 2014 condense nitrogen
+wherever their air falls under its saturation temperature. A pure N₂ air
+over its frost or its liquid then cools 4.8 K per e-fold of pressure at
+62 K, its saturation curve, against 17.7 K on the dry adiabat
+([Nitrogen phases](nitrogen-phases.md)).
 
 A monatomic gas stores no heat in rotation: argon's heat capacity is
 20.786 J/(mol·K) from 298 to 6000 K (the Shomate fit of Chase 1998 through
@@ -1088,18 +1095,27 @@ the Bond albedo are there too (change 2b-2).
   not read at its source and not adopted.
 - **Titan's greenhouse is its pairs only.** Since study 36 (issue #703)
   methane's infrared is HITRAN's N₂–CH₄ and CH₄–CH₄ pairs, with N₂–N₂,
-  which settle the sourced Titan (1.467 bar, 5.65 % of methane at the
+  which settled the sourced Titan (1.467 bar, 5.65 % of methane at the
   surface, Niemann et al. 2010) at 92.30 K against the measured
-  93.65 ± 0.25 K (Fulchignoni et al. 2005), without a fitted constant.
+  93.65 ± 0.25 K (Fulchignoni et al. 2005), without a fitted constant;
+  since N₂ condenses in its column (issue #741, below) it settles at
+  91.81 K.
   The column misses N₂–H₂ pairs (Titan's H₂ is not a gas of the model,
   issue #720), methane's own lines and the haze's infrared, and it holds
   too little methane low down: it applies the cold trap's mixing ratio
   (`radiating_methane_bar`) at every level, so its lower troposphere
   holds about 40 % of the sourced surface CH₄ (a review's estimate,
   derived, issue #744), likely a large share of the gap since N₂–CH₄ is
-  linear in CH₄. The tier-1 test allows the column 1.4 K under the
-  measurement for them (a calibration on the measured gap): its floor is
-  93.65 − 0.25 − 1.4 = 92.00 K, 0.3 K under the column's 92.30 K. The
+  linear in CH₄. The tier-1 test allows the column 1.9 K under the
+  measurement (`TITAN_MISSING_WARMING_K`, a calibration on the measured
+  gap): its floor is 93.65 − 0.25 − 1.9 = 91.50 K, 0.31 K under the
+  column's 91.81 K since N₂ condenses in its upper troposphere (below;
+  1.4 K and 92.00 K before, refitted by the user on 2026-11-27). The
+  column's troposphere, 4 to 8 K colder than Huygens's between 0.3 and
+  0.9 bar (issue #750), hides 1.2 to 2.3 K more of the missing warming
+  and would cool the column once fixed (study 39,
+  [Nitrogen phases](nitrogen-phases.md#titans-column-against-huygens)),
+  so the bound is one-sided only for the missing absorbers. The
   grey stand-in it replaced (`CH4_OPACITY` 15.1, `CH4_SATURATION_BAR`
   0.01 bar, two calibrations on Titan, see `planet-atmospheres.md`,
   "Calibration of `CH4_OPACITY`") put it at 93.60 K. The cold-trap
@@ -1397,6 +1413,66 @@ the Bond albedo are there too (change 2b-2).
   Kopparapu et al. 2013 give the slope, not its integration), and no
   dedicated search was made. The numbers at 1.272 AU were measured on
   #703 PR 1's branch (`feat/climate-longwave-gases`, `de97e27c`).
+- **N₂'s pseudo-adiabat and its phase step** (issue #741, study 38).
+  The column drew a dry adiabat through a saturated N₂ air; it now
+  condenses N₂ where the air reaches N₂'s saturation
+  (`volatiles::nitrogen_saturation_pressure`: the frost fit of Fray &
+  Schmitt 2009 below 63.14 K, Span et al. 2000 above) and follows its
+  pseudo-adiabat (`column::n2_lapse`, the construction of CO₂'s with N₂'s
+  curve and its ideal-vapour latent heat, `nitrogen_latent_j_mol_over`),
+  N₂'s share of the air thinning to what saturation leaves, as CO₂'s
+  does. Its latent heat jumps at 63.14 K from 6.10 kJ/mol (the liquid's
+  curve) to 6.64 kJ/mol (the frost's), so the step that crosses the
+  triple point is split there from the start (`n2_step`, through the
+  `split_step` water's and CO₂'s steps share). A cold N₂ body sits on
+  that point, which is where its frost and its liquid are both stable
+  (study 38). The tests:
+  `a_saturated_nitrogen_column_follows_its_saturation_curve` holds every
+  level of a pure N₂ column over its frost within
+  `NITROGEN_PROFILE_TOLERANCE_K` (0.002 K) of N₂'s saturation
+  temperature at its pressure (4.5e-4 to 5.5e-4 K measured; over a
+  liquid ground plus the 0.27 % join of the two curves, 0.013 K);
+  `a_nitrogen_column_is_smooth_across_its_triple_point` sweeps a
+  saturated N₂ air from 63.5 to 66 K, its column crossing the triple
+  point from its first layer to its fourth, and holds the change of its
+  rise under `NITROGEN_SMOOTH_RISE_CHANGE` (1 %; 0.26 % split, 6.3 %
+  with each point's phase, where water's 10 % would not see it); and
+  `a_nitrogen_step_across_its_triple_point_takes_each_phase_on_its_part`
+  holds one step from 63.3 to 63.6 K within `N2_STEP_TOLERANCE_K`
+  (0.001 K) of the same step cut into 2000 (8.8e-5 to 1.3e-4 K split,
+  0.013 to 0.022 K with each point's phase). The three bounds are
+  calibrations of the model's numerics, between measured ends, as
+  CO₂'s; no published tolerance was found.
+
+  It reaches Titan too. The sourced Titan's column (1.467 bar, 5.65 % of
+  methane, Titan's gravity) draws a dry adiabat from its 92.3 K surface to
+  its 68.95 K skin, which it reached at about 0.52 bar; on the way it
+  passed N₂'s saturation at about 0.65 bar and 73.5 K, and its N₂ was
+  about 20 % over saturation at 0.58 bar (derived from the dry
+  adiabat's `R/c_p` of 0.282 and N₂'s curve). The column now follows
+  N₂'s curve from there and reaches the skin at about 0.34 bar, 2.7 K
+  warmer than the dry adiabat at 0.52 bar (measured on the column). The
+  warmer air aloft sends out more: the tier-1 column settles at
+  91.81 K, 0.49 K under its 92.30 K (below), and the settled Titan on
+  its measured air at 92.33 K against 92.64 K. All of it is the
+  longwave. The shortwave column (`Profile::SHORTWAVE`, which the Bond
+  albedo reads) condenses N₂ too, up to its top with no skin, but it
+  absorbs only with CO₂ and water: Titan's Bond albedo is 0.2680 over a
+  93.65 K ground on `main` and on the branch, and 0.28294 against
+  0.28293 settled (a 1e-5 change, about 3e-4 K of the ground). Where an
+  air holds CO₂ or water, condensing its N₂ in that column is right as
+  in the climate's: an air cannot stay far over its saturation
+  (Charnay et al. 2014, §3); the missing skin is the shortwave's own
+  simplification. Study 38 expected the law
+  to touch only bodies whose N₂ condenses at the ground; it did not
+  probe Titan's column, where the dry adiabat, not the ground, brings
+  the air to saturation. The real Titan does not saturate: along
+  Huygens's profile its N₂ reaches at most 0.52 of its saturation, near
+  0.3 bar, because its troposphere is 4 to 8 K warmer than the column's
+  between 0.3 and 0.9 bar (study 39, [Nitrogen
+  phases](nitrogen-phases.md#titans-column-against-huygens); the
+  column's troposphere is issue #750). The user kept the condensation
+  and refitted the Titan test's bound to 1.9 K on 2026-11-27 (above).
 - **Argon (study 29).** The column counts argon as air in the lines'
   widths and in the water's foreign continuum, where
   it broadens CO₂'s lines 0.78 times as much as N₂ and water's about 0.37
@@ -1964,6 +2040,34 @@ publisher's page (Tables 1 to 5).
      "The natural greenhouse effect of atmospheric oxygen (O₂) and nitrogen
      (N₂)", *Geophys. Res. Lett.* 39, L10706, doi:10.1029/2012GL051409
      (author copy read, Table 1).
+113. Charnay, B., Forget, F., Tobie, G., Sotin, C., Wordsworth, R. 2014,
+     "Titan's past and future: 3D modeling of a pure nitrogen atmosphere
+     and geological implications", *Icarus* 241, 269,
+     doi:10.1016/j.icarus.2014.07.009 (arXiv:1407.1791, read: §2, §3,
+     §4.2, §4.3, conclusions, Table 2; N₂ condensing at saturation).
+114. Fray, N., Schmitt, B. 2009, *Planet. Space Sci.* 57, 2053,
+     doi:10.1016/j.pss.2009.09.011 (N₂'s frost fit, through Lisse et al.
+     2021, *Icarus* 356, 114072, arXiv:2009.02277, Table 2).
+115. Span, R., Lemmon, E. W., Jacobsen, R. T., Wagner, W., Yokozeki, A.
+     2000, "A reference equation of state for the thermodynamic
+     properties of nitrogen for temperatures from 63.151 to 1000 K and
+     pressures to 2200 MPa", *J. Phys. Chem. Ref. Data* 29, 1361,
+     doi:10.1063/1.1349047 (N₂'s liquid vapour-pressure curve; read in
+     the NIST reprint, <https://srd.nist.gov/JPCRD/jpcrd593.pdf>,
+     pp. 1402-1405).
+116. Aboudan, A. (producer), HASI team, CISAS 2006, Huygens HASI mission
+     raw and calibrated data V1.1, data set
+     `HP-SSA-HASI-2-3-4-MISSION-V1.1`, product
+     `HASI_L4_ATMO_PROFILE_DESCEN.TAB`, NASA PDS Atmospheres Node,
+     <https://pds-atmospheres.nmsu.edu/PDS/data/hphasi_0001/DATA/PROFILES/>
+     (Titan's measured profile, through study 39,
+     [Nitrogen phases](nitrogen-phases.md#titans-column-against-huygens)).
+117. Rossini, F. D., Wagman, D. D., Evans, W. H., Levine, S., Jaffe, I.
+     1952, *Selected Values of Chemical Thermodynamic Properties*, NBS
+     Circular 500, Series II, Table 18-1, p. 561 (N₂'s enthalpy of
+     fusion, 0.172 kcal/mole at 63.15 K; read in the NIST scan,
+     <https://nvlpubs.nist.gov/nistpubs/Legacy/circ/nbscircular500.pdf>,
+     PDF page 569).
 
 ## See also
 

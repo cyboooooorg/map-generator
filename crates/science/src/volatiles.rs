@@ -589,24 +589,57 @@ pub fn nitrogen_frost_pressure(t: Kelvin) -> Option<Pascal> {
     if t.0 >= NITROGEN_TRIPLE_TEMPERATURE.0 {
         return None;
     }
-    let ln = |fit: &[f64], t: f64| polynomial(fit, 1.0 / t).0;
-    let beta =
-        |t: f64| ln(&NITROGEN_BETA_FIT, t) - ln(&NITROGEN_BETA_FIT, NITROGEN_TRIPLE_TEMPERATURE.0);
-    let alpha = |t: f64| {
-        ln(&NITROGEN_ALPHA_FIT, t) - ln(&NITROGEN_ALPHA_FIT, NITROGEN_ALPHA_BETA.0)
-            + beta(NITROGEN_ALPHA_BETA.0)
+    let ln_ratio = nitrogen_frost_log(t.0).0;
+    Some(Pascal(NITROGEN_TRIPLE_PRESSURE.0 * ln_ratio.exp()))
+}
+
+/// `t_k` held at or under N2's triple point, where its frost's curve
+/// ends (a NaN passes, which [`nitrogen_frost_log`] reads at its floor as
+/// [`nitrogen_frost_pressure`] does).
+fn frost_side(t_k: f64) -> f64 {
+    if t_k > NITROGEN_TRIPLE_TEMPERATURE.0 {
+        NITROGEN_TRIPLE_TEMPERATURE.0
+    } else {
+        t_k
+    }
+}
+
+/// `(ln(p / p_t), d ln p / d(1/T))` of N2 over its frost at `t_k` held at
+/// or above [`FLOOR_TEMPERATURE`], `p_t` its triple-point pressure: the
+/// curve of [`nitrogen_frost_pressure`], read at any temperature (the
+/// caller holds it under the triple point). Its slope in `1/T` is
+/// `-L / R`, the sublimation heat by Clausius-Clapeyron for an ideal
+/// vapour ([`nitrogen_latent_j_mol_over`]).
+fn nitrogen_frost_log(t_k: f64) -> (f64, f64) {
+    let ln = |fit: &[f64], t: f64| polynomial(fit, 1.0 / t);
+    let beta = |t: f64| {
+        let (value, slope) = ln(&NITROGEN_BETA_FIT, t);
+        (
+            value - ln(&NITROGEN_BETA_FIT, NITROGEN_TRIPLE_TEMPERATURE.0).0,
+            slope,
+        )
     };
-    let t = t.0.max(FLOOR_TEMPERATURE);
-    let ln_ratio = if t >= NITROGEN_ALPHA_BETA.0 {
+    let alpha = |t: f64| {
+        let (value, slope) = ln(&NITROGEN_ALPHA_FIT, t);
+        (
+            value - ln(&NITROGEN_ALPHA_FIT, NITROGEN_ALPHA_BETA.0).0
+                + beta(NITROGEN_ALPHA_BETA.0).0,
+            slope,
+        )
+    };
+    let t = t_k.max(FLOOR_TEMPERATURE);
+    if t >= NITROGEN_ALPHA_BETA.0 {
         beta(t)
     } else if t >= NITROGEN_FIT_FLOOR {
         alpha(t)
     } else {
         let floor = 1.0 / NITROGEN_FIT_FLOOR;
         let slope = polynomial(&NITROGEN_ALPHA_FIT, floor).1;
-        alpha(NITROGEN_FIT_FLOOR) + slope * (1.0 / t - floor)
-    };
-    Some(Pascal(NITROGEN_TRIPLE_PRESSURE.0 * ln_ratio.exp()))
+        (
+            alpha(NITROGEN_FIT_FLOOR).0 + slope * (1.0 / t - floor),
+            slope,
+        )
+    }
 }
 
 /// Source: critical temperature of nitrogen, 126.192 K (Span, Lemmon,
@@ -648,15 +681,84 @@ pub fn nitrogen_saturation_pressure(t: Kelvin) -> Pascal {
     if t.0 >= NITROGEN_CRITICAL_TEMPERATURE.0 {
         return Pascal(f64::INFINITY);
     }
-    nitrogen_frost_pressure(t).unwrap_or_else(|| {
-        let sum = vapour_sum(
-            NITROGEN_CRITICAL_TEMPERATURE.0,
-            &NITROGEN_VAPOUR_N,
-            &NITROGEN_VAPOUR_T,
-            t.0,
-        );
-        Pascal(NITROGEN_CRITICAL_PRESSURE.0 * sum.0.exp())
-    })
+    nitrogen_frost_pressure(t)
+        .unwrap_or_else(|| Pascal(NITROGEN_CRITICAL_PRESSURE.0 * nitrogen_vapour_sum(t.0).0.exp()))
+}
+
+/// [`nitrogen_saturation_pressure`] at `t_k`, bar: the curve the column's
+/// N2 condenses on ([`crate::radiation::column`]).
+pub(crate) fn nitrogen_saturation_bar(t_k: f64) -> f64 {
+    nitrogen_saturation_pressure(Kelvin(t_k)).0 / PASCALS_PER_BAR
+}
+
+/// The condensate of N2 stable at `t_k`: frost below its triple point
+/// ([`NITROGEN_TRIPLE_TEMPERATURE`], and at a NaN temperature), liquid
+/// above, as [`nitrogen_saturation_pressure`] switches.
+pub(crate) fn nitrogen_condensate(t_k: f64) -> Condensate {
+    if t_k.is_nan() || t_k < NITROGEN_TRIPLE_TEMPERATURE.0 {
+        Condensate::Ice
+    } else {
+        Condensate::Liquid
+    }
+}
+
+/// [`nitrogen_saturation_bar`] over `condensate` whatever the temperature:
+/// the liquid's curve (Span et al. 2000) a little below the triple point,
+/// where N2's pseudo-adiabat's step that crosses it is split
+/// ([`crate::radiation::column`]), infinite from the critical point up;
+/// the frost's (Fray and Schmitt 2009), held at the triple point above it
+/// (the split's rounding only reads it there). Over the condensate stable
+/// at `t_k` ([`nitrogen_condensate`]) it is [`nitrogen_saturation_bar`].
+/// The two curves meet at the triple point within 0.27 % (see
+/// [`nitrogen_saturation_pressure`]).
+pub(crate) fn nitrogen_saturation_bar_over(t_k: f64, condensate: Condensate) -> f64 {
+    let pa = match condensate {
+        Condensate::Liquid if t_k >= NITROGEN_CRITICAL_TEMPERATURE.0 => f64::INFINITY,
+        Condensate::Liquid => NITROGEN_CRITICAL_PRESSURE.0 * nitrogen_vapour_sum(t_k).0.exp(),
+        Condensate::Ice => {
+            let t = frost_side(t_k);
+            NITROGEN_TRIPLE_PRESSURE.0 * nitrogen_frost_log(t).0.exp()
+        }
+    };
+    pa / PASCALS_PER_BAR
+}
+
+/// Molar latent heat of N2 over `condensate`, J/mol, at `t_k`, whatever
+/// the temperature (as [`nitrogen_saturation_bar_over`]), taken from the
+/// slope of its curve by Clausius-Clapeyron for an ideal vapour over a
+/// condensate of negligible volume, `L = R T^2 d ln p / dT`, as
+/// [`co2_latent_j_mol_over`] does: the slope of the frost's fit over
+/// frost (6.64 kJ/mol at the triple point, 6.70 at 59.25 K), of the
+/// liquid's curve over liquid (6.10 kJ/mol at the triple point), which
+/// differ there by 0.54 kJ/mol, the fusion the two fits imply; 0 over
+/// liquid from the critical point up. A pure N2 air on its pseudo-adiabat
+/// then follows its curve, `d T / d ln p = R T^2 / L`.
+///
+/// The ideal-vapour heat is a declared simplification, as CO2's: over the
+/// liquid it is 1.0 % over the enthalpy of vaporisation of Span et al.
+/// 2000's saturation table at their triple point (6037 J/mol at 63.151
+/// K), 4.9 % over it at 77 K, the gap growing with the vapour's pressure
+/// (derived; `docs/science/nitrogen-phases.md`).
+pub(crate) fn nitrogen_latent_j_mol_over(t_k: f64, condensate: Condensate) -> f64 {
+    match condensate {
+        Condensate::Liquid if t_k >= NITROGEN_CRITICAL_TEMPERATURE.0 => 0.0,
+        Condensate::Liquid => MOLAR_GAS_CONSTANT * t_k * t_k * nitrogen_vapour_sum(t_k).1,
+        Condensate::Ice => {
+            let t = frost_side(t_k);
+            -MOLAR_GAS_CONSTANT * nitrogen_frost_log(t).1
+        }
+    }
+}
+
+/// `(ln(p / p_c), d ln p / dT)` of N2's liquid curve at `t_k` (Span et
+/// al. 2000, eq. 4), between the triple and the critical point.
+fn nitrogen_vapour_sum(t_k: f64) -> (f64, f64) {
+    vapour_sum(
+        NITROGEN_CRITICAL_TEMPERATURE.0,
+        &NITROGEN_VAPOUR_N,
+        &NITROGEN_VAPOUR_T,
+        t_k,
+    )
 }
 
 /// Source: triple-point temperature of argon, 83.806 K (Tegeler, Span and
