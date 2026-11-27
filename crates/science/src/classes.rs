@@ -51,7 +51,7 @@ pub fn basin_capacity_oceans(radius: EarthRadius, gravity: MetrePerSecondSquared
 pub const DENSE_AIR_BAR: Bar = Bar(1.0);
 
 /// Calibration: the water kept at the surface, in Earth oceans, from which
-/// a body of at least `system::planet::heat::ICY_MIN_WATER` water and ices is an ice
+/// an icy body (rich enough in water and ices, see the page) is an ice
 /// world, 0.01 (issue #452): a little over twice Mars's 0.004, its polar
 /// deposits and ground ice of about 34 m of global layer (Carr & Head
 /// 2015, doi:10.1002/2014GL062464, not reached: the figure as the page
