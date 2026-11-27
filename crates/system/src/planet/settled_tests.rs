@@ -7,7 +7,8 @@
 //! (the snowball branches), so its tests are tier 3; so are the thin
 //! steam Venus's (about 7 s each, a wet Venus's climate).
 
-use super::bare::{Bare, Ground, bare_with, formed};
+use super::air_tests::TITAN_N2_TOLERANCE;
+use super::bare::{Ground, bare_with, formed};
 use super::climate::Rotation;
 use super::climate::branches::{Bistable, Solved, solve};
 use super::climate::fixture::{EARTH_OBLIQUITY, MARS_OBLIQUITY, TITAN_OBLIQUITY, rotation};
@@ -16,9 +17,7 @@ use super::climate::{ClimateInputs, Light, Numerics};
 use super::codes;
 use super::draws::{Drawn, LABELS, draw};
 use super::enveloped::Body;
-use super::settled::{
-    Entry, Settled, after_boil, climate_of, run, settled, settled_with, steam_world,
-};
+use super::settled::{Entry, Settled, after_boil, run, settled, settled_with, steam_world};
 use super::tests::{
     EARTH, MARS, MERCURY, ReferenceBody, TITAN, VENUS, WET_VENUS, ancestry, derived_from,
     reference_trial, with_fluence,
@@ -77,17 +76,6 @@ const SAME_LIGHT: f64 = 1e-9;
 /// Source: Titan's surface pressure, 1.467 bar (1467 hPa; Fulchignoni et
 /// al. 2005, *Nature* 438, 785, doi:10.1038/nature04314).
 const TITAN_PRESSURE: f64 = 1.467;
-
-/// Source: the methane share of Titan's air near its surface, 5.65 %
-/// (Niemann et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
-/// doi:10.1029/2010JE003659).
-const TITAN_METHANE_SHARE: f64 = 0.0565;
-
-/// Definition: the methane a test inventory holds above what Titan's air
-/// keeps, 0.5 bar (a weight), so that the sea can form. A test input chosen to
-/// exceed the saturation of the air at Titan's temperature, not a
-/// measurement: the measured air is what the sea leaves in the air.
-const TITAN_METHANE_SURPLUS: f64 = 0.5;
 
 /// Source: Titan's surface temperature, 93.65 ± 0.25 K (Fulchignoni et
 /// al. 2005, *Nature* 438, 785), the centre of the validation window.
@@ -352,63 +340,31 @@ fn mercury_sits_at_its_equilibrium_temperature() {
     );
 }
 
-/// Titan's measured air as the inventory of a reference Titan, with a
-/// methane inventory above what the air keeps (an imposed test input, as
-/// Mars's air is; #679: the reference trial's 2d-2 air held 2.876 bar of
-/// N₂ against the measured 1.384 bar, which settled it at 104.8 K; it now
-/// holds 1.422 bar, and 2d-4 moves this test onto the chain's own air).
-fn titan_on_its_measured_air() -> (Bare, Rotation, Trace) {
-    let mut trace = Trace::new();
-    let (t, d) = reference_trial(&mut trace, &TITAN);
-    let rot = rotation(&mut trace, TITAN_OBLIQUITY, false);
-    let mut bare = bare_with(&t, &d, &mut trace).unwrap();
-    // Refs #679: the measured air replaces the reference trial's, in the
-    // weights the chain records (#749): the measured shares by volume read
-    // as weights, and the surplus, an amount, added to the methane's.
-    let weights = PartialPressures {
-        n2: TITAN_PRESSURE * (1.0 - TITAN_METHANE_SHARE),
-        ch4: TITAN_PRESSURE * TITAN_METHANE_SHARE,
-        ..PartialPressures::default()
-    }
-    .weights();
-    let measured = [
-        (Gas::N2, "test.titan.n2", weights.n2),
-        (
-            Gas::Ch4,
-            "test.titan.ch4",
-            weights.ch4 + TITAN_METHANE_SURPLUS,
-        ),
-        (Gas::Co2, "test.titan.co2", 0.0),
-        (Gas::H2o, "test.titan.h2o", 0.0),
-        (Gas::Nh3, "test.titan.nh3", 0.0),
-        (Gas::So2, "test.titan.so2", 0.0),
-        (Gas::O2, "test.titan.o2", 0.0),
-    ];
-    let surface = bare.surface.as_mut().unwrap();
-    for (gas, code, p) in measured {
-        let leaf = trace
-            .leaf(Code::of(code), Bar(p), Provenance::Imposed)
-            .unwrap();
-        surface.atmosphere.partial.insert(gas, leaf);
-    }
-    (bare, rot, trace)
-}
-
 #[test]
 fn titan_has_its_seas() {
-    let (bare, rot, mut trace) = titan_on_its_measured_air();
-    let (c, _, settle) = climate_of(&bare, &rot, DRAW, &mut trace).unwrap();
-    let air = settle.air;
+    // Titan on the air its chain makes (#679, 2d-4): no measured air
+    // substituted.
+    let (titan, rot, trace) = settled_of(&TITAN, TITAN_OBLIQUITY);
+    let c = climate(&titan);
+    let air = air_of(c);
     let t = c.global.surface_temperature.value().0;
     assert!(
         (t - TITAN_SURFACE.0).abs() <= TITAN_WINDOW.0,
         "{t} K, {c:?}"
     );
+    // The surface pressure of the chain's air, within the tolerance of
+    // the nitrogen test (`TITAN_N2_TOLERANCE`) of the measured 1.467 bar.
+    let pressure = c.atmosphere.surface_pressure.value().0;
+    println!("Titan: {pressure} bar, {t} K");
+    assert!(
+        (pressure / TITAN_PRESSURE - 1.0).abs() < TITAN_N2_TOLERANCE,
+        "{pressure} bar against {TITAN_PRESSURE}, {c:?}"
+    );
     assert_eq!(c.liquid.map(|l| *l.value()), Some(LiquidKind::Hydrocarbons));
     assert!(c.condensate.contains_key(&Gas::Ch4), "{c:?}");
     // The air keeps at most what condense lets it keep at that
-    // temperature, the inventory being the measured air and the surplus.
-    let inventory = ClimateInputs::of(&bare, &rot, Bar(0.0)).unwrap().air;
+    // temperature, the inventory being the air the chain made.
+    let inventory = ClimateInputs::of(&titan.bare, &rot, Bar(0.0)).unwrap().air;
     let cap = condense(&inventory, Kelvin(t)).air.ch4;
     assert!(air.ch4 <= cap * (1.0 + CAP_SLACK), "{} over {cap}", air.ch4);
     assert_eq!(*c.global.state.value(), ClimateState::Temperate);

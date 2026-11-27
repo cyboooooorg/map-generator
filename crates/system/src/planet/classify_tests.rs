@@ -6,15 +6,15 @@
 //! (`climate::heavy_tests`), as are the two water worlds here over 5 s.
 
 use super::classify::{BodyKind, ClassView, SurfaceView, class, classify};
-use super::climate::fixture::{EARTH_OBLIQUITY, MARS_OBLIQUITY, rotation};
+use super::climate::fixture::{EARTH_OBLIQUITY, MARS_OBLIQUITY, TITAN_OBLIQUITY, rotation};
 use super::codes;
 use super::draws::{Drawn, LABELS};
 use super::heat::ICY_MIN_WATER;
 use super::settled::{Settled, settled_with};
 use super::tests::{
     CALLISTO, EARTH_CORE_MASS_FRACTION, EARTH_WATER_FRACTION, HOT_ORBIT_AU, MARS, MERCURY,
-    ReferenceBody, VENUS, WATER_WORLD_FRACTION, jupiter_at, neptune_at, reference_trial, trial,
-    water_world_trial,
+    ReferenceBody, TITAN, VENUS, WATER_WORLD_FRACTION, jupiter_at, neptune_at, reference_trial,
+    trial, water_world_trial,
 };
 use crate::Trial;
 use science::classes::{
@@ -225,6 +225,11 @@ fn the_solar_system_classifies_as_itself() {
     );
     assert_eq!(reference_class(&MERCURY, NO_OBLIQUITY).0, Rocky);
     assert_eq!(reference_class(&MARS, MARS_OBLIQUITY).0, Rocky);
+    // Titan, on its chain's air: seas of methane.
+    let (titan, settled, _) = reference_class(&TITAN, TITAN_OBLIQUITY);
+    assert_eq!(titan, HydrocarbonWorld);
+    let liquid = settled.climate.as_ref().unwrap().liquid;
+    assert_eq!(liquid.map(|l| *l.value()), Some(LiquidKind::Hydrocarbons));
     // Photolysis leaves Callisto no methane, so no seas of it.
     let (callisto, settled, _) = reference_class(&CALLISTO, EARTH_OBLIQUITY);
     assert_eq!(callisto, IceWorld);
