@@ -41,6 +41,9 @@ pub struct PlanetDraw {
     pub designation: Designation,
     pub seed: Seed,
     pub archetype: Option<ArchetypeId>,
+    /// The drawn mass. It stays beside `state`'s bulk mass because the two
+    /// differ once an envelope boils off; without a boil-off they are the
+    /// same node, so `system.draw.mass` names two pointers per planet.
     pub mass: Traced<EarthMass>,
     /// The planet model's state on the drawn (possibly eccentric) trial:
     /// its orbit, spin, stellar sources, class, climate, liquid and
