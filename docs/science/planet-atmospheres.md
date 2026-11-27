@@ -3650,21 +3650,43 @@ and grows by about a tenth a step, so the collapse took up to 58
 climates before falling to the cold balance (0.57 bar, 188 K).
 
 The rewrite keeps the plain step as its shortest and lets each step
-grow to at most twice the last, and to at most `COLLAPSE_STEP` of the
-CO₂ (0.085 bar at 17 bar). Where `g` falls, the step also stops at the
-zero of the secant through the last two points. Where `g` falls below
-minus its noise, the step has passed a balance: the search brackets it
-and closes in by the Illinois rule. A warm balance narrower than one
-step can be stepped over; the plain step finds every one (tier 1,
-synthetic collapses in the measured shape). Before #703's pairs, at
+grow to at most twice the last. While `g` rises or stays flat, a step
+is also at most `COLLAPSE_STEP` of the CO₂ (0.05, 0.85 bar at 17 bar).
+Once `g` falls, the step goes to the zero of the secant through the
+last two points, with no cap but twice the last step. Where `g` falls
+below minus its noise, the step has passed a balance: the search
+brackets it and closes in by the Illinois rule. A warm balance narrower
+than a rising step, or hidden before the secant's zero, can be stepped
+over; the plain step finds every one (tier 1, synthetic collapses in
+the measured shape).
+
+Until 2026-11-27 every step was capped at 0.005 of the CO₂. Round cool
+stars that made the thaw search of a methane Earth near its outer edge
+slow (#731, main a97c1ca1): a frozen climate collapses its CO₂ again
+at every albedo step, and its gap is a single hump, from about zero to
+0.3 to 3 bar and back down to its root over 12 to 44 bar of CO₂. The
+cap kept the rise short and the secant short of the root, 44 to 85
+evaluations of about 33 ms per collapse, and a solve took 261 to 276 s
+at 4500 K (1.2828 AU) and 45 to 79 s at 3300 K (1.32 to 1.37 AU). On the
+traced gaps the two rules take 24 instead of 83 evaluations at 4500 K
+and 22 instead of 44 at 3300 K (simulated). Accepting that a narrow warm
+balance can be stepped over was the user's decision on 2026-11-27; at
+half the step the frozen climates of those solves move by at most
+0.021 K (`COOL_FROZEN` in `collapse_step_is_converged`: 223.4501
+against 223.4683 K at 19.03 bar and 4500 K, 222.6543 against
+222.6336 K on a cycle at 19.62 bar, 204.7431 against 204.7578 K at
+45.9 bar and 3300 K), and they stay within 0.04 K of the old step's.
+
+Before #703's pairs, at
 half the step the methane Earth's climates at 1.42875, 1.4355 and
 1.44 AU, around its outer edge, did not move (tier 3,
 `collapse_step_is_converged`). With the pairs and the split phase step
 of #746 the edge is 1.2534 AU and the test holds 1.25, 1.2534 and
 1.264 AU (`STEP_ORBITS`); none moves at half the step (at 1.264 AU,
-231.6489 against 231.6492 K). Measured on 2026-11-26 at `COLLAPSE_STEP`,
-half, a quarter and the plain step, the climates just past the edge
-stay within:
+231.5439 against 231.5807 K with the rules of 2026-11-27; 231.6489
+against 231.6492 K before them). Measured on 2026-11-26 at the old
+`COLLAPSE_STEP` (0.005), half, a quarter and the plain step, the
+climates just past the edge stay within:
 
 - 0.11 K at 1.268 AU, a converged climate (230.92 to 231.03 K, 9.25 to
   9.28 bar of CO₂);

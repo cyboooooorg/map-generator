@@ -25,7 +25,7 @@
 use super::body::ClimateBody;
 use super::branches::{Solved, frozen_over, solve, solve_with};
 use super::fixture::{EARTH_OBLIQUITY, earth, moved, rotation, titan};
-use super::settle::{Settle, albedo_for, pair_residuals};
+use super::settle::{Settle, albedo_for, frozen_at, pair_residuals};
 use super::settle_tests::{cold_methane_world, settled, triton_like};
 use super::wet::{collapsed_climate, wet_balance, wet_climate};
 use super::wet_tests::{COLLAPSE_ORBIT, EARTH_SURFACE, TEST_ALBEDO, modern_air};
@@ -1968,8 +1968,19 @@ fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
 /// 1.4365 AU and the orbits were 1.42875, 1.4355 and 1.44 AU.
 const STEP_ORBITS: [f64; 3] = [1.25, 1.2534, CYCLING_AU];
 
+/// Definition: frozen climates where the collapse's step is held round
+/// cool stars (star, AU, CO₂): calls of the thaw search on a methane
+/// Earth near its outer edge, measured on #731 (main a97c1ca1), where
+/// each albedo step collapsed its CO₂ in 40 to 85 evaluations before the
+/// step rules of 2026-11-27. The second one cycled with the old step.
+const COOL_FROZEN: [(Kelvin, f64, Bar); 3] = [
+    (Kelvin(4500.0), 1.2828, Bar(19.0296)),
+    (Kelvin(4500.0), 1.2828, Bar(19.6173)),
+    (Kelvin(3300.0), 1.3586, Bar(45.9)),
+];
+
 #[test]
-#[ignore = "heavy: a methane Earth at three orbits around its outer edge, twice"]
+#[ignore = "heavy: a methane Earth at three orbits around its outer edge, and three frozen climates round cool stars, twice"]
 fn collapse_step_is_converged() {
     // The longest step of a collapse (`COLLAPSE_STEP`): at half of it the
     // climates around the edge, where collapses start at the fold, keep
@@ -2003,6 +2014,39 @@ fn collapse_step_is_converged() {
         assert!(
             (a.temperature.0 - b.temperature.0).abs() < super::ALBEDO_TOLERANCE_K.0,
             "{au} AU: {a:?} {b:?}"
+        );
+    }
+    // Round cool stars the frozen branch collapses at every albedo step.
+    for (teff, au, co2) in COOL_FROZEN {
+        let inputs = inputs_at(&EARTH, au, teff);
+        let inputs = ClimateInputs {
+            air: PartialPressures {
+                ch4: titan().air.ch4,
+                ..inputs.air
+            },
+            ..inputs
+        };
+        let frozen = |numerics: Numerics| frozen_at(&mut ClimateBody::new(&inputs, numerics), co2);
+        let (a, b) = (frozen(Numerics::DEFAULT), frozen(half));
+        println!(
+            "{} K, {au} AU, {:.4} bar: {:.4} K against {:.4} K at half the step, CO2 {:.4} and \
+             {:.4} bar, cycles {} and {}",
+            teff.0,
+            co2.0,
+            a.temperature.0,
+            b.temperature.0,
+            a.air.co2,
+            b.air.co2,
+            a.cycles,
+            b.cycles
+        );
+        let at = format!("{} K, {au} AU, {} bar", teff.0, co2.0);
+        assert!(a.converged || a.cycles, "{at}: {a:?}");
+        assert!(b.converged || b.cycles, "{at}, half the step: {b:?}");
+        assert_eq!(frozen_over(&a), frozen_over(&b), "{at}: {a:?} {b:?}");
+        assert!(
+            (a.temperature.0 - b.temperature.0).abs() < super::ALBEDO_TOLERANCE_K.0,
+            "{at}: {a:?} {b:?}"
         );
     }
 }
