@@ -55,9 +55,10 @@ pub(crate) struct BoiledOff {
 /// - when `f ≤ c` nothing is cut and nothing recorded: a ceiling node
 ///   would put the flux in the cause of a fraction it did not change (as
 ///   the XUV escape records no zero loss);
-/// - otherwise the fraction left is `c`, the mass `M_c / (1 − c)`, the
-///   envelope boiled off the difference with the trial's mass, and the
-///   body is built again ([`interior`]).
+/// - otherwise the fraction left is `c`, the envelope boiled off
+///   `M − M_c / (1 − c)` (the trial's mass `M` less the core under the
+///   ceiling), the mass left `M` less that envelope, and the body is
+///   built again ([`interior`]).
 ///
 /// The XUV escape and [`science::escape::MIN_ENVELOPE`] follow on what is
 /// left ([`super::escape::escaped`]).
@@ -96,20 +97,20 @@ pub(crate) fn boiled_off(
         c,
         &[f.node(), ceiling.node()],
     )?;
-    // The mass left and the envelope it lost are one value: the mass is
-    // computed once, the boiled node derives from it and the trial's mass,
-    // and the mass node lists the boiled node among its causes, so that
-    // the boiled envelope is reachable from the planet's outputs.
-    let left_mass = EarthMass(core.value().0 / (1.0 - c.get()));
+    // The envelope boiled off is the drawn mass less the core under the
+    // ceiling, `M − M_c / (1 − c)`; the mass left is then the drawn mass
+    // less that envelope, so the boiled node is a real cause of the mass
+    // and is reachable from the planet's outputs.
     let boiled = trace.record(
         Code::of(codes::ENVELOPE_BOILED_OFF),
-        Kilogram::from(*trial.mass.value()) - Kilogram::from(left_mass),
+        Kilogram::from(*trial.mass.value())
+            - Kilogram::from(EarthMass(core.value().0 / (1.0 - c.get()))),
         &[trial.mass.node(), core.node(), left.node()],
     )?;
     let mass = trace.record(
         Code::of(codes::MASS_AFTER_BOIL_OFF),
-        left_mass,
-        &[core.node(), left.node(), boiled.node()],
+        EarthMass::from(Kilogram::from(*trial.mass.value()) - *boiled.value()),
+        &[trial.mass.node(), boiled.node()],
     )?;
     let trial = Trial {
         mass,
