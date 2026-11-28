@@ -16,6 +16,8 @@ map-generator = { path = "../cli" }
 [dev-dependencies]
 clap.workspace = true
 serde_json.workspace = true
+# The structural fixtures, for the purity check's message test.
+timeline = { workspace = true, features = ["fixtures"] }
 
 [lints]
 workspace = true
