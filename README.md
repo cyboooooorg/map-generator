@@ -46,6 +46,16 @@ cargo run -q -p map-generator -- system --seed 1 \
   --explain /timelines/1/keyframes/0/state/planet/orbit/period
 ```
 
+`map-generator world` builds the world of one planet of that system (the
+relief so far), writes a world file and an equirectangular PNG to `--out`,
+and keeps the system, its timelines and the world in a store
+(`--root`, default `map-generator-store`) whose cache stays under
+`--cache-budget` (default 2 GiB):
+
+```bash
+cargo run -q -p map-generator -- world --seed 15 --body c --out out
+```
+
 Flags, output and exit codes: [`crates/cli/README.md`](crates/cli/README.md).
 The tasks check the workspace:
 
@@ -67,7 +77,10 @@ Options after `--` go to nextest, for example
 ## Configuration
 
 The system draw's inputs are the flags of `map-generator system` (seed,
-age, host mass, metallicity, archetypes). Tool versions are pinned in
+age, host mass, metallicity, archetypes); `world` takes the same ones.
+`--root` and `--cache-budget` set where the store lives and how large its
+cache may grow; every command accepts them, before or after its name, and
+only `world` uses them so far. Tool versions are pinned in
 `mise.toml`; test tiers and their thread count in `.config/nextest.toml`.
 
 ## Crates

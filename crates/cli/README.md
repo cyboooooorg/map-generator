@@ -1,9 +1,11 @@
 # `map-generator`: the command line
 
 The composition root: wires the adapters into the engines' ports and
-parses the command line. One command, `system`, so far. Run it from the
-workspace with `cargo run -q -p map-generator -- system …`, or install the
-binary with `cargo install --path crates/cli` and call `map-generator`:
+parses the command line. Two commands: `system` draws a planetary system,
+`world` maps one of its planets (see [The `world` command](#the-world-command)).
+Run them from the workspace with `cargo run -q -p map-generator -- system …`,
+or install the binary with `cargo install --path crates/cli` and call
+`map-generator`:
 
 ```bash
 map-generator system [--seed N] [--present GYR] [--host-mass M]
@@ -82,21 +84,90 @@ values that depend on it (`system.draw.break-up-fraction`), is reported as
 | `cli.explain.not-traced` | The pointer leads to a value with no cause tree (a designation, say) |
 | `cli.explain.ambiguous` | Several values share the code; the message lists their pointers |
 
-## World pipeline
+## The `world` command
 
-The crate holds the world pipeline (`src/world.rs`): it takes a stored
-system, builds or reads the cached timeline and world, and exports a world
-file and a PNG. Its store options arrive with the `world` command in the
-next pull request:
+`world` draws a system with the same flags as `system`, builds the world
+of one of its planets at its present (the relief so far), and writes it
+to a directory: the world file and an equirectangular PNG of one field.
+Run it to look at a planet, or to fill the store's cache.
+
+```bash
+map-generator [--root PATH] [--cache-budget SIZE] world --body BODY --out DIR
+    [--seed N] [--present GYR] [--host-mass M] [--metallicity DEX]
+    [--archetype ID=COUNT ...] [--cell-km KM] [--field CODE] [--width PIXELS]
+```
 
 | Flag | Meaning |
 | --- | --- |
+| `--body BODY` | Required. The last part of the body's designation: `b`, `c`… for the planets in order from the star, `A` for the star |
+| `--out DIR` | Required. Where the world file and the PNG are written |
+| `--cell-km KM` | The grid's cell size in km, finite and above 0. Default 15 |
+| `--field CODE` | The field to project. Default `relief.height` |
+| `--width PIXELS` | The PNG width, even and above 0; the height is half. Default 2048 |
 | `--root PATH` | The store's root directory. Default `map-generator-store` |
 | `--cache-budget SIZE` | The cache budget in bytes, with `KiB`, `MiB`, `GiB` or `TiB`. Default 2 GiB. SI suffixes (`MB`) are refused |
 
-The pipeline refuses a PNG width that is odd or zero (`cli.world.width`)
-before touching the store, and stamps the world with the body timeline's
-engine version.
+The `system` flags (`--seed` and the others) mean what they mean for
+`system`, and a drawn seed is announced on stderr the same way.
+`--root` and `--cache-budget` belong to every command: they go before or
+after the command's name.
+
+`--body` takes the body part only: the command builds the full
+designation (`MGS 99401 c`) from the drawn system's number. A text that
+is not a body part is refused before the system is drawn
+(`cli.world.invalid-body`); the star `A` is refused once it is drawn
+(`cli.world.not-a-planet`), and so is a planet without a solid surface
+(`relief.no-surface`). Multiple-star systems (#585) will name their
+stars `A`, `B`… with no change to the flag.
+
+The first run stores the inputs, then caches the timelines and the
+world; a second run with the same flags reads both from the cache and
+writes the same bytes. After each run, the eviction deletes every cache
+entry of another engine version (a cache is never migrated), then the
+least recently used ones until the cache fits the budget.
+
+It prints a JSON summary on stdout:
+
+| Field | Meaning |
+| --- | --- |
+| `system` | The system's id in the store (16 hex digits) |
+| `body` | The full designation |
+| `keyframe` | The index of the present keyframe in the body's timeline |
+| `grid` | The grid's subdivision count |
+| `engine`, `world_engine` | The system engine and map generator versions |
+| `timelines_cached`, `world_cached` | Whether each came from the cache |
+| `evicted` | How many cache entries the eviction removed |
+| `world`, `png` | The files written |
+
+Map planet c of seed 15, which has surface water with engine 4:
+
+```bash
+map-generator world --seed 15 --body c --out out
+```
+
+The same with a smaller cache, given before the command:
+
+```bash
+map-generator --cache-budget 512MiB world --seed 15 --body c --out out
+```
+
+The `world` command fails with exit 1 and one of these codes, after
+those of the draw (`system.*`), the relief (`relief.*`) and the export:
+
+| Code | Meaning |
+| --- | --- |
+| `cli.world.invalid-body` | `--body` is not a body part (`b`, `c`…, `A`); refused before the draw |
+| `cli.world.no-such-body` | The system has no such body |
+| `cli.world.not-a-planet` | The body is the star |
+| `cli.world.no-present-keyframe` | The body's timeline has no state at its present |
+| `cli.world.width` | The width is odd or zero (from the library; the flag refuses it first) |
+| `cli.store` | The store could not be read or written |
+
+A wrong `--field` that is well formed is refused by the export, after the
+world is built.
+
+The world is stamped with the body timeline's engine version and the map
+generator's, so a new engine never reads an old cache entry.
 
 ## Exit codes
 
@@ -104,7 +175,7 @@ engine version.
 | --- | --- |
 | 0 | Success (also when the reader closes stdout early) |
 | 1 | The command failed; stderr is `map-generator: <code>: <message>` |
-| 2 | Usage error (bad flag or malformed `ID=COUNT`) |
+| 2 | Usage error: a bad flag, a malformed `ID=COUNT`, a `--cell-km` at or below 0 or not finite, an odd or zero `--width`, a malformed `--field` |
 
 A stdout write error other than a closed pipe exits 1 with `cli.io`.
 

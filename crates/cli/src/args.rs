@@ -11,11 +11,17 @@ use timeline::{Code, Seed};
 
 use crate::error::CliError;
 use crate::system::SystemCommand;
+use crate::world::WorldCommand;
 
 /// The planetary-system generator.
 #[derive(Parser, Debug)]
-#[command(version, about = "Draws planetary systems and explains their values")]
+#[command(
+    version,
+    about = "Draws planetary systems, explains their values and maps their planets"
+)]
 pub struct Cli {
+    #[command(flatten)]
+    pub global: GlobalArgs,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -25,6 +31,9 @@ pub struct Cli {
 pub enum Command {
     /// Draw a planetary system and print it as JSON.
     System(SystemCommand),
+    /// Build the world of one planet of a system, export it as a world
+    /// file and a PNG, and print a JSON summary.
+    World(WorldCommand),
 }
 
 /// The flags that become the draw's [`Inputs`].
@@ -182,8 +191,75 @@ mod tests {
         let mut argv = vec!["map-generator", "system"];
         argv.extend_from_slice(extra);
         let cli = Cli::try_parse_from(argv)?;
-        let Command::System(command) = cli.command;
+        let Command::System(command) = cli.command else {
+            panic!("the system command");
+        };
         Ok(command.system)
+    }
+
+    fn world_command(extra: &[&str]) -> Result<crate::world::WorldCommand, clap::Error> {
+        let mut argv = vec!["map-generator", "world"];
+        argv.extend_from_slice(extra);
+        let Command::World(command) = Cli::try_parse_from(argv)?.command else {
+            panic!("the world command");
+        };
+        Ok(command)
+    }
+
+    #[test]
+    fn world_flags_default() {
+        let command = world_command(&["--body", "b", "--out", "o"]).unwrap();
+        assert_eq!(command.body, "b");
+        assert_eq!(command.out, PathBuf::from("o"));
+        assert_eq!(command.cell_km, 15.0);
+        assert_eq!(command.field.0.as_str(), "relief.height");
+        assert_eq!(command.width, 2048);
+    }
+
+    #[test]
+    fn world_needs_a_body_and_an_out() {
+        for argv in [&["--body", "b"][..], &["--out", "o"][..]] {
+            let error = world_command(argv).unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::MissingRequiredArgument, "{argv:?}");
+        }
+    }
+
+    #[test]
+    fn world_refuses_a_cell_size_at_or_below_zero_or_not_finite() {
+        for bad in ["0", "-1", "NaN", "inf", "x"] {
+            let error =
+                world_command(&["--body", "b", "--out", "o", "--cell-km", bad]).unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::ValueValidation, "{bad}");
+        }
+    }
+
+    #[test]
+    fn world_refuses_an_odd_or_zero_width() {
+        for bad in ["0", "63", "-2", "x"] {
+            let error = world_command(&["--body", "b", "--out", "o", "--width", bad]).unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::ValueValidation, "{bad}");
+        }
+    }
+
+    #[test]
+    fn world_help_shows_the_defaults() {
+        let help = Cli::try_parse_from(["map-generator", "world", "--help"])
+            .unwrap_err()
+            .to_string();
+        for default in [
+            "[default: 15]",
+            "[default: relief.height]",
+            "[default: 2048]",
+        ] {
+            assert!(help.contains(default), "{default}\n{help}");
+        }
+    }
+
+    #[test]
+    fn world_refuses_a_malformed_field() {
+        let error =
+            world_command(&["--body", "b", "--out", "o", "--field", "Relief Height"]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::ValueValidation);
     }
 
     fn id(text: &'static str) -> ArchetypeId {
@@ -306,18 +382,36 @@ mod tests {
         }
     }
 
-    #[derive(Parser)]
-    struct Probe {
-        #[command(flatten)]
-        g: GlobalArgs,
+    #[test]
+    fn global_options_default() {
+        let cli = Cli::try_parse_from(["map-generator", "system"]).unwrap();
+        assert_eq!(cli.global.root, PathBuf::from("map-generator-store"));
+        assert_eq!(cli.global.cache_budget, catalogue::DEFAULT_BUDGET);
     }
 
     #[test]
-    fn global_args_default_and_override() {
-        let probe = Probe::try_parse_from(["probe"]).unwrap();
-        assert_eq!(probe.g.root, PathBuf::from("map-generator-store"));
-        assert_eq!(probe.g.cache_budget, catalogue::DEFAULT_BUDGET);
-        let probe = Probe::try_parse_from(["probe", "--cache-budget", "512MiB"]).unwrap();
-        assert_eq!(probe.g.cache_budget, 512 << 20);
+    fn global_options_go_before_or_after_the_command() {
+        for argv in [
+            &[
+                "map-generator",
+                "--cache-budget",
+                "1GiB",
+                "--root",
+                "r",
+                "system",
+            ][..],
+            &[
+                "map-generator",
+                "system",
+                "--cache-budget",
+                "1GiB",
+                "--root",
+                "r",
+            ][..],
+        ] {
+            let cli = Cli::try_parse_from(argv).unwrap();
+            assert_eq!(cli.global.cache_budget, 1 << 30);
+            assert_eq!(cli.global.root, PathBuf::from("r"));
+        }
     }
 }

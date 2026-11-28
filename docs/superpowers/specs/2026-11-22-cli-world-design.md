@@ -148,10 +148,71 @@ dev-dependency of `cli`), and pull request B passes `system::generate`.
 
 ## Pull request B (after the planet PR 2d)
 
-`Command::World` with `SystemArgs`, `--body`, `--cell-km`, `--field`,
-`--width`, `--out`, wired to `world::run` with `system::generate`; the
-CLI README and usage text; the oracle report and projections for the
-user's approval.
+Designed with the user on 2026-11-23. It waits on mapgen1's planet
+PR 2d, then on mapgen3's `system::generate` (no stubs, user decision
+of 2026-11-23); the signature is fixed:
+`pub fn generate(inputs: &Inputs) -> Result<Vec<Timeline>, SystemError>`.
+
+### Command
+
+`map-generator world` takes the flags of `system` (`SystemArgs`) and:
+
+| Flag | Meaning | Default |
+| --- | --- | --- |
+| `--body <BODY>` | The body part of a designation: `b`, `c`, ... | Required |
+| `--cell-km <KM>` | The cell size | `world::DEFAULT_CELL` (15 km) |
+| `--field <CODE>` | The field projected to the PNG | `relief.height` |
+| `--width <PX>` | The PNG width, even and above 0 | 2048 |
+| `--out <DIR>` | Where the world file and the PNG go | Required |
+
+`GlobalArgs` (`--root`, `--cache-budget`) is flattened into `Cli`, so
+both commands take them; the `dead_code` expectations of pull request A
+go. The drawn-seed notice is shared by `system` and `world`: each
+command's arm of `dispatch` returns the drawn seed in `Run.drawn_seed`,
+and `main` prints it, also when the command then fails.
+
+### Naming the body
+
+`--body` takes the body part only, since the `MGS` number is drawn with
+the system and is unknown before a run, and always unknown without
+`--seed`. The CLI never interprets that text: it builds
+`MGS <number> <body>` from the number of the generated timelines and
+parses it with `Designation::from_str`, the contract's one parser. So
+`b` names a planet, `A` names the star (refused, `NotAPlanet`), and the
+multiple-star forms of track T7 (#585: `B b` around star B, `AB b`
+around the pair) work without a CLI change once the contract learns
+them. A body absent from the system is `NoSuchBody`.
+
+`WorldRequest.body` therefore becomes that text, resolved inside
+`cli::world::run` after the timelines exist.
+
+### Output
+
+stdout gets a JSON summary of the `WorldRun`: system id, world key,
+what came from the cache, what was evicted, the files written. It
+matches `system`, which prints JSON.
+
+### Approaches for the body
+
+1. Body part only, resolved against the drawn number (chosen): one
+   command, even with a drawn seed.
+2. Full designation (`MGS 12345 b`). Rejected: `system` has to run
+   first to learn the number.
+3. Both forms. Rejected: more parsing for little use.
+
+### Tests of pull request B
+
+- Tier 1: flag parsing; body resolution, the star refused and a missing
+  body, through the injected producer and hand-built timelines (no
+  generation).
+- Tier 3: `world` end to end on the real `system::generate`.
+- Once `generate` is on `main`: the oracle report and 2:1 projections
+  of a few bodies, for the user's approval.
+
+### Documentation of pull request B
+
+`crates/cli/README.md` (the `world` command, its flags, examples), the
+usage text of each flag, and this section.
 
 ## Left to the builder
 

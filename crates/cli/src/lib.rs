@@ -1,5 +1,5 @@
 //! `map-generator`: the composition root. It wires the adapters into the
-//! engines' ports and dispatches the commands (`system` so far).
+//! engines' ports and dispatches the commands (`system`, `world`).
 //!
 //! A library so that the tier-2 tests (`crates/regression`) can run the
 //! commands without the binary; `main.rs` keeps the process concerns
@@ -10,7 +10,7 @@ pub mod error;
 pub mod explain;
 pub mod report;
 pub mod system;
-mod world;
+pub mod world;
 
 use timeline::Seed;
 
@@ -39,6 +39,16 @@ pub fn dispatch(cli: &Cli) -> Run {
             Ok(root) => Run {
                 drawn_seed: root.drawn.then_some(root.seed),
                 output: system::run(command, root.seed),
+            },
+            Err(error) => Run {
+                drawn_seed: None,
+                output: Err(error),
+            },
+        },
+        Command::World(command) => match command.system.root_seed() {
+            Ok(root) => Run {
+                drawn_seed: root.drawn.then_some(root.seed),
+                output: world::command(command, &cli.global, root.seed),
             },
             Err(error) => Run {
                 drawn_seed: None,
