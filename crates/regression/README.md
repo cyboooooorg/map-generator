@@ -14,7 +14,8 @@ nextest runs each test in its own process, and each process that calls
 `references()` draws and models the eight systems again): the pinned
 digests of the reference systems and the purity of the generation
 (reference 1 generated again with `class_of`, same digest and
-timelines), `generate`'s timelines as `world::run` reads them (one per
+timelines; a failure names the first differing body and field, as a
+JSON pointer), `generate`'s timelines as `world::run` reads them (one per
 body, star first, body seeds, one keyframe at the present), every
 placement modelled with a
 valid state, unique trial seeds, reference 7's asked `earth-like` placed
@@ -33,7 +34,9 @@ that the workspace builds.
 `tests/cli.rs` runs the `map-generator system` command through the
 library (`report`, `explain`, `dispatch`) on reference 1's inputs only:
 the report's shape and `--explain`. Reference 1 is giants only, so its
-draw solves no climate and stays cheap.
+draw solves no climate and stays cheap: each test generates it (about 0.1 s, #785)
+rather than read `references()`, which would cost each test's process
+the eight systems.
 
 ## Ports
 

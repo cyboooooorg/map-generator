@@ -12,10 +12,14 @@ use std::collections::BTreeSet;
 
 use regression::{LoggedRead, Reference, digest, reference_requests, references};
 use science::escape::MIN_ENVELOPE;
+use science::units::Gyr;
+use serde_json::{Value, json};
 use system::planet::{ALBEDO_TOLERANCE_K, class_of, is_giant};
 use system::{ArchetypeId, ENGINE_VERSION, Placement, generate_with};
+use timeline::fixtures::earth_like_fixture;
 use timeline::{
-    Biosphere, BodyState, CauseGraph, Code, LiquidKind, NodeId, Origin, PlanetClass, PlanetState,
+    Biosphere, BodyState, CauseGraph, Code, Designation, Keyframe, LiquidKind, NodeId, Origin,
+    PlanetClass, PlanetState, Seed, SystemNumber, Timeline, Trace,
 };
 
 /// Definition: the index of the `earth-like` request in
@@ -110,7 +114,7 @@ fn golden_digests() {
 /// Generation is a pure function of its inputs: generating the first
 /// reference request again, with the planet model's `class_of` instead of
 /// the logging classifier, gives the digest and the timelines of the
-/// shared build.
+/// shared build. A failure names the first differing body and field.
 fn generation_is_pure_within_a_run() {
     let request = &reference_requests()[0];
     let again = generate_with(request, class_of).unwrap();
@@ -119,10 +123,96 @@ fn generation_is_pure_within_a_run() {
         digest(&references()[0].drawn),
         "purity"
     );
-    assert!(
-        again.timelines == references()[0].timelines,
-        "purity: the timelines differ"
-    );
+    if let Some(difference) = timelines_difference(&again.timelines, &references()[0].timelines) {
+        panic!("purity: {difference}");
+    }
+}
+
+/// Definition: the longest value, in characters of compact JSON, that a
+/// difference message prints.
+const DIFFERENCE_VALUE_CHARS: usize = 80;
+
+/// Where two lists of timelines first differ: both counts, or the first
+/// unequal timeline's body with the first differing field.
+fn timelines_difference(again: &[Timeline], shared: &[Timeline]) -> Option<String> {
+    if again.len() != shared.len() {
+        return Some(format!("{} timelines vs {}", again.len(), shared.len()));
+    }
+    let (a, b) = again.iter().zip(shared).find(|(a, b)| a != b)?;
+    let field = first_difference(
+        &serde_json::to_value(a).expect("a timeline serialises"),
+        &serde_json::to_value(b).expect("a timeline serialises"),
+    )
+    .unwrap_or_else(|| "unequal but serialised the same (a NaN?)".to_owned());
+    Some(format!("{}: {field}", b.body))
+}
+
+/// Definition: the characters a difference message keeps before the first
+/// character where two long values differ, when it skips their common start.
+const DIFFERENCE_CONTEXT_CHARS: usize = 20;
+
+/// The first JSON pointer (RFC 6901, the root written `(root)`) where two
+/// values differ, with both values cut to `DIFFERENCE_VALUE_CHARS`: object
+/// keys in sorted order, a missing key shown as `absent`, arrays by index
+/// then by length. Two values that differ late are shown from
+/// `DIFFERENCE_CONTEXT_CHARS` before their first differing character.
+fn first_difference(a: &Value, b: &Value) -> Option<String> {
+    fn leaves(a: Option<&Value>, b: Option<&Value>) -> (String, String) {
+        let text = |value: Option<&Value>| value.map_or("absent".to_owned(), Value::to_string);
+        let (a, b) = (text(a), text(b));
+        let common = a.chars().zip(b.chars()).take_while(|(a, b)| a == b).count();
+        let skip = if common + DIFFERENCE_CONTEXT_CHARS >= DIFFERENCE_VALUE_CHARS {
+            common - DIFFERENCE_CONTEXT_CHARS
+        } else {
+            0
+        };
+        let cut = |text: String| {
+            let mut shown: String = if skip > 0 {
+                "…".to_owned()
+            } else {
+                String::new()
+            };
+            shown.extend(text.chars().skip(skip).take(DIFFERENCE_VALUE_CHARS));
+            if text.chars().count() > skip + DIFFERENCE_VALUE_CHARS {
+                shown.push('…');
+            }
+            shown
+        };
+        (cut(a), cut(b))
+    }
+    fn at(pointer: &str) -> &str {
+        if pointer.is_empty() {
+            "(root)"
+        } else {
+            pointer
+        }
+    }
+    fn walk(pointer: String, a: Option<&Value>, b: Option<&Value>) -> Option<String> {
+        match (a, b) {
+            (Some(Value::Object(a)), Some(Value::Object(b))) => {
+                let keys: BTreeSet<&String> = a.keys().chain(b.keys()).collect();
+                keys.into_iter().find_map(|key| {
+                    let segment = key.replace('~', "~0").replace('/', "~1");
+                    walk(format!("{pointer}/{segment}"), a.get(key), b.get(key))
+                })
+            }
+            (Some(Value::Array(a)), Some(Value::Array(b))) => a
+                .iter()
+                .zip(b)
+                .enumerate()
+                .find_map(|(i, (a, b))| walk(format!("{pointer}/{i}"), Some(a), Some(b)))
+                .or_else(|| {
+                    (a.len() != b.len())
+                        .then(|| format!("{}: length {} vs {}", at(&pointer), a.len(), b.len()))
+                }),
+            (a, b) if a == b => None,
+            (a, b) => {
+                let (a, b) = leaves(a, b);
+                Some(format!("{}: {a} vs {b}", at(&pointer)))
+            }
+        }
+    }
+    walk(String::new(), Some(a), Some(b))
 }
 
 /// `generate`'s contract with its readers (`world::run`): one timeline per
@@ -558,4 +648,91 @@ fn boiled_off_placements_end_bare() {
         }
     }
     assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// `first_difference` names the first JSON pointer where two values
+/// differ, with both values cut short.
+#[test]
+fn a_difference_names_its_pointer() {
+    assert_eq!(
+        first_difference(&json!({"a": [1]}), &json!({"a": [1]})),
+        None
+    );
+    assert_eq!(
+        first_difference(&json!({"a": {"b": [1, 2]}}), &json!({"a": {"b": [1, 3]}})).as_deref(),
+        Some("/a/b/1: 2 vs 3")
+    );
+    assert_eq!(
+        first_difference(&json!([1]), &json!([1, 2])).as_deref(),
+        Some("(root): length 1 vs 2")
+    );
+    assert_eq!(
+        first_difference(&json!({"x": 1}), &json!({})).as_deref(),
+        Some("/x: 1 vs absent")
+    );
+    assert_eq!(
+        first_difference(&json!({"a/b~": 1}), &json!({"a/b~": 2})).as_deref(),
+        Some("/a~1b~0: 1 vs 2")
+    );
+    let long = json!({"k": "x".repeat(200)});
+    let message = first_difference(&json!({"v": long}), &json!({"v": 1})).unwrap();
+    assert!(
+        message.starts_with("/v: {") && message.ends_with("… vs 1"),
+        "{message}"
+    );
+    // two long strings that differ late: shown from just before the difference
+    let (x, y) = ("a".repeat(100) + "x", "a".repeat(100) + "y");
+    let twenty = "a".repeat(20);
+    assert_eq!(
+        first_difference(&json!({ "s": x }), &json!({ "s": y })),
+        Some(format!("/s: …{twenty}x\" vs …{twenty}y\""))
+    );
+}
+
+/// `timelines_difference` names the body and the field, on hand-built
+/// timelines (`timeline::fixtures`) altered on purpose: no generation, no
+/// `references()`.
+#[test]
+fn a_timeline_difference_names_the_body_and_the_field() {
+    let system = SystemNumber::new(10_001).unwrap();
+    let shared: Vec<Timeline> = (1..=2)
+        .map(|rank| {
+            let mut trace = Trace::new();
+            let state = earth_like_fixture(&mut trace, 4.57);
+            let keyframe = Keyframe::new(Gyr(4.57), BodyState::Planet(state), &trace).unwrap();
+            Timeline::new(
+                Designation::planet(system, rank).unwrap(),
+                Seed::new(u64::from(rank)),
+                ENGINE_VERSION,
+                Gyr(4.57),
+                vec![keyframe],
+            )
+            .unwrap()
+        })
+        .collect();
+    assert_eq!(timelines_difference(&shared, &shared), None);
+
+    let fewer = &shared[..shared.len() - 1];
+    assert_eq!(
+        timelines_difference(fewer, &shared),
+        Some(format!("{} timelines vs {}", fewer.len(), shared.len()))
+    );
+
+    let mut later = shared.clone();
+    later[1].present = Gyr(shared[1].present.0 + 1.0);
+    let message = timelines_difference(&later, &shared).unwrap();
+    assert!(
+        message.starts_with(&format!("{}: /present: ", shared[1].body)),
+        "{message}"
+    );
+
+    let mut nan = shared.clone();
+    nan[1].present = Gyr(f64::NAN);
+    assert_eq!(
+        timelines_difference(&nan, &nan),
+        Some(format!(
+            "{}: unequal but serialised the same (a NaN?)",
+            shared[1].body
+        ))
+    );
 }

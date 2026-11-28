@@ -8,6 +8,12 @@
 //! through `report` or, with the flags that give the same inputs, through
 //! `dispatch`. These draws stay cheap: reference 1 is giants only (a hot
 //! Jupiter and a gas giant), so the planet model solves no climate.
+//!
+//! They do not read `regression::references()`: nextest runs each test in
+//! its own process, and a process that calls it generates the eight
+//! systems (about 350 s in debug, measured for #785), while reference 1
+//! costs each test about 0.1 s. Hence separate tests rather than named checks of one
+//! test sharing the references, as in `planets.rs` (#785).
 
 use std::sync::OnceLock;
 
